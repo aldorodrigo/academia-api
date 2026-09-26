@@ -1,0 +1,120 @@
+# Lógica de negocio
+
+Documento maestro. Toda regla de negocio implementada debe estar acá; si el código y este
+documento difieren, se corrige uno de los dos en el mismo cambio.
+
+> Idioma del producto: **solo español**. Moneda del piloto: **guaraníes (PYG)**.
+
+---
+
+## 1. Organizaciones (tenancy)
+
+- Una **organización** es un cliente del SaaS: club, academia, escuela o comisión de padres (ACE).
+- Tipos: `club`, `academy`, `school`, `parents_association`.
+- Cada organización tiene: nombre, slug único, país, moneda, zona horaria, **vocabulario** y **módulos activos**.
+- **Aislamiento total:** ningún usuario ve datos de una organización a la que no pertenece.
+- **Vocabulario configurable** (etiquetas, no traducciones). Valores por defecto:
+
+  | Clave | Por defecto | Ej. academia de danza |
+  |---|---|---|
+  | `program` | Disciplina | Estilo |
+  | `group` | Categoría | Nivel |
+  | `student` | Jugador | Alumna/o |
+  | `instructor` | Técnico | Profesor/a |
+  | `guardian` | Tutor | Tutor |
+
+- **Módulos opcionales** (`features`): `board` (comisión, actas, resoluciones), `fundraising` (rifas),
+  `apparel` (indumentaria), `tournaments`, `evaluations`, `electronic_invoicing` (SIFEN).
+
+## 2. Usuarios, membresías y roles
+
+- Un **usuario** puede pertenecer a **varias organizaciones** (membresía `active` / `inactive`)
+  con roles distintos en cada una.
+- Solo entra a una organización con membresía **activa**.
+- **Super admin** de la plataforma (`is_super_admin`): acceso total, soporte.
+- Roles por organización: `admin`, cargos de comisión (`presidente`, `vicepresidente`,
+  `secretario`, `tesorero`, `vocal`, `sindico`…), `instructor`, `tutor`.
+- **Cargos de comisión con mandato** (desde / hasta): al vencer, el rol se desactiva solo. *(Sprint 1)*
+- Alta de usuarios **por invitación** (email / link / QR); no hay registro abierto. *(Sprint 1)*
+
+## 3. Estructura académica *(Sprint 2)*
+
+```
+Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) → Horarios
+```
+
+- **Temporada:** período (ej. 2026). Una sola temporada `actual` por organización.
+- **Inscripción** = alumno + grupo + temporada. Un alumno puede tener varias (ej. fútbol y pádel).
+- Estados de inscripción: `pendiente`, `activo`, `becado`, `suspendido`, `baja`.
+- Criterio de grupo por programa: año de nacimiento (fútbol) o nivel (pádel, danza).
+- **Familia:** agrupa alumnos y tutores. Un tutor puede tener varios hijos; un hijo varios tutores.
+- Alumno adulto sin tutor: es su propio responsable.
+- Ficha médica: visible solo para roles autorizados.
+
+## 4. Dinero — reglas generales
+
+- Montos en **enteros** (guaraníes sin decimales). Porcentajes se redondean al guaraní entero.
+- **Libro mayor inmutable:** un movimiento no se edita ni se borra; se **anula** con un
+  contra-movimiento, con motivo y auditoría.
+- **Saldo de una cuenta = suma de sus movimientos.** Nunca se edita a mano.
+- Cuentas: banco, caja (efectivo), billetera digital.
+
+## 5. Tarifas y cuotas *(Sprint 3)*
+
+- **Tarifa** = concepto (inscripción, cuota mensual, torneo…) + grupo + temporada + monto + vigencia.
+- Cambiar una tarifa **no altera** cargos ya emitidos; rige desde su fecha de vigencia.
+- **Cuota mensual automática** para inscripciones `activo` (no para `becado` total ni `baja`).
+  - La generación es **idempotente**: lock en Redis + índice único en BD
+    (inscripción + concepto + período). Nunca se cobra dos veces el mismo mes.
+- Todo **cargo** pertenece a un alumno (y a su inscripción) y guarda: monto base,
+  ajustes aplicados (descuentos, becas, recargos) y monto final.
+
+## 6. Descuentos y becas *(Sprint 3)*
+
+- Regla de descuento: tipo (`hermanos`, `beca`, `convenio`, `pronto_pago`, `otro`),
+  porcentaje **o** monto fijo, conceptos a los que aplica, vigencia.
+- **Hermanos:** según la posición del hijo entre las inscripciones activas de la familia
+  (ej. 2º −20 %, 3º −50 %). Configurable.
+- **Beca:** parcial (%) o total, con motivo, vigencia y **aprobación**.
+- Orden de aplicación configurable. Un cargo **nunca** queda negativo.
+
+## 7. Mora *(Sprint 3)*
+
+- Configurable por organización (y opcionalmente por concepto): día de vencimiento,
+  días de gracia, recargo fijo o %, frecuencia (una vez / por mes), tope.
+- Se puede desactivar o **exonerar** un cargo puntual (con motivo y auditoría).
+- Recordatorios: antes del vencimiento, el día del vencimiento y cada N días de atraso.
+
+## 8. Cobros *(Sprint 4)*
+
+- La **cuenta corriente** es por alumno; la **familia** ve el consolidado de sus hijos.
+- Un **pago** se **imputa** a uno o varios cargos, de uno o varios hijos
+  (por defecto los más antiguos primero; el tesorero puede elegir).
+- Pago de más → **saldo a favor** de la familia, que se aplica al próximo cargo.
+- Cada pago genera un **recibo PDF**.
+- **Comprobante subido por el padre** (transferencia) queda `pendiente` hasta que el
+  tesorero lo valida; recién ahí impacta en la cuenta. *(Fase 2)*
+
+## 9. Gastos *(Sprint 4)*
+
+- Cada gasto: cuenta de salida, categoría, proveedor, comprobante adjunto.
+- Gastos por encima de un **umbral configurable** requieren **doble aprobación**
+  (ej. tesorero + presidente).
+- Transferencias entre cuentas (ej. caja → banco) son dos movimientos enlazados.
+
+## 10. Comunicación *(Sprint 5)*
+
+- Avisos segmentados: toda la organización, programa, grupo, familia.
+- Push (Firebase) + email; confirmación de lectura.
+- Envíos masivos por lotes en la cola `notifications` (Horizon).
+- Una **resolución** publicada a un grupo notifica a sus tutores y puede generar un cargo. *(Fase 2)*
+
+## 11. Fechas y horarios
+
+- Se guardan en **UTC**; se muestran en la zona horaria de la organización
+  (por defecto `America/Asuncion`).
+
+## 12. Auditoría y datos sensibles
+
+- Todo lo financiero y los cambios de roles quedan en el registro de actividad.
+- Datos de menores: acceso mínimo por rol; ficha médica solo para roles autorizados.

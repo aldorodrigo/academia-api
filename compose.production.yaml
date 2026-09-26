@@ -1,0 +1,193 @@
+name: academia
+
+x-app-common: &app-common
+    image: academia-app:${APP_IMAGE_TAG:-latest}
+    build:
+        context: .
+        dockerfile: Dockerfile.production
+        target: app
+    env_file:
+        - ${APP_ENV_FILE:-.env.production}
+    environment:
+        DB_PASSWORD_FILE: /run/secrets/db_password
+        REDIS_PASSWORD_FILE: /run/secrets/redis_password
+    secrets:
+        - db_password
+        - redis_password
+    volumes:
+        - app_storage:/var/www/html/storage
+    read_only: true
+    tmpfs:
+        - /tmp:rw,noexec,nosuid,size=64m,uid=1000,gid=1000,mode=1777
+        - /var/www/html/bootstrap/cache:rw,noexec,nosuid,size=32m,uid=1000,gid=1000,mode=0775
+    user: "1000:1000"
+    init: true
+    cap_drop:
+        - ALL
+    security_opt:
+        - no-new-privileges:true
+    restart: unless-stopped
+
+services:
+    database:
+        image: mariadb:11.8
+        environment:
+            MARIADB_DATABASE: ${DB_DATABASE:-academia}
+            MARIADB_USER: ${DB_USERNAME:-academia}
+            MARIADB_PASSWORD_FILE: /run/secrets/db_password
+            MARIADB_ROOT_PASSWORD_FILE: /run/secrets/db_root_password
+        command:
+            - --character-set-server=utf8mb4
+            - --collation-server=utf8mb4_uca1400_ai_ci
+            - --innodb-buffer-pool-size=768M
+            - --max-connections=75
+            - --skip-name-resolve
+        secrets:
+            - db_password
+            - db_root_password
+        volumes:
+            - database_data:/var/lib/mysql
+        networks:
+            - internal
+        healthcheck:
+            test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+            interval: 10s
+            timeout: 5s
+            retries: 12
+            start_period: 30s
+        mem_limit: 1280m
+        init: true
+        security_opt:
+            - no-new-privileges:true
+        stop_grace_period: 1m
+        restart: unless-stopped
+
+    redis:
+        image: redis:8-alpine
+        # AOF: los jobs en cola sobreviven a un reinicio.
+        command:
+            - sh
+            - -c
+            - exec redis-server --appendonly yes --appendfsync everysec --requirepass "$$(cat /run/secrets/redis_password)"
+        secrets:
+            - redis_password
+        volumes:
+            - redis_data:/data
+        networks:
+            - internal
+        healthcheck:
+            test: ["CMD-SHELL", "redis-cli -a \"$$(cat /run/secrets/redis_password)\" --no-auth-warning ping | grep PONG"]
+            interval: 10s
+            timeout: 5s
+            retries: 6
+        mem_limit: 256m
+        security_opt:
+            - no-new-privileges:true
+        restart: unless-stopped
+
+    app:
+        <<: *app-common
+        networks:
+            - public
+            - internal
+        depends_on:
+            database:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        healthcheck:
+            test:
+                - CMD
+                - php
+                - -r
+                - "exit(@fsockopen('127.0.0.1', 9000) ? 0 : 1);"
+            interval: 15s
+            timeout: 5s
+            retries: 5
+            start_period: 30s
+        mem_limit: 1024m
+
+    horizon:
+        <<: *app-common
+        command: ["php", "artisan", "horizon"]
+        networks:
+            - egress
+            - internal
+        depends_on:
+            database:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        mem_limit: 768m
+        stop_grace_period: 90s
+
+    scheduler:
+        <<: *app-common
+        command: ["php", "artisan", "schedule:work"]
+        networks:
+            - egress
+            - internal
+        depends_on:
+            database:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        mem_limit: 384m
+
+    proxy:
+        image: academia-proxy:${APP_IMAGE_TAG:-latest}
+        build:
+            context: .
+            dockerfile: Dockerfile.production
+            target: proxy
+        environment:
+            ACME_EMAIL: ${ACME_EMAIL}
+            APP_DOMAIN: ${APP_DOMAIN}
+        ports:
+            - "80:80"
+            - "443:443"
+        volumes:
+            - app_storage:/var/www/html/storage:ro
+            - caddy_data:/data
+            - caddy_config:/config
+        networks:
+            - public
+        depends_on:
+            app:
+                condition: service_healthy
+        read_only: true
+        tmpfs:
+            - /tmp:rw,noexec,nosuid,size=32m,uid=1000,gid=1000,mode=1777
+        user: "1000:1000"
+        cap_drop:
+            - ALL
+        cap_add:
+            - NET_BIND_SERVICE
+        security_opt:
+            - no-new-privileges:true
+        mem_limit: 256m
+        restart: unless-stopped
+
+networks:
+    public:
+        driver: bridge
+    egress:
+        driver: bridge
+    internal:
+        driver: bridge
+        internal: true
+
+volumes:
+    app_storage:
+    database_data:
+    redis_data:
+    caddy_data:
+    caddy_config:
+
+secrets:
+    db_password:
+        file: ${DB_PASSWORD_SECRET_FILE:-./secrets/db_password}
+    db_root_password:
+        file: ${DB_ROOT_PASSWORD_SECRET_FILE:-./secrets/db_root_password}
+    redis_password:
+        file: ${REDIS_PASSWORD_SECRET_FILE:-./secrets/redis_password}
