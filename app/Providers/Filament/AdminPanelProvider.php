@@ -2,6 +2,7 @@
 
 namespace App\Providers\Filament;
 
+use App\Filament\Pages\Tenancy\EditOrganizationProfile;
 use App\Http\Middleware\SetCurrentOrganizationFromPanel;
 use App\Models\Organization;
 use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
@@ -36,6 +37,7 @@ class AdminPanelProvider extends PanelProvider
                 'primary' => Color::Emerald,
             ])
             ->tenant(Organization::class, slugAttribute: 'slug')
+            ->tenantProfile(EditOrganizationProfile::class)
             ->tenantMiddleware([
                 SetCurrentOrganizationFromPanel::class,
             ], isPersistent: true)
