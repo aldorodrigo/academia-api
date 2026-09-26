@@ -17,6 +17,13 @@ it('un miembro entra al panel de su organización', function () {
     $this->actingAs($user)->get('/admin/jakare')->assertOk();
 });
 
+it('el super admin entra al panel y a la gestión de roles', function () {
+    $user = memberOf($this->jakare, ['is_super_admin' => true]);
+
+    $this->actingAs($user)->get('/admin/jakare')->assertOk();
+    $this->actingAs($user)->get('/admin/jakare/shield/roles')->assertOk();
+});
+
 it('un usuario no puede entrar al panel de una organización ajena', function () {
     $user = memberOf($this->jakare);
 

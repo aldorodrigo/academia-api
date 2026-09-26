@@ -64,6 +64,16 @@ class Organization extends Model
     }
 
     /**
+     * Roles de la organización (lo usa el recurso de roles de Shield en el panel).
+     *
+     * @return HasMany<Role, $this>
+     */
+    public function roles(): HasMany
+    {
+        return $this->hasMany(Role::class);
+    }
+
+    /**
      * @return HasMany<Season, $this>
      */
     public function seasons(): HasMany
