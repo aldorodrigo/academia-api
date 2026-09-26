@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Organizations\EnsureOrganizationRoles;
 use App\Enums\MembershipStatus;
 use App\Enums\OrganizationType;
 use App\Models\Organization;
@@ -24,6 +25,9 @@ class DatabaseSeeder extends Seeder
             ['slug' => 'jakare'],
             ['name' => 'Club Jakare', 'type' => OrganizationType::Club],
         );
+
+        // Por si la organización ya existía antes de los roles base.
+        app(EnsureOrganizationRoles::class)->handle($jakare);
 
         $jakare->memberships()->updateOrCreate(
             ['user_id' => $admin->id],

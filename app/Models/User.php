@@ -4,6 +4,7 @@ namespace App\Models;
 
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use App\Enums\MembershipStatus;
+use App\Enums\OrganizationRole;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasTenants;
@@ -72,6 +73,40 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     {
         return $this->is_super_admin
             || $this->activeOrganizations()->whereKey($organization->getKey())->exists();
+    }
+
+    /**
+     * @return HasMany<RoleAssignment, $this>
+     */
+    public function roleAssignments(): HasMany
+    {
+        return $this->hasMany(RoleAssignment::class);
+    }
+
+    /**
+     * Asignaciones vigentes en la organización dada (con el rol cargado).
+     *
+     * @return Collection<int, RoleAssignment>
+     */
+    public function currentRoleAssignments(Organization $organization): Collection
+    {
+        return RoleAssignment::query()
+            ->withoutGlobalScopes()
+            ->with(['role', 'organization'])
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $this->id)
+            ->current($organization->today()->toDateString())
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Administrador de la organización (rol admin vigente).
+     */
+    public function isOrganizationAdmin(Organization $organization): bool
+    {
+        return $this->currentRoleAssignments($organization)
+            ->contains(fn (RoleAssignment $assignment) => $assignment->role->name === OrganizationRole::Admin->value);
     }
 
     public function canAccessPanel(Panel $panel): bool
