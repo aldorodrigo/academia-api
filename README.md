@@ -14,12 +14,17 @@ PHP 8.5 · Laravel 13 · Filament 5 · Sanctum · Horizon · Pest 5 ·
 
 ```bash
 cp .env.example .env
-composer install
+# Instala dependencias sin PHP local (la imagen php85-composer no existe; 8.4 alcanza para instalar)
+docker run --rm -v "$(pwd):/var/www/html" -w /var/www/html laravelsail/php84-composer:latest composer install --ignore-platform-reqs
 ./vendor/bin/sail up -d
 ./vendor/bin/sail artisan key:generate
 ./vendor/bin/sail artisan migrate --seed
 ./vendor/bin/sail npm install && ./vendor/bin/sail npm run build
+./vendor/bin/sail artisan shield:generate --all --panel=admin
 ```
+
+Si el puerto 80 está ocupado (ej. Apache en WSL), usá `APP_PORT=8080` y `APP_URL=http://localhost:8080` en `.env`.
+Después de `composer require` o de cambiar código de jobs/mails, reiniciá los workers: `sail artisan queue:restart`.
 
 - Panel: http://localhost/admin (`admin@academia.test` / `password`, solo desarrollo)
 - Horizon: http://localhost/horizon

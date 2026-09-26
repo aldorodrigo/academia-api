@@ -17,7 +17,7 @@ Este documento se reemplaza por la especificación OpenAPI en el Sprint 5.
 | GET | `me` | token | Usuario y organizaciones activas |
 | GET | `organization` | token + org | Datos, vocabulario y módulos de la organización activa |
 
-## Sprint 1
+## Sprint 1 (implementado)
 
 ### `GET invitations/{token}` (público, con throttle)
 

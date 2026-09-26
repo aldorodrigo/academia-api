@@ -31,11 +31,54 @@ documento difieren, se corrige uno de los dos en el mismo cambio.
 - Un **usuario** puede pertenecer a **varias organizaciones** (membresía `active` / `inactive`)
   con roles distintos en cada una.
 - Solo entra a una organización con membresía **activa**.
-- **Super admin** de la plataforma (`is_super_admin`): acceso total, soporte.
-- Roles por organización: `admin`, cargos de comisión (`presidente`, `vicepresidente`,
-  `secretario`, `tesorero`, `vocal`, `sindico`…), `instructor`, `tutor`.
-- **Cargos de comisión con mandato** (desde / hasta): al vencer, el rol se desactiva solo. *(Sprint 1)*
-- Alta de usuarios **por invitación** (email / link / QR); no hay registro abierto. *(Sprint 1)*
+- Una persona puede tener **varios roles** a la vez (ej. tutor + tesorero); la app muestra todos sus perfiles.
+
+### Super admin y admin
+- **Super admin** de la plataforma (`users.is_super_admin`): acceso total a todas las organizaciones
+  (alta de organizaciones, soporte, Horizon). No es un rol de organización: se otorga o quita solo
+  por consola (`users:super-admin {email} [--revoke]`), nunca por invitación, y queda auditado.
+- **Admin** de la organización (rol `admin`): acceso total **solo dentro de su organización**
+  (configuración, vocabulario, módulos, miembros, invitaciones, roles y permisos).
+
+### Roles base
+Cada organización nace con estos roles (`App\Enums\OrganizationRole`). Los permisos finos se
+editan en Shield; † = funcionalidad todavía no construida, el alcance del rol ya queda definido.
+
+| Rol | Tipo | Qué puede hacer |
+|---|---|---|
+| `admin` | Organización | Todo dentro de su organización |
+| `presidente` | Cargo | Ve todo; aprueba resoluciones†, becas† y gastos sobre el umbral† (con el tesorero); firma actas† |
+| `vicepresidente` | Cargo | Ve todo; reemplaza al presidente |
+| `secretario` | Cargo | Reuniones, actas y resoluciones†; avisos y comunicados†; ve miembros y alumnos |
+| `prosecretario` | Cargo | Asiste y suple al secretario |
+| `tesorero` | Cargo | Cuentas, tarifas, cuotas, becas, mora†; pagos y recibos†; gastos†, comprobantes†, aprueba gastos sobre el umbral† (con el presidente); informes† |
+| `protesorero` | Cargo | Suple al tesorero, salvo aprobar gastos sobre el umbral |
+| `vocal` | Cargo | Lee actas, resoluciones e informes†; vota en reuniones† |
+| `sindico` | Cargo | Lee todo lo financiero y el registro de actividad†; no modifica nada |
+| `instructor` | Organización | Sus grupos: alumnos, asistencia†, convocatorias†, avisos al grupo†; ficha médica de sus alumnos (lectura)† |
+| `tutor` | Organización | Sus hijos: ficha, inscripciones†, estado de cuenta†, recibos†, avisos†; confirma asistencia† y sube comprobantes† |
+
+`instructor` y `tutor` se muestran con el vocabulario de la organización (ej. "Técnico", "Profesor/a").
+
+### Asignaciones y mandatos
+- **`role_assignments` es la fuente de verdad** de quién tiene qué rol y desde/hasta cuándo;
+  `model_has_roles` (spatie) se sincroniza desde ahí. Terminar una asignación no la borra:
+  queda como **historial** (comisiones anteriores).
+- Los **cargos de comisión** exigen fecha de fin del mandato; el fin no puede ser anterior al inicio.
+- **Vencimiento automático:** `roles:expire` corre todos los días (00:05, Asunción) y termina los
+  mandatos cuyo fin ya pasó **según la fecha local de cada organización**; también activa los que
+  empiezan ese día. Todo queda en el registro de actividad.
+
+### Invitaciones
+- Alta de usuarios **solo por invitación**; no hay registro abierto.
+- La invitación tiene email, roles (con mandato para los cargos), quién invitó y vencimiento a los
+  **14 días**. Sirve **una sola vez**.
+- El link `{APP_FRONTEND_URL}/invitacion/{token}` llega por email (con QR) y se muestra en el panel
+  **una sola vez**: el token se guarda solo hasheado (sha256). "Reenviar" genera un token nuevo.
+- Una invitación nueva para el mismo email **revoca** la pendiente anterior. Se puede revocar a mano.
+- Al aceptar: si no existe cuenta con ese email se crea (nombre + contraseña de 8+ caracteres);
+  si existe, se pide su contraseña actual. Se activa la membresía, se asignan los roles (sin
+  duplicar los que ya tiene) y se devuelve el token de la app.
 
 ## 3. Estructura académica *(Sprint 2)*
 

@@ -277,4 +277,19 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
   - Verificar el build de la imagen Docker de producción.
   - Corregir el README: `laravelsail/php85-composer` no existe; usar `php84-composer` para el `composer install` inicial.
 
-### Sprint 1 — en curso: organizaciones y roles
+### Sprint 1 — organizaciones y roles
+- **App** (aldorodrigo/academia-app#1): aceptar invitación por link o código (cuenta nueva o existente),
+  perfiles con mandato en el inicio, "Mi cuenta", vocabulario y módulos, URLs sin `#` en la web.
+- **API y panel:**
+  - Roles base por organización (`OrganizationRole`) con descripción; super admin (plataforma) vs. admin (organización).
+  - `role_assignments` con mandatos, historial y vencimiento diario (`roles:expire`, fecha local).
+  - Invitaciones con email + QR, token hasheado, un solo uso, 14 días; endpoints públicos de la API.
+  - Panel: Invitaciones, Miembros (asignar/quitar roles, historial, activar/desactivar) y Configuración (vocabulario y módulos).
+  - `GET organization` con `membership.roles`.
+- **Probado de punta a punta:** invitación creada → email en Mailpit con link y QR → aceptada desde la app web
+  en un navegador real → el inicio muestra "Tutor" y "Secretario · hasta 31/12/2027"; `roles:expire` quita un mandato vencido.
+- Pendiente: permisos finos por rol en Shield (por ahora el admin tiene todo y el resto lo que se le otorgue);
+  restringir el acceso al panel a quien tenga algún rol con permisos (hoy entra cualquier miembro activo, aunque no ve nada);
+  deep links nativos (Android/iOS) cuando haya dominio.
+
+### Próximo: Sprint 2 — académico ("Mis hijos" primero en la app)
