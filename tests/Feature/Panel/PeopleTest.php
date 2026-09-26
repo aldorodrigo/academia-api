@@ -122,7 +122,7 @@ it('desactivar un miembro le quita el acceso', function () {
         ->and($member->belongsToOrganization($this->jakare))->toBeFalse();
 });
 
-it('editar vocabulario y módulos; una etiqueta vacía vuelve al valor por defecto', function () {
+it('editar el vocabulario; una etiqueta vacía vuelve al valor por defecto', function () {
     actingInPanel($this->admin, $this->jakare);
 
     Livewire::test(EditOrganizationProfile::class)
@@ -130,7 +130,6 @@ it('editar vocabulario y módulos; una etiqueta vacía vuelve al valor por defec
             'name' => 'Club Jakare',
             'type' => 'club',
             'terminology' => ['group' => 'Nivel', 'student' => ''],
-            'features' => ['board', 'apparel'],
         ])
         ->call('save')
         ->assertHasNoFormErrors();
@@ -138,6 +137,5 @@ it('editar vocabulario y módulos; una etiqueta vacía vuelve al valor por defec
     $jakare = $this->jakare->fresh();
 
     expect($jakare->term('group'))->toBe('Nivel')
-        ->and($jakare->term('student'))->toBe('Jugador')
-        ->and($jakare->features)->toBe(['board', 'apparel']);
+        ->and($jakare->term('student'))->toBe('Jugador');
 });

@@ -1,0 +1,47 @@
+<?php
+
+namespace App\Filament\Platform\Resources\Organizations;
+
+use App\Filament\Platform\Resources\Organizations\Pages\EditOrganization;
+use App\Filament\Platform\Resources\Organizations\Pages\ListOrganizations;
+use App\Filament\Platform\Resources\Organizations\Schemas\OrganizationForm;
+use App\Filament\Platform\Resources\Organizations\Tables\OrganizationsTable;
+use App\Models\Organization;
+use BackedEnum;
+use Filament\Resources\Resource;
+use Filament\Schemas\Schema;
+use Filament\Support\Icons\Heroicon;
+use Filament\Tables\Table;
+
+class OrganizationResource extends Resource
+{
+    protected static ?string $model = Organization::class;
+
+    protected static ?string $slug = 'organizaciones';
+
+    protected static string|BackedEnum|null $navigationIcon = Heroicon::OutlinedBuildingOffice2;
+
+    protected static ?string $modelLabel = 'organización';
+
+    protected static ?string $pluralModelLabel = 'organizaciones';
+
+    protected static ?string $recordTitleAttribute = 'name';
+
+    public static function form(Schema $schema): Schema
+    {
+        return OrganizationForm::configure($schema);
+    }
+
+    public static function table(Table $table): Table
+    {
+        return OrganizationsTable::configure($table);
+    }
+
+    public static function getPages(): array
+    {
+        return [
+            'index' => ListOrganizations::route('/'),
+            'edit' => EditOrganization::route('/{record}/edit'),
+        ];
+    }
+}

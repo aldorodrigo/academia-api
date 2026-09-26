@@ -61,8 +61,11 @@ class EditOrganizationProfile extends EditTenantProfile
                 )->values()->all()),
             Section::make('Módulos')
                 ->schema([
+                    // Los módulos los habilita la plataforma (super admin); el admin solo los ve.
                     CheckboxList::make('features')
                         ->label('Módulos activos')
+                        ->helperText(fn () => auth()->user()->is_super_admin ? null : 'Los módulos los habilita la plataforma.')
+                        ->disabled(fn () => ! auth()->user()->is_super_admin)
                         ->options(collect(Feature::cases())->mapWithKeys(fn (Feature $feature) => [$feature->value => $feature->label()]))
                         ->columns(2),
                 ]),

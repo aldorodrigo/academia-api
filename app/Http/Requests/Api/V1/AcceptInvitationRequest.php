@@ -20,7 +20,7 @@ class AcceptInvitationRequest extends FormRequest
     {
         $this->invitation = Invitation::findByToken((string) $this->route('token'));
 
-        abort_unless($this->invitation?->isPending(), 404, 'La invitación no es válida o ya venció.');
+        abort_unless($this->invitation?->canBeAccepted(), 404, 'La invitación no es válida o ya venció.');
     }
 
     /**

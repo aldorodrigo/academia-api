@@ -88,6 +88,14 @@ class Invitation extends Model
     }
 
     /**
+     * Pendiente y de una organización no suspendida.
+     */
+    public function canBeAccepted(): bool
+    {
+        return $this->isPending() && ! $this->organization->isSuspended();
+    }
+
+    /**
      * @return list<string>
      */
     public function roleLabels(): array
