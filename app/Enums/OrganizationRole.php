@@ -3,6 +3,7 @@
 namespace App\Enums;
 
 use App\Models\Organization;
+use Illuminate\Support\Str;
 
 /**
  * Roles base de cada organización (spatie/permission, teams = organización).
@@ -24,6 +25,15 @@ enum OrganizationRole: string
     case Auditor = 'sindico';
     case Instructor = 'instructor';
     case Guardian = 'tutor';
+
+    /**
+     * Etiqueta de cualquier rol: los base según el enum, los creados a mano en
+     * Shield a partir de su nombre.
+     */
+    public static function labelFor(string $name, ?Organization $organization = null): string
+    {
+        return self::tryFrom($name)?->label($organization) ?? Str::headline($name);
+    }
 
     public function label(?Organization $organization = null): string
     {

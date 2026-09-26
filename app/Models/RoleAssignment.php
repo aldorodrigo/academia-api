@@ -10,7 +10,6 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Str;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
@@ -86,7 +85,7 @@ class RoleAssignment extends Model
 
     public function label(): string
     {
-        return $this->roleEnum()?->label($this->organization) ?? Str::headline($this->role->name);
+        return OrganizationRole::labelFor($this->role->name, $this->organization);
     }
 
     /**
