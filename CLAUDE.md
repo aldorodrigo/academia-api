@@ -68,6 +68,15 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Roles/permisos: spatie/permission con `teams` = `organization_id` (se setea en `CurrentOrganization::set`).
 - `users.is_super_admin`: acceso total a la plataforma (`Gate::before`).
 
+### Paneles
+- **`/admin/{slug}`** (`AdminPanelProvider`): panel de cada organización (tenancy). Recursos en
+  `app/Filament/Resources`, páginas en `app/Filament/Pages`.
+- **`/plataforma`** (`PlatformPanelProvider`): solo super admins, sin tenancy. Organizaciones
+  (alta con primer admin, suspender/reactivar, entrar al panel) y usuarios (super admins).
+  Recursos en `app/Filament/Platform/Resources`. Sin organización activa los scopes no filtran.
+- Vistas propias en paneles: usar componentes `x-filament::*` o estilos inline (las clases de
+  Tailwind propias no están en el CSS de Filament).
+
 ### Roles e invitaciones
 - Roles base en `App\Enums\OrganizationRole`; se crean al crear una organización.
 - **Nunca** asignes roles con `assignRole()` directo: usá `App\Support\Roles\RoleAssigner`

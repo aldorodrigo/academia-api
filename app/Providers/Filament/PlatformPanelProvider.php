@@ -2,10 +2,6 @@
 
 namespace App\Providers\Filament;
 
-use App\Filament\Pages\Tenancy\EditOrganizationProfile;
-use App\Http\Middleware\SetCurrentOrganizationFromPanel;
-use App\Models\Organization;
-use BezhanSalleh\FilamentShield\FilamentShieldPlugin;
 use Filament\Actions\Action;
 use Filament\Http\Middleware\Authenticate;
 use Filament\Http\Middleware\AuthenticateSession;
@@ -16,7 +12,6 @@ use Filament\Panel;
 use Filament\PanelProvider;
 use Filament\Support\Colors\Color;
 use Filament\Support\Icons\Heroicon;
-use Filament\Widgets\AccountWidget;
 use Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse;
 use Illuminate\Cookie\Middleware\EncryptCookies;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
@@ -24,33 +19,33 @@ use Illuminate\Routing\Middleware\SubstituteBindings;
 use Illuminate\Session\Middleware\StartSession;
 use Illuminate\View\Middleware\ShareErrorsFromSession;
 
-class AdminPanelProvider extends PanelProvider
+/**
+ * Panel de la plataforma (/plataforma): solo super admins.
+ * Sin tenancy: gestiona organizaciones y super admins.
+ */
+class PlatformPanelProvider extends PanelProvider
 {
     public function panel(Panel $panel): Panel
     {
         return $panel
-            ->default()
-            ->id('admin')
-            ->path('admin')
+            ->id('platform')
+            ->path('plataforma')
             ->login()
-            ->passwordReset()
-            ->brandName(config('app.name'))
+            ->brandName(config('app.name').' · Plataforma')
             ->colors([
-                'primary' => Color::Emerald,
+                'primary' => Color::Indigo,
             ])
-            ->tenant(Organization::class, slugAttribute: 'slug')
-            ->tenantProfile(EditOrganizationProfile::class)
-            ->tenantMiddleware([
-                SetCurrentOrganizationFromPanel::class,
-            ], isPersistent: true)
-            ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
-            ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
+            ->discoverResources(in: app_path('Filament/Platform/Resources'), for: 'App\Filament\Platform\Resources')
+            ->discoverPages(in: app_path('Filament/Platform/Pages'), for: 'App\Filament\Platform\Pages')
             ->pages([
                 Dashboard::class,
             ])
-            ->discoverWidgets(in: app_path('Filament/Widgets'), for: 'App\Filament\Widgets')
-            ->widgets([
-                AccountWidget::class,
+            ->discoverWidgets(in: app_path('Filament/Platform/Widgets'), for: 'App\Filament\Platform\Widgets')
+            ->userMenuItems([
+                Action::make('organizationPanel')
+                    ->label('Panel de organizaciones')
+                    ->icon(Heroicon::OutlinedBuildingOffice2)
+                    ->url(fn () => url('/admin')),
             ])
             ->middleware([
                 EncryptCookies::class,
@@ -62,16 +57,6 @@ class AdminPanelProvider extends PanelProvider
                 SubstituteBindings::class,
                 DisableBladeIconComponents::class,
                 DispatchServingFilamentEvent::class,
-            ])
-            ->userMenuItems([
-                Action::make('platform')
-                    ->label('Plataforma')
-                    ->icon(Heroicon::OutlinedGlobeAlt)
-                    ->url(fn () => url('/plataforma'))
-                    ->visible(fn () => (bool) auth()->user()?->is_super_admin),
-            ])
-            ->plugins([
-                FilamentShieldPlugin::make(),
             ])
             ->authMiddleware([
                 Authenticate::class,

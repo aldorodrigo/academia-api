@@ -66,7 +66,9 @@ class User extends Authenticatable implements FilamentUser, HasTenants
      */
     public function activeOrganizations(): BelongsToMany
     {
-        return $this->organizations()->wherePivot('status', MembershipStatus::Active->value);
+        return $this->organizations()
+            ->wherePivot('status', MembershipStatus::Active->value)
+            ->whereNull('organizations.suspended_at');
     }
 
     public function belongsToOrganization(Organization $organization): bool
@@ -111,7 +113,11 @@ class User extends Authenticatable implements FilamentUser, HasTenants
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return $this->is_super_admin || $this->activeOrganizations()->exists();
+        return match ($panel->getId()) {
+            // Panel de la plataforma: solo super admins.
+            'platform' => (bool) $this->is_super_admin,
+            default => $this->is_super_admin || $this->activeOrganizations()->exists(),
+        };
     }
 
     /**

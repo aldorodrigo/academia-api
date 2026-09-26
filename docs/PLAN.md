@@ -292,4 +292,11 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
   restringir el acceso al panel a quien tenga algún rol con permisos (hoy entra cualquier miembro activo, aunque no ve nada);
   deep links nativos (Android/iOS) cuando haya dominio.
 
+### Panel de plataforma — completado
+- `/plataforma` para super admins: tablero, organizaciones (alta con invitación al primer admin, editar,
+  suspender/reactivar con motivo, entrar al panel, invitar otro admin) y usuarios (dar/quitar super admin,
+  con resguardo de no quitarse a uno mismo ni al último).
+- Organizaciones suspendidas: bloqueo en app, API, panel e invitaciones; el super admin sigue entrando.
+- Módulos: los habilita la plataforma; el admin de la organización solo los ve.
+
 ### Próximo: Sprint 2 — académico ("Mis hijos" primero en la app)

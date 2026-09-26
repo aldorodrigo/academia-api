@@ -20,7 +20,7 @@ class InvitationController extends Controller
     {
         $invitation = Invitation::findByToken($token);
 
-        abort_unless($invitation?->isPending(), Response::HTTP_NOT_FOUND, 'La invitación no es válida o ya venció.');
+        abort_unless($invitation?->canBeAccepted(), Response::HTTP_NOT_FOUND, 'La invitación no es válida o ya venció.');
 
         $organization = $invitation->organization;
 

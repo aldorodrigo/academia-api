@@ -27,6 +27,12 @@ class ResolveOrganizationFromHeader
         $organization = Organization::query()->where('slug', $slug)->first();
 
         abort_if(
+            $organization?->isSuspended() && ! $request->user()?->is_super_admin,
+            Response::HTTP_FORBIDDEN,
+            'La organización está suspendida.',
+        );
+
+        abort_if(
             $organization === null || ! $request->user()?->belongsToOrganization($organization),
             Response::HTTP_FORBIDDEN,
             'No tenés acceso a esta organización.',

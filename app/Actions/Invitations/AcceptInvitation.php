@@ -30,7 +30,7 @@ class AcceptInvitation
         return DB::transaction(function () use ($invitation, $data) {
             $invitation = Invitation::query()->withoutGlobalScopes()->lockForUpdate()->findOrFail($invitation->id);
 
-            abort_unless($invitation->isPending(), 404, 'La invitación no es válida o ya venció.');
+            abort_unless($invitation->canBeAccepted(), 404, 'La invitación no es válida o ya venció.');
 
             $user = User::query()->where('email', $invitation->email)->first();
 

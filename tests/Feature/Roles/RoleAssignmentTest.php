@@ -4,6 +4,7 @@ use App\Enums\OrganizationRole;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\RoleAssignment;
+use App\Models\User;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Support\Carbon;
@@ -100,6 +101,8 @@ it('el admin de la organización tiene acceso total solo en su organización', f
 });
 
 it('users:super-admin otorga y quita el acceso', function () {
+    User::factory()->create(['is_super_admin' => true]);
+
     $this->artisan('users:super-admin', ['email' => $this->user->email])->assertSuccessful();
     expect($this->user->fresh()->is_super_admin)->toBeTrue();
 

@@ -8,13 +8,15 @@ use App\Enums\OrganizationType;
 use Carbon\CarbonImmutable;
 use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'features'])]
+#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'features', 'suspended_at', 'suspension_reason'])]
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
@@ -57,7 +59,43 @@ class Organization extends Model
             'type' => OrganizationType::class,
             'terminology' => 'array',
             'features' => 'array',
+            'suspended_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Organizaciones no suspendidas.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function active(Builder $query): void
+    {
+        $query->whereNull('suspended_at');
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->suspended_at !== null;
+    }
+
+    /**
+     * Bloquea el acceso de todos sus miembros (salvo super admins); los datos se conservan.
+     */
+    public function suspend(string $reason): void
+    {
+        $this->update(['suspended_at' => now(), 'suspension_reason' => $reason]);
+
+        activity('platform')->performedOn($this)
+            ->withProperties(['reason' => $reason])
+            ->log('Organización suspendida');
+    }
+
+    public function reactivate(): void
+    {
+        $this->update(['suspended_at' => null, 'suspension_reason' => null]);
+
+        activity('platform')->performedOn($this)->log('Organización reactivada');
     }
 
     public function getRouteKeyName(): string
@@ -99,6 +137,14 @@ class Organization extends Model
     public function seasons(): HasMany
     {
         return $this->hasMany(Season::class);
+    }
+
+    /**
+     * @return HasMany<Invitation, $this>
+     */
+    public function invitations(): HasMany
+    {
+        return $this->hasMany(Invitation::class);
     }
 
     /**

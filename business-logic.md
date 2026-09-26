@@ -25,6 +25,17 @@ documento difieren, se corrige uno de los dos en el mismo cambio.
 
 - **Módulos opcionales** (`features`): `board` (comisión, actas, resoluciones), `fundraising` (rifas),
   `apparel` (indumentaria), `tournaments`, `evaluations`, `electronic_invoicing` (SIFEN).
+  Los **habilita la plataforma** (super admin): son lo que la organización contrata. El admin de la
+  organización los ve pero no los cambia; sí edita el vocabulario.
+- **Alta:** la hace un super admin desde `/plataforma` (datos, módulos y el email del **primer
+  administrador**, que recibe una invitación con rol `admin`). Los roles base se crean solos.
+  El slug no se cambia después del alta (es la URL del panel y el header `X-Organization`).
+- **Estado:** `activa` o `suspendida` (con motivo). Una organización suspendida:
+  - no aparece para sus miembros (ni en la app ni en el panel) y la API responde 403
+    "La organización está suspendida.";
+  - sus invitaciones no se pueden ver ni aceptar;
+  - conserva todos sus datos y sus tareas programadas; el super admin sigue entrando (soporte).
+  - Suspender y reactivar queda en el registro de actividad. No hay borrado desde el panel.
 
 ## 2. Usuarios, membresías y roles
 
@@ -36,7 +47,8 @@ documento difieren, se corrige uno de los dos en el mismo cambio.
 ### Super admin y admin
 - **Super admin** de la plataforma (`users.is_super_admin`): acceso total a todas las organizaciones
   (alta de organizaciones, soporte, Horizon). No es un rol de organización: se otorga o quita solo
-  por consola (`users:super-admin {email} [--revoke]`), nunca por invitación, y queda auditado.
+  desde `/plataforma` → Usuarios o por consola (`users:super-admin {email} [--revoke]`), nunca por
+  invitación, y queda auditado. Nadie puede quitarse su propio acceso y siempre queda al menos uno.
 - **Admin** de la organización (rol `admin`): acceso total **solo dentro de su organización**
   (configuración, vocabulario, módulos, miembros, invitaciones, roles y permisos).
 
