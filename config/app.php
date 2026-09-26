@@ -55,6 +55,13 @@ return [
     'url' => env('APP_URL', 'http://localhost'),
 
     /*
+    | URL de la app web (Flutter). Se usa para armar los links de invitación:
+    | {frontend_url}/invitacion/{token}.
+    */
+
+    'frontend_url' => env('APP_FRONTEND_URL', 'http://localhost:5000'),
+
+    /*
     |--------------------------------------------------------------------------
     | Application Timezone
     |--------------------------------------------------------------------------

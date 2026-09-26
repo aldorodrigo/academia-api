@@ -22,7 +22,16 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        // El super admin de la plataforma (is_super_admin) tiene acceso total.
-        Gate::before(fn (User $user): ?bool => $user->is_super_admin ? true : null);
+        // El super admin de la plataforma (is_super_admin) tiene acceso total;
+        // el admin de la organización, acceso total dentro de la organización activa.
+        Gate::before(function (User $user): ?bool {
+            if ($user->is_super_admin) {
+                return true;
+            }
+
+            $organization = app(CurrentOrganization::class)->get();
+
+            return $organization !== null && $user->isOrganizationAdmin($organization) ? true : null;
+        });
     }
 }

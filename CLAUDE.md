@@ -39,7 +39,13 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 ./vendor/bin/sail artisan horizon        # procesar colas
 ./vendor/bin/sail composer test          # Pest
 ./vendor/bin/sail composer lint          # Pint
+./vendor/bin/sail artisan queue:restart  # después de composer require o de cambiar jobs/mails
+./vendor/bin/sail artisan roles:expire   # mandatos (agendado a diario)
+./vendor/bin/sail artisan organizations:sync-roles   # roles base en organizaciones existentes
+./vendor/bin/sail artisan users:super-admin {email} [--revoke]
 ```
+
+- `APP_FRONTEND_URL`: URL de la app web Flutter; arma los links de invitación (`/invitacion/{token}`).
 
 - Panel: http://localhost/admin — `admin@academia.test` / `password` (super admin, solo dev).
 - Horizon: http://localhost/horizon (solo super admin).
@@ -61,6 +67,14 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Formularios de Filament: **nunca** exponer `organization_id` como campo editable.
 - Roles/permisos: spatie/permission con `teams` = `organization_id` (se setea en `CurrentOrganization::set`).
 - `users.is_super_admin`: acceso total a la plataforma (`Gate::before`).
+
+### Roles e invitaciones
+- Roles base en `App\Enums\OrganizationRole`; se crean al crear una organización.
+- **Nunca** asignes roles con `assignRole()` directo: usá `App\Support\Roles\RoleAssigner`
+  (`role_assignments` es la fuente de verdad y sincroniza spatie).
+- Invitaciones: `CreateInvitation` / `AcceptInvitation` (`app/Actions/Invitations`). El token solo
+  existe en claro al crear o reenviar; se guarda hasheado.
+- Contrato de la API para la app: `docs/API_V1.md`. Plan del proyecto: `docs/PLAN.md`.
 
 ### Dinero
 - Montos en **enteros** (guaraníes, sin decimales). Nunca `float` para dinero.

@@ -13,4 +13,16 @@ enum Feature: string
     case Tournaments = 'tournaments';
     case Evaluations = 'evaluations';
     case ElectronicInvoicing = 'electronic_invoicing';
+
+    public function label(): string
+    {
+        return match ($this) {
+            self::Board => 'Comisión, actas y resoluciones',
+            self::Fundraising => 'Rifas y recaudación',
+            self::Apparel => 'Indumentaria',
+            self::Tournaments => 'Torneos',
+            self::Evaluations => 'Evaluaciones',
+            self::ElectronicInvoicing => 'Factura electrónica (SIFEN)',
+        };
+    }
 }
