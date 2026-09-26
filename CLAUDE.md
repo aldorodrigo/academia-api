@@ -84,6 +84,15 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Invitaciones: `CreateInvitation` / `AcceptInvitation` (`app/Actions/Invitations`). El token solo
   existe en claro al crear o reenviar; se guarda hasheado.
 - Contrato de la API para la app: `docs/API_V1.md`. Plan del proyecto: `docs/PLAN.md`.
+- Invitación de un tutor cargado: `CreateInvitation::forGuardian()`; al aceptarla, `guardians.user_id` queda vinculado.
+
+### Académico
+- Programa → Grupo → Horarios; `Enrollment` = alumno + grupo + temporada (`Season::currentOrNull()`, una sola actual).
+- "Mis hijos": `Student::inChargeOf($user)` (tutor vinculado o alumno adulto con `user_id`).
+- Ficha médica: siempre chequear `can('viewMedical', $student)` (`StudentPolicy`); los campos clínicos van cifrados.
+- Importación de alumnos: la lógica de fila está en `App\Actions\Students\ImportStudentRow` (testeable sin Filament);
+  el importer corre en cola y recibe `organization_id` en `options`.
+- Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
 
 ### Dinero
 - Montos en **enteros** (guaraníes, sin decimales). Nunca `float` para dinero.

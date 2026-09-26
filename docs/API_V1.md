@@ -77,7 +77,7 @@ Agrega `membership` con los roles del usuario en la organización activa:
 
 El link que se envía por email o se muestra como QR es `{APP_URL_WEB}/invitacion/{token}`. En el celular abre la app (deep link, cuando haya dominio) y en la web abre la app web. Además, la app permite pegar el link o el código a mano.
 
-## Sprint 2 (contrato)
+## Sprint 2 (implementado)
 
 Todos requieren token + organización. Solo se incluyen las inscripciones de la temporada actual.
 Estados de inscripción: `pendiente`, `activo`, `becado`, `suspendido`, `baja` (con `status_label` para mostrar).
