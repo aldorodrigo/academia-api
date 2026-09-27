@@ -13,3 +13,6 @@ Schedule::command('roles:expire')->dailyAt('00:05')->timezone('America/Asuncion'
 
 // Cuota mensual: el día 1 en la fecha local. Idempotente (lock + índice único).
 Schedule::command('charges:generate')->monthlyOn(1, '00:30')->timezone('America/Asuncion')->withoutOverlapping();
+
+// Gastos recurrentes (alquiler de cancha…): pendientes del mes, el día 1. Idempotente.
+Schedule::command('expenses:generate')->monthlyOn(1, '00:40')->timezone('America/Asuncion')->withoutOverlapping();

@@ -312,6 +312,8 @@ Ingresos y gastos del período (por defecto, el mes actual en la fecha local).
 ```
 
 - `opening_balance` / `closing_balance`: suma de todas las cuentas al inicio y al final del período. `accounts[].balance`: saldo al final del período.
+- `other`: saldos iniciales y ajustes del período (ni ingreso ni gasto). Siempre se cumple: inicial + ingresos − gastos + `other` = final.
+- Un pago o gasto anulado en un período posterior resta en ese período.
 - Ingresos por concepto (según a qué se imputó cada pago; lo no imputado va como "Saldo a favor"). Gastos pagados por categoría. Transferencias entre cuentas no cuentan; anulados tampoco.
 - `pending_expenses`: gastos pendientes de pago que vencen en el período.
 

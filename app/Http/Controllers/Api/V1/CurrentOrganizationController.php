@@ -42,6 +42,11 @@ class CurrentOrganizationController extends Controller
                 'features' => $organization->features ?? [],
                 'membership' => [
                     'roles' => $roles,
+                    // Permisos que usa la app para mostrar secciones (ej. informes).
+                    'permissions' => collect(['view_reports' => 'View:Reports'])
+                        ->filter(fn (string $permission) => $user->can($permission))
+                        ->keys()
+                        ->values(),
                 ],
             ],
         ]);
