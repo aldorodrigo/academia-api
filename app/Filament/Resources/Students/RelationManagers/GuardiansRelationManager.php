@@ -6,6 +6,7 @@ use App\Enums\GuardianRelationship;
 use App\Filament\Resources\Guardians\GuardianResource;
 use App\Filament\Resources\Guardians\Tables\GuardiansTable;
 use App\Filament\Support\Terms;
+use App\Models\Family;
 use App\Models\Guardian;
 use Filament\Actions\AttachAction;
 use Filament\Actions\CreateAction;
@@ -54,8 +55,9 @@ class GuardiansRelationManager extends RelationManager
                 AttachAction::make()
                     ->label('Vincular existente')
                     ->recordSelectSearchColumns(['first_name', 'last_name', 'email', 'document'])
-                    ->schema(fn (AttachAction $action) => [$action->getRecordSelect(), self::relationshipField()]),
-                CreateAction::make(),
+                    ->schema(fn (AttachAction $action) => [$action->getRecordSelect(), self::relationshipField()])
+                    ->after(fn () => Family::syncFor($this->getOwnerRecord())),
+                CreateAction::make()->after(fn () => Family::syncFor($this->getOwnerRecord())),
             ])
             ->recordActions([
                 GuardiansTable::inviteAction(),

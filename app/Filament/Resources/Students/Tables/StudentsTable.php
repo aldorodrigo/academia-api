@@ -18,7 +18,7 @@ class StudentsTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['family', 'currentEnrollments.group']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('currentEnrollments.group'))
             ->columns([
                 TextColumn::make('last_name')->label('Apellido')->searchable()->sortable(),
                 TextColumn::make('first_name')->label('Nombre')->searchable()->sortable(),
@@ -33,7 +33,6 @@ class StudentsTable
                     ->label('Estado')
                     ->state(fn (Student $record) => $record->currentEnrollments->map(fn (Enrollment $e) => $e->status)->all())
                     ->badge(),
-                TextColumn::make('family.name')->label('Familia')->toggleable(),
             ])
             ->filters([
                 SelectFilter::make('group')

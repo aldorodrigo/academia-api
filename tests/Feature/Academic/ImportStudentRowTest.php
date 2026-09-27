@@ -104,3 +104,13 @@ it('no usa grupos de otra organización', function () {
 
     importRow($ajena);
 })->throws(ImportRowException::class, 'No existe Disciplina "fútbol".');
+
+it('sin categoría usa la que corresponde por edad', function () {
+    $this->season->update(['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31']);
+    $this->group->update(['min_age' => 9, 'max_age' => 10]);
+
+    $student = importRow($this->jakare, ['group' => null, 'program' => null]);
+
+    app(CurrentOrganization::class)->set($this->jakare);
+    expect($student->enrollments()->sole()->group_id)->toBe($this->group->id);
+});

@@ -2,9 +2,12 @@
 
 namespace App\Models;
 
+use App\Enums\GroupCriterion;
 use App\Models\Concerns\BelongsToOrganization;
+use Carbon\CarbonInterface;
 use Database\Factories\GroupFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -80,5 +83,23 @@ class Group extends Model
         $minAge = $this->min_age ?? $this->max_age;
 
         return range($year - $this->max_age, $year - $minAge);
+    }
+
+    /**
+     * Categoría que corresponde por año de nacimiento en la temporada (ej. 2016 → Sub-10).
+     * Solo si hay exactamente una; con varias disciplinas se puede acotar por nombre.
+     */
+    public static function suggestFor(CarbonInterface $birthDate, Season $season, ?string $programName = null): ?self
+    {
+        $matches = static::query()
+            ->where('is_active', true)
+            ->whereNotNull('max_age')
+            ->whereHas('program', fn (Builder $program) => $program
+                ->where('group_criterion', GroupCriterion::BirthYear)
+                ->when($programName, fn (Builder $query) => $query->where('name', $programName)))
+            ->get()
+            ->filter(fn (Group $group) => in_array($birthDate->year, $group->birthYearsFor($season), true));
+
+        return $matches->count() === 1 ? $matches->first() : null;
     }
 }

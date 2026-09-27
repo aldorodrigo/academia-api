@@ -2,12 +2,12 @@
 
 namespace Database\Seeders;
 
+use App\Actions\Students\RegisterStudent;
 use App\Enums\EnrollmentStatus;
 use App\Enums\GroupCriterion;
 use App\Enums\MembershipStatus;
 use App\Enums\OrganizationRole;
 use App\Models\Enrollment;
-use App\Models\Family;
 use App\Models\Group;
 use App\Models\Guardian;
 use App\Models\Program;
@@ -68,26 +68,27 @@ class AcademicSeeder extends Seeder
         );
         $this->member($tutor, OrganizationRole::Guardian);
 
-        $family = Family::query()->firstOrCreate(['name' => 'Familia Benítez']);
-        $ana = Guardian::query()->firstOrCreate(
-            ['email' => 'tutor@academia.test'],
-            ['first_name' => 'Ana', 'last_name' => 'Benítez', 'phone' => '0981 123 456', 'family_id' => $family->id, 'user_id' => $tutor->id],
-        );
-
         $year = $season?->starts_on->year ?? now()->year;
         $children = [
             ['Mateo', 'Benítez', '6123456', ($year - 10).'-03-14', 10, EnrollmentStatus::Active],
             ['Sofía', 'Benítez', '7234567', ($year - 8).'-07-02', 8, EnrollmentStatus::Scholarship],
         ];
 
+        // Alta como en el panel: datos + inscripción + tutor (familia automática).
         foreach ($children as [$first, $last, $document, $birth, $age, $status]) {
-            $student = Student::query()->firstOrCreate(
-                ['document' => $document],
-                ['first_name' => $first, 'last_name' => $last, 'birth_date' => $birth, 'family_id' => $family->id, 'shirt_size' => (string) $age],
-            );
-            $student->guardians()->syncWithoutDetaching([$ana->id => ['relationship' => 'madre']]);
-            $this->enroll($student, $groups[$age], $season, $status);
+            if ($season !== null) {
+                app(RegisterStudent::class)->handle(
+                    $organization,
+                    ['first_name' => $first, 'last_name' => $last, 'document' => $document, 'birth_date' => $birth, 'shirt_size' => (string) $age],
+                    $groups[$age],
+                    $season,
+                    $status,
+                    [['first_name' => 'Ana', 'last_name' => 'Benítez', 'email' => 'tutor@academia.test', 'phone' => '0981 123 456', 'relationship' => 'madre']],
+                );
+            }
         }
+
+        Guardian::query()->where('email', 'tutor@academia.test')->update(['user_id' => $tutor->id]);
 
         Student::query()->where('document', '6123456')->first()->medicalRecord()->firstOrCreate([], [
             'organization_id' => $organization->id,

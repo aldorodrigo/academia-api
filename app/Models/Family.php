@@ -33,4 +33,32 @@ class Family extends Model
     {
         return $this->hasMany(Guardian::class);
     }
+
+    /**
+     * Familia automática: la del alumno, la de alguno de sus tutores o una nueva.
+     * Los hermanos que comparten un tutor quedan juntos.
+     */
+    public static function syncFor(Student $student): ?self
+    {
+        $guardians = $student->guardians()->get();
+
+        if ($student->family_id === null && $guardians->isEmpty()) {
+            return null;
+        }
+
+        $familyId = $student->family_id
+            ?? $guardians->pluck('family_id')->filter()->first()
+            ?? static::query()->create([
+                'organization_id' => $student->organization_id,
+                'name' => "Familia {$student->last_name}",
+            ])->id;
+
+        if ($student->family_id !== $familyId) {
+            $student->update(['family_id' => $familyId]);
+        }
+
+        $guardians->whereNull('family_id')->each->update(['family_id' => $familyId]);
+
+        return static::query()->find($familyId);
+    }
 }

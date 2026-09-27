@@ -40,6 +40,9 @@ class EnrollmentsRelationManager extends RelationManager
                 ->getOptionLabelFromRecordUsing(fn (Group $group) => "{$group->name} · {$group->program->name}")
                 ->required()
                 ->preload()
+                ->default(fn () => ($season = Season::currentOrNull()) && $this->getOwnerRecord()->birth_date
+                    ? Group::suggestFor($this->getOwnerRecord()->birth_date, $season)?->id
+                    : null)
                 // Una inscripción por jugador, grupo y temporada.
                 ->unique(
                     ignoreRecord: true,

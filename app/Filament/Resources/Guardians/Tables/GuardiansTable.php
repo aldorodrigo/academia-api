@@ -23,14 +23,13 @@ class GuardiansTable
     public static function configure(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['students', 'family']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('students'))
             ->columns([
                 TextColumn::make('last_name')->label('Apellido')->searchable()->sortable(),
                 TextColumn::make('first_name')->label('Nombre')->searchable(),
                 TextColumn::make('email')->label('Correo')->searchable(),
                 TextColumn::make('phone')->label('Teléfono'),
                 TextColumn::make('students.first_name')->label('Hijos')->badge(),
-                TextColumn::make('family.name')->label('Familia')->toggleable(isToggledHiddenByDefault: true),
                 IconColumn::make('has_account')->label('Usa la app')->boolean()
                     ->state(fn (Guardian $record) => $record->hasAccount()),
             ])

@@ -90,8 +90,11 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Programa → Grupo → Horarios; `Enrollment` = alumno + grupo + temporada (`Season::currentOrNull()`, una sola actual).
 - "Mis hijos": `Student::inChargeOf($user)` (tutor vinculado o alumno adulto con `user_id`).
 - Ficha médica: siempre chequear `can('viewMedical', $student)` (`StudentPolicy`); los campos clínicos van cifrados.
-- Importación de alumnos: la lógica de fila está en `App\Actions\Students\ImportStudentRow` (testeable sin Filament);
-  el importer corre en cola y recibe `organization_id` en `options`.
+- Alta de jugador: `App\Actions\Students\RegisterStudent` (datos + inscripción + tutores + invitación). La usan
+  el formulario "Nuevo jugador" y la importación (`ImportStudentRow` adapta la fila; el importer corre en cola y
+  recibe `organization_id` en `options`).
+- Familia: automática e invisible (`Family::syncFor($student)`), sin menú ni campo en el panel.
+- Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season)`.
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
 
 ### Dinero

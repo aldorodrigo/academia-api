@@ -6,12 +6,14 @@ use App\Filament\Imports\StudentImporter;
 use App\Filament\Resources\Enrollments\EnrollmentResource;
 use App\Filament\Resources\Enrollments\Pages\ManageEnrollments;
 use App\Filament\Resources\Groups\Pages\CreateGroup;
+use App\Filament\Resources\Students\Pages\CreateStudent;
 use App\Filament\Resources\Students\Pages\EditStudent;
 use App\Filament\Resources\Students\Pages\ListStudents;
 use App\Filament\Resources\Students\RelationManagers\EnrollmentsRelationManager;
 use App\Filament\Resources\Students\RelationManagers\GuardiansRelationManager;
 use App\Mail\InvitationMail;
 use App\Models\Enrollment;
+use App\Models\Family;
 use App\Models\Group;
 use App\Models\Guardian;
 use App\Models\Organization;
@@ -152,8 +154,8 @@ it('las páginas del módulo académico cargan', function (string $path) {
         ->get(str_replace(['{student}', '{group}'], [$student->id, $group->id], "/admin/jakare/{$path}"))
         ->assertOk();
 })->with([
-    'sedes', 'programas', 'grupos', 'grupos/create', 'grupos/{group}/edit', 'alumnos', 'alumnos/create',
-    'alumnos/{student}/edit', 'tutores', 'familias', 'inscripciones',
+    'grupos', 'grupos/create', 'grupos/{group}/edit', 'alumnos', 'alumnos/create',
+    'alumnos/{student}/edit', 'tutores', 'inscripciones', 'seasons',
 ]);
 
 it('los relation managers del alumno muestran inscripciones y tutores', function () {
@@ -212,4 +214,108 @@ it('la lista de inscripciones no tiene alta y lleva a la ficha del jugador', fun
 
     expect($enrollment->fresh()->status)->toBe(EnrollmentStatus::Withdrawn)
         ->and($enrollment->fresh()->ended_on)->not->toBeNull();
+});
+
+it('los menús de familias, sedes y disciplinas ya no existen', function (string $path) {
+    $this->actingAs($this->admin)->get("/admin/jakare/{$path}")->assertNotFound();
+})->with(['familias', 'sedes', 'programas']);
+
+it('nuevo jugador: datos, categoría sugerida, tutores e invitación en un paso', function () {
+    inPanel($this->admin, $this->jakare);
+    $sub10 = Group::factory()->for($this->program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id, 'min_age' => 9, 'max_age' => 10]);
+    Group::factory()->for($this->program)->create(['name' => 'Sub-12', 'organization_id' => $this->jakare->id, 'min_age' => 11, 'max_age' => 12]);
+    $year = Season::currentOrNull()->starts_on->year;
+
+    $page = Livewire::test(CreateStudent::class)
+        ->fillForm(['first_name' => 'Mateo', 'last_name' => 'Benítez', 'document' => '6123456'])
+        ->set('data.birth_date', ($year - 10).'-03-14')
+        ->assertSchemaStateSet(['group_id' => $sub10->id, 'season_id' => Season::currentOrNull()->id, 'status' => 'activo']);
+
+    $guardians = array_keys($page->get('data.guardians'));
+    $page->set("data.guardians.{$guardians[0]}", [
+        'email' => 'ana@test.com', 'first_name' => 'Ana', 'last_name' => 'Benítez', 'relationship' => 'madre', 'phone' => null, 'invite' => true,
+    ])
+        ->call('create')
+        ->assertHasNoFormErrors()
+        ->assertNotified('Jugador inscripto. Invitaciones enviadas: 1.');
+
+    $student = Student::query()->where('document', '6123456')->sole();
+    expect($student->currentEnrollments()->sole()->group_id)->toBe($sub10->id)
+        ->and($student->guardians()->sole()->email)->toBe('ana@test.com')
+        ->and($student->family_id)->not->toBeNull();
+    Mail::assertQueued(InvitationMail::class, fn ($mail) => $mail->hasTo('ana@test.com'));
+});
+
+it('un menor sin tutores no se puede crear', function () {
+    inPanel($this->admin, $this->jakare);
+    $group = Group::factory()->for($this->program)->create(['organization_id' => $this->jakare->id]);
+
+    Livewire::test(CreateStudent::class)
+        ->fillForm([
+            'first_name' => 'Mateo', 'last_name' => 'Benítez', 'birth_date' => now()->subYears(10)->toDateString(),
+            'group_id' => $group->id, 'guardians' => [],
+        ])
+        ->call('create')
+        ->assertHasFormErrors(['guardians' => 'min']);
+
+    expect(Student::query()->count())->toBe(0);
+});
+
+it('un adulto se puede crear sin tutores', function () {
+    inPanel($this->admin, $this->jakare);
+    $group = Group::factory()->for($this->program)->create(['organization_id' => $this->jakare->id]);
+
+    Livewire::test(CreateStudent::class)
+        ->fillForm([
+            'first_name' => 'Laura', 'last_name' => 'Ríos', 'birth_date' => now()->subYears(30)->toDateString(),
+            'group_id' => $group->id, 'guardians' => [],
+        ])
+        ->call('create')
+        ->assertHasNoFormErrors()
+        ->assertNotified('Jugador inscripto.');
+
+    expect(Student::query()->sole()->enrollments()->count())->toBe(1);
+});
+
+it('un correo de tutor ya cargado completa sus datos', function () {
+    inPanel($this->admin, $this->jakare);
+    $guardian = Guardian::factory()->for($this->jakare)->create(['first_name' => 'Ana', 'last_name' => 'Benítez', 'email' => 'ana@test.com', 'phone' => '0981 1']);
+
+    $page = Livewire::test(CreateStudent::class);
+    $item = array_key_first($page->get('data.guardians'));
+
+    $page->set("data.guardians.{$item}.email", 'ANA@test.com')
+        ->assertSet("data.guardians.{$item}.first_name", 'Ana')
+        ->assertSet("data.guardians.{$item}.last_name", 'Benítez')
+        ->assertSet("data.guardians.{$item}.phone", $guardian->phone);
+});
+
+it('con una sola disciplina no se pregunta en el formulario de categoría', function () {
+    inPanel($this->admin, $this->jakare);
+
+    Livewire::test(CreateGroup::class)
+        ->assertFormFieldHidden('program_id')
+        ->fillForm(['name' => 'Sub-8', 'min_age' => 7, 'max_age' => 8])
+        ->call('create')
+        ->assertHasNoFormErrors();
+
+    expect(Group::query()->where('name', 'Sub-8')->sole()->program_id)->toBe($this->program->id);
+
+    Program::factory()->for($this->jakare)->create(['name' => 'Pádel']);
+    Livewire::test(CreateGroup::class)->assertFormFieldVisible('program_id');
+});
+
+it('vincular un tutor desde la ficha arma la familia', function () {
+    inPanel($this->admin, $this->jakare);
+    $brother = Student::factory()->for($this->jakare)->create();
+    $guardian = Guardian::factory()->for($this->jakare)->create();
+    $brother->guardians()->attach($guardian);
+    $family = Family::syncFor($brother);
+    $sister = Student::factory()->for($this->jakare)->create();
+
+    Livewire::test(GuardiansRelationManager::class, ['ownerRecord' => $sister, 'pageClass' => EditStudent::class])
+        ->callTableAction('attach', data: ['recordId' => $guardian->id, 'relationship' => 'madre'])
+        ->assertHasNoTableActionErrors();
+
+    expect($sister->fresh()->family_id)->toBe($family->id);
 });

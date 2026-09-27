@@ -310,9 +310,18 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
     `MedicalRecord` (datos clínicos cifrados), `Enrollment` con estados; una sola temporada actual por organización.
   - `StudentPolicy::viewMedical`: permiso `ViewMedical:Student`, tutor del alumno, alumno adulto e instructor de su grupo.
   - Endpoints con API Resources (`app/Http/Resources/Api/V1`); `404` para alumnos ajenos.
-  - Panel "Académico": sedes, programas, grupos (horarios e instructores), alumnos (ficha médica, inscripciones, tutores),
-    inscripciones (lista con cambio de estado individual y masivo; se inscribe solo desde la ficha del jugador); "Personas": tutores (invitar / invitar seleccionados) y familias.
-  - Importación Excel/CSV de alumnos + hasta dos tutores (`ImportStudentRow`, reimportable sin duplicar, invitación opcional).
+  - Panel simplificado:
+    - **Académico:** Categorías, Jugadores, Inscripciones, Temporadas.
+    - **Personas:** Miembros, Invitaciones, Tutores.
+    - Disciplinas y sedes se crean desde el formulario de Categoría; con una sola disciplina no se pregunta.
+    - Familia automática e invisible (`Family::syncFor`): los hermanos que comparten tutor quedan juntos.
+  - **Alta de jugador en un paso** (`RegisterStudent`):
+    - datos, categoría sugerida por fecha de nacimiento (`Group::suggestFor`), temporada y estado;
+    - tutores, reutilizando los ya cargados por correo, con invitación a la app;
+    - un menor necesita al menos un tutor.
+
+    Las inscripciones siguientes se hacen desde la ficha del jugador; la lista de inscripciones sirve para ver y cambiar estados.
+  - Importación Excel/CSV de alumnos + hasta dos tutores: `ImportStudentRow` usa `RegisterStudent`, se puede reimportar sin duplicar, la categoría es opcional (se sugiere por edad) y la invitación es opcional.
   - Invitaciones con `guardian_id`: al aceptar, el tutor queda vinculado y la app muestra sus hijos.
   - Seeder de desarrollo: `tutor@academia.test` y `tecnico@academia.test` (`password`).
 - **Probado de punta a punta:** tutor sembrado → login en la app web en un navegador real → inicio con sus dos hijos →

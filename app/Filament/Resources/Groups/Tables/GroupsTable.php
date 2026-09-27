@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Groups\Tables;
 
 use App\Enums\EnrollmentStatus;
+use App\Filament\Resources\Groups\Schemas\GroupForm;
 use App\Filament\Support\Terms;
 use App\Models\Group;
 use App\Models\Schedule;
@@ -25,7 +26,8 @@ class GroupsTable
                     ->where('status', '!=', EnrollmentStatus::Withdrawn)
                     ->whereHas('season', fn (Builder $season) => $season->where('is_current', true))]))
             ->columns([
-                TextColumn::make('program.name')->label(Terms::label('program', 'Disciplina'))->sortable(),
+                TextColumn::make('program.name')->label(Terms::label('program', 'Disciplina'))->sortable()
+                    ->visible(fn () => GroupForm::onlyProgram() === null),
                 TextColumn::make('name')->label('Nombre')->searchable()->sortable(),
                 TextColumn::make('criterion')
                     ->label('Edades / nivel')
@@ -46,7 +48,8 @@ class GroupsTable
                 IconColumn::make('is_active')->label('Activo')->boolean(),
             ])
             ->filters([
-                SelectFilter::make('program')->label(Terms::label('program', 'Disciplina'))->relationship('program', 'name'),
+                SelectFilter::make('program')->label(Terms::label('program', 'Disciplina'))->relationship('program', 'name')
+                    ->visible(fn () => GroupForm::onlyProgram() === null),
             ])
             ->defaultSort('name')
             ->recordActions([EditAction::make(), DeleteAction::make()]);

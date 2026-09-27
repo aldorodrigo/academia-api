@@ -7,7 +7,6 @@ use App\Filament\Resources\Guardians\Tables\GuardiansTable;
 use App\Filament\Support\Terms;
 use App\Models\Guardian;
 use BackedEnum;
-use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
 use Filament\Schemas\Schema;
@@ -63,12 +62,6 @@ class GuardianResource extends Resource
             TextInput::make('email')->label('Correo')->email()->maxLength(255)
                 ->helperText('Con el correo se le puede mandar la invitación a la app.'),
             TextInput::make('phone')->label('Teléfono')->tel()->maxLength(30),
-            Select::make('family_id')
-                ->label('Familia')
-                ->relationship('family', 'name')
-                ->searchable()
-                ->preload()
-                ->createOptionForm([TextInput::make('name')->label('Nombre')->required()]),
         ];
     }
 

@@ -16,6 +16,7 @@ use Illuminate\Support\Number;
 /**
  * Planilla de alumnos: una fila por alumno con hasta dos tutores.
  * La lógica de cada fila está en ImportStudentRow; acá solo se mapean columnas.
+ * Programa y grupo son opcionales: si faltan, se usa la categoría que corresponde por edad.
  */
 class StudentImporter extends Importer
 {
@@ -30,8 +31,8 @@ class StudentImporter extends Importer
             ImportColumn::make('birth_date')->label('Fecha de nacimiento')->exampleHeader('fecha_nacimiento')->guess(['fecha_nacimiento', 'nacimiento'])->requiredMapping()->example('14/03/2016'),
             ImportColumn::make('shirt_size')->label('Talle')->exampleHeader('talle')->example('12'),
             ImportColumn::make('position')->label('Posición')->exampleHeader('posicion')->guess(['posicion', 'posición'])->example('Arquero'),
-            ImportColumn::make('program')->label('Programa')->exampleHeader('programa')->guess(['programa', 'disciplina', 'deporte'])->requiredMapping()->example('Fútbol'),
-            ImportColumn::make('group')->label('Grupo')->exampleHeader('grupo')->guess(['grupo', 'categoria', 'categoría'])->requiredMapping()->example('Sub-10'),
+            ImportColumn::make('program')->label('Programa')->exampleHeader('programa')->guess(['programa', 'disciplina', 'deporte'])->example('Fútbol'),
+            ImportColumn::make('group')->label('Grupo')->exampleHeader('grupo')->guess(['grupo', 'categoria', 'categoría'])->example('Sub-10'),
             ImportColumn::make('status')->label('Estado')->exampleHeader('estado')->example('activo'),
             ...self::guardianColumns(1, ['Ana', 'Benítez', 'ana@example.com', '0981 123 456', 'madre']),
             ...self::guardianColumns(2, ['Luis', 'Benítez', '', '', 'padre']),

@@ -31,8 +31,12 @@ enum GuardianRelationship: string implements HasLabel
     /**
      * Acepta el valor o la etiqueta ("Madre", "madre"); lo desconocido queda como tutor.
      */
-    public static function parse(?string $value): self
+    public static function parse(self|string|null $value): self
     {
+        if ($value instanceof self) {
+            return $value;
+        }
+
         $value = mb_strtolower(trim((string) $value));
 
         return self::tryFrom($value)

@@ -2,13 +2,24 @@
 
 namespace App\Filament\Resources\Students\Schemas;
 
+use App\Enums\EnrollmentStatus;
+use App\Enums\GuardianRelationship;
+use App\Filament\Support\Terms;
+use App\Models\Group;
+use App\Models\Guardian;
+use App\Models\Season;
 use App\Models\Student;
 use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
+use Filament\Schemas\Components\Utilities\Set;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\Rules\Unique;
 
 class StudentForm
@@ -17,22 +28,26 @@ class StudentForm
     {
         return $schema->components([
             // La organización la asigna el panel (tenant activo); nunca se elige a mano.
-            Section::make('Datos')->columns(2)->schema([
+            Section::make('Datos')->columnSpanFull()->columns(3)->schema([
                 TextInput::make('first_name')->label('Nombre')->required()->maxLength(255),
                 TextInput::make('last_name')->label('Apellido')->required()->maxLength(255),
                 TextInput::make('document')->label('Documento')->maxLength(30)
                     ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, ?Student $record) => $rule
                         ->where('organization_id', filament()->getTenant()?->getKey())),
-                DatePicker::make('birth_date')->label('Fecha de nacimiento')->required()->maxDate(now()),
+                DatePicker::make('birth_date')
+                    ->label('Fecha de nacimiento')
+                    ->required()
+                    ->maxDate(now())
+                    ->live(onBlur: true)
+                    // Al crear, sugiere la categoría que corresponde por edad.
+                    ->afterStateUpdated(function (?string $state, Set $set, string $operation) {
+                        $season = Season::currentOrNull();
+                        if ($operation === 'create' && $state && $season && ($group = Group::suggestFor(Carbon::parse($state), $season))) {
+                            $set('group_id', $group->id);
+                        }
+                    }),
                 TextInput::make('shirt_size')->label('Talle')->maxLength(10),
                 TextInput::make('position')->label('Posición')->maxLength(50),
-                Select::make('family_id')
-                    ->label('Familia')
-                    ->relationship('family', 'name')
-                    ->searchable()
-                    ->preload()
-                    ->createOptionForm([TextInput::make('name')->label('Nombre')->placeholder('Familia Benítez')->required()])
-                    ->helperText('Agrupa hermanos y tutores (para el estado de cuenta).'),
                 Select::make('user_id')
                     ->label('Cuenta propia (alumno adulto)')
                     ->relationship('user', 'name', fn ($query) => $query->whereHas(
@@ -43,14 +58,17 @@ class StudentForm
                     ->helperText('Solo para alumnos adultos que son su propio responsable.'),
                 Textarea::make('notes')->label('Notas')->columnSpanFull(),
             ]),
+            ...self::enrollmentAndGuardians(),
             Section::make('Ficha médica')
                 ->description('Solo la ven los roles autorizados, sus tutores y sus técnicos.')
                 ->relationship('medicalRecord', condition: fn (?array $state) => collect($state)->filter(fn ($value) => filled($value))->isNotEmpty())
                 ->visible(fn (?Student $record) => $record
                     ? auth()->user()->can('viewMedical', $record)
                     : auth()->user()->can('ViewMedical:Student'))
+                ->columnSpanFull()
                 ->columns(2)
                 ->collapsible()
+                ->collapsed(fn (string $operation) => $operation === 'create')
                 ->schema([
                     Select::make('blood_type')->label('Grupo sanguíneo')
                         ->options(array_combine($types = ['O+', 'O-', 'A+', 'A-', 'B+', 'B-', 'AB+', 'AB-'], $types)),
@@ -62,5 +80,110 @@ class StudentForm
                     TextInput::make('emergency_contact_phone')->label('Teléfono de emergencia')->tel(),
                 ]),
         ]);
+    }
+
+    /**
+     * Solo al crear: el jugador se inscribe y se cargan sus tutores en el mismo paso.
+     *
+     * @return list<Section>
+     */
+    private static function enrollmentAndGuardians(): array
+    {
+        return [
+            Section::make('Inscripción')->visibleOn('create')->columnSpanFull()->columns(3)->schema([
+                Select::make('group_id')
+                    ->label(Terms::label('group', 'Categoría'))
+                    ->options(fn () => Group::query()->with('program')->where('is_active', true)->orderBy('name')->get()
+                        ->mapWithKeys(fn (Group $group) => [$group->id => "{$group->name} · {$group->program->name}"]))
+                    ->required()
+                    ->searchable()
+                    ->helperText('Se sugiere según la fecha de nacimiento.'),
+                Select::make('season_id')
+                    ->label('Temporada')
+                    ->options(fn () => Season::query()->orderByDesc('starts_on')->pluck('name', 'id'))
+                    ->default(fn () => Season::currentOrNull()?->id)
+                    ->required(),
+                Select::make('status')
+                    ->label('Estado')
+                    ->options([
+                        EnrollmentStatus::Active->value => EnrollmentStatus::Active->label(),
+                        EnrollmentStatus::Scholarship->value => EnrollmentStatus::Scholarship->label(),
+                        EnrollmentStatus::Pending->value => EnrollmentStatus::Pending->label(),
+                    ])
+                    ->default(EnrollmentStatus::Active->value)
+                    ->required(),
+            ]),
+            Section::make(ucfirst(Terms::plural('guardian', 'Tutor')))
+                ->description('Con correo se les puede mandar la invitación a la app: al aceptarla ven a sus hijos.')
+                ->visibleOn('create')
+                ->columnSpanFull()
+                ->schema([
+                    Repeater::make('guardians')
+                        ->hiddenLabel()
+                        ->columns(3)
+                        ->defaultItems(1)
+                        ->addActionLabel('Agregar otro tutor')
+                        // Un menor necesita al menos un tutor; un adulto puede ser su propio responsable.
+                        ->minItems(fn (Get $get) => self::isMinor($get('birth_date')) ? 1 : 0)
+                        ->validationMessages(['min' => 'El jugador es menor de edad: cargá al menos un tutor.'])
+                        ->schema([
+                            TextInput::make('email')
+                                ->label('Correo')
+                                ->email()
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (?string $state, Set $set) => self::fillExistingGuardian($state, $set))
+                                ->helperText(fn (?string $state) => self::existingGuardianNote($state)),
+                            TextInput::make('first_name')->label('Nombre')->required()->maxLength(255),
+                            TextInput::make('last_name')->label('Apellido')->required()->maxLength(255),
+                            Select::make('relationship')
+                                ->label('Parentesco')
+                                ->options(GuardianRelationship::class)
+                                ->default(GuardianRelationship::Mother->value)
+                                ->required(),
+                            TextInput::make('phone')->label('Teléfono')->tel()->maxLength(30),
+                            Toggle::make('invite')
+                                ->label('Enviar invitación a la app')
+                                ->default(true)
+                                ->inline(false)
+                                ->visible(fn (Get $get) => filled($get('email')) && ! self::existingGuardian($get('email'))?->hasAccount()),
+                        ]),
+                ]),
+        ];
+    }
+
+    private static function isMinor(?string $birthDate): bool
+    {
+        return $birthDate === null || Carbon::parse($birthDate)->age < Student::ADULT_AGE;
+    }
+
+    private static function existingGuardian(?string $email): ?Guardian
+    {
+        return filled($email) ? Guardian::query()->with('students')->where('email', mb_strtolower(trim($email)))->first() : null;
+    }
+
+    /**
+     * Tutor ya cargado (ej. padre de un hermano): se completan sus datos y se reutiliza.
+     */
+    private static function fillExistingGuardian(?string $email, Set $set): void
+    {
+        if ($guardian = self::existingGuardian($email)) {
+            $set('first_name', $guardian->first_name);
+            $set('last_name', $guardian->last_name);
+            $set('phone', $guardian->phone);
+        }
+    }
+
+    private static function existingGuardianNote(?string $email): ?string
+    {
+        $guardian = self::existingGuardian($email);
+
+        if ($guardian === null) {
+            return null;
+        }
+
+        $children = $guardian->students->pluck('first_name')->join(', ', ' y ');
+        $note = $children === '' ? 'Ya está cargado.' : "Ya está cargado: tutor de {$children}.";
+
+        return $guardian->hasAccount() ? "{$note} Ya usa la app." : $note;
     }
 }
