@@ -37,7 +37,7 @@ beforeEach(function () {
     $this->admin = memberOf($this->jakare);
     app(RoleAssigner::class)->assign($this->jakare, $this->admin, OrganizationRole::Admin);
 
-    Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true]);
+    Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31']);
     $this->program = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
 });
 
@@ -190,7 +190,7 @@ it('se inscribe solo desde la ficha del jugador y no permite duplicados', functi
 
     $enrollment = Enrollment::query()->sole();
     expect($enrollment->student_id)->toBe($student->id)
-        ->and($enrollment->season_id)->toBe(Season::currentOrNull()->id)
+        ->and($enrollment->season_id)->toBe(Season::query()->orderBy('starts_on')->first()->id)
         ->and($enrollment->status)->toBe(EnrollmentStatus::Active);
 
     $manager()
@@ -224,12 +224,12 @@ it('nuevo jugador: datos, categoría sugerida, tutores e invitación en un paso'
     inPanel($this->admin, $this->jakare);
     $sub10 = Group::factory()->for($this->program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id, 'min_age' => 9, 'max_age' => 10]);
     Group::factory()->for($this->program)->create(['name' => 'Sub-12', 'organization_id' => $this->jakare->id, 'min_age' => 11, 'max_age' => 12]);
-    $year = Season::currentOrNull()->starts_on->year;
+    $year = Season::query()->orderBy('starts_on')->first()->starts_on->year;
 
     $page = Livewire::test(CreateStudent::class)
         ->fillForm(['first_name' => 'Mateo', 'last_name' => 'Benítez', 'document' => '6123456'])
         ->set('data.birth_date', ($year - 10).'-03-14')
-        ->assertSchemaStateSet(['group_id' => $sub10->id, 'season_id' => Season::currentOrNull()->id, 'status' => 'activo']);
+        ->assertSchemaStateSet(['group_id' => $sub10->id, 'season_id' => Season::query()->orderBy('starts_on')->first()->id, 'status' => 'activo']);
 
     $guardians = array_keys($page->get('data.guardians'));
     $page->set("data.guardians.{$guardians[0]}", [

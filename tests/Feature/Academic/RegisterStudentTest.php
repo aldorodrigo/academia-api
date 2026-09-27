@@ -18,7 +18,7 @@ beforeEach(function () {
     Mail::fake();
     $this->jakare = Organization::factory()->create(['slug' => 'jakare']);
     $this->season = Season::factory()->for($this->jakare)->create([
-        'name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true,
+        'name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31',
     ]);
     $this->program = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $this->sub10 = Group::factory()->for($this->program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id, 'min_age' => 9, 'max_age' => 10]);

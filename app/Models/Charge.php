@@ -21,7 +21,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * Cargo de la cuenta corriente de un alumno. Inmutable: no se edita ni se borra;
  * se anula con motivo (VoidCharge) y, si hace falta, se carga uno nuevo.
  */
-#[Fillable(['organization_id', 'student_id', 'enrollment_id', 'group_id', 'fee_concept_id', 'tariff_id', 'period', 'description', 'base_amount', 'final_amount', 'issued_on', 'due_on', 'unique_key', 'voided_at', 'void_reason', 'voided_by', 'created_by'])]
+#[Fillable(['organization_id', 'student_id', 'enrollment_id', 'group_id', 'season_id', 'fee_concept_id', 'tariff_id', 'period', 'period_start', 'period_end', 'description', 'base_amount', 'quantity', 'unit_amount', 'final_amount', 'issued_on', 'due_on', 'unique_key', 'voided_at', 'void_reason', 'voided_by', 'created_by'])]
 class Charge extends Model
 {
     /** @use HasFactory<ChargeFactory> */
@@ -33,7 +33,10 @@ class Charge extends Model
     protected static function booted(): void
     {
         static::updating(function (Charge $charge): void {
-            if (array_diff(array_keys($charge->getDirty()), self::VOID_FIELDS) !== []) {
+            // Al anular se puede liberar la clave para volver a emitir el período.
+            $allowed = $charge->isDirty('voided_at') ? [...self::VOID_FIELDS, 'unique_key'] : self::VOID_FIELDS;
+
+            if (array_diff(array_keys($charge->getDirty()), $allowed) !== []) {
                 throw new LogicException('Un cargo no se modifica: anulalo y cargá uno nuevo.');
             }
         });
@@ -47,6 +50,10 @@ class Charge extends Model
     {
         return [
             'period' => 'date',
+            'period_start' => 'immutable_date',
+            'period_end' => 'immutable_date',
+            'quantity' => 'integer',
+            'unit_amount' => 'integer',
             'base_amount' => 'integer',
             'final_amount' => 'integer',
             'issued_on' => 'date',
@@ -156,6 +163,25 @@ class Charge extends Model
     public function group(): BelongsTo
     {
         return $this->belongsTo(Group::class);
+    }
+
+    /**
+     * Cuota creada por adelantado: falta pagar algo y su período todavía no empezó.
+     */
+    public function isUpcoming(): bool
+    {
+        return $this->period_start !== null
+            && $this->voided_at === null
+            && $this->period_start->gt($this->organization->today())
+            && $this->pendingAmount() > 0;
+    }
+
+    /**
+     * @return BelongsTo<Season, $this>
+     */
+    public function season(): BelongsTo
+    {
+        return $this->belongsTo(Season::class);
     }
 
     /**

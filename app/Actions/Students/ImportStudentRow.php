@@ -17,7 +17,8 @@ use Throwable;
 
 /**
  * Adapta una fila de la planilla de alumnos (una fila por alumno, hasta dos tutores)
- * y la registra con RegisterStudent en la temporada actual.
+ * y la registra con RegisterStudent en la temporada vigente de la disciplina (o la de la
+ * columna `temporada`, obligatoria si hay varias vigentes).
  *
  * Si la categoría viene vacía, se usa la que corresponde por año de nacimiento.
  */
@@ -29,7 +30,7 @@ class ImportStudentRow
     ) {}
 
     /**
-     * @param  array{first_name: ?string, last_name: ?string, document?: ?string, birth_date: mixed, shirt_size?: ?string, position?: ?string, program?: ?string, group?: ?string, status?: ?string, guardians?: list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string}>}  $row
+     * @param  array{first_name: ?string, last_name: ?string, document?: ?string, birth_date: mixed, shirt_size?: ?string, position?: ?string, program?: ?string, group?: ?string, season?: ?string, status?: ?string, guardians?: list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string}>}  $row
      */
     public function handle(Organization $organization, array $row, bool $invite = false, ?User $invitedBy = null): Student
     {
@@ -41,7 +42,14 @@ class ImportStudentRow
             }
 
             $birthDate = $this->date($row['birth_date'] ?? null);
-            $season = Season::currentOrNull() ?? throw new ImportRowException('No hay una temporada actual.');
+            $program = $this->program($organization, $row['program'] ?? null);
+            $season = $this->season($row['season'] ?? null, $program);
+            $group = $this->group($organization, $row['program'] ?? null, $row['group'] ?? null, $birthDate, $season);
+
+            // Sin disciplina en la fila: la temporada tiene que ser de la disciplina de la categoría.
+            if ($program === null && $season->programs()->exists() && ! $season->programs()->whereKey($group->program_id)->exists()) {
+                $season = $this->season($row['season'] ?? null, $group->program);
+            }
 
             return $this->register->handle(
                 $organization,
@@ -53,13 +61,48 @@ class ImportStudentRow
                     'shirt_size' => $row['shirt_size'] ?? null,
                     'position' => $row['position'] ?? null,
                 ],
-                $this->group($organization, $row['program'] ?? null, $row['group'] ?? null, $birthDate, $season),
+                $group,
                 $season,
                 $this->status($row['status'] ?? null),
                 collect($row['guardians'] ?? [])->map(fn (array $guardian) => [...$guardian, 'invite' => $invite])->all(),
                 $invitedBy,
             );
         });
+    }
+
+    private function program(Organization $organization, ?string $name): ?Program
+    {
+        if ($name === null) {
+            return null;
+        }
+
+        return Program::query()->where('name', $name)->first()
+            ?? throw new ImportRowException("No existe {$organization->term('program')} \"{$name}\".");
+    }
+
+    /**
+     * La de la columna `temporada` o, si no viene, la única vigente (o próxima) de la disciplina.
+     */
+    private function season(?string $name, ?Program $program): Season
+    {
+        $seasons = Season::query()
+            ->open()
+            ->when($program, fn ($query) => $query->forProgram($program))
+            ->when($name, fn ($query) => $query->where('name', $name))
+            ->get();
+
+        if ($name !== null && $seasons->isEmpty()) {
+            throw new ImportRowException("No existe la temporada \"{$name}\" (vigente o próxima).");
+        }
+
+        $active = $seasons->filter(fn (Season $season) => $season->status()->value === 'vigente');
+        $candidates = $active->isNotEmpty() ? $active : $seasons;
+
+        return match ($candidates->count()) {
+            1 => $candidates->first(),
+            0 => throw new ImportRowException('No hay una temporada vigente o próxima.'),
+            default => throw new ImportRowException('Hay varias temporadas vigentes: indicá la temporada.'),
+        };
     }
 
     private function group(Organization $organization, ?string $programName, ?string $groupName, CarbonImmutable $birthDate, Season $season): Group

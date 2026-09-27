@@ -1,6 +1,5 @@
 <?php
 
-use App\Actions\Billing\GenerateMonthlyCharges;
 use App\Actions\Billing\RegisterPayment;
 use App\Actions\Billing\VoidPayment;
 use App\Actions\Treasury\ExpenseLedger;
@@ -118,7 +117,7 @@ describe('transferencias', function () {
 
 describe('informes', function () {
     beforeEach(function () {
-        $season = Season::factory()->for($this->jakare)->create(['starts_on' => '2026-02-01', 'ends_on' => '2026-11-30', 'is_current' => true]);
+        $season = Season::factory()->for($this->jakare)->create(['starts_on' => '2026-02-01', 'ends_on' => '2026-11-30']);
         $group = Group::factory()->for(Program::factory()->for($this->jakare))->create(['organization_id' => $this->jakare->id]);
         Tariff::factory()->create(['fee_concept_id' => FeeConcept::monthlyFee($this->jakare)->id, 'season_id' => $season->id, 'amount' => 150000, 'valid_from' => '2026-02-01']);
 
@@ -130,7 +129,7 @@ describe('informes', function () {
             Enrollment::factory()->create(['student_id' => $student->id, 'group_id' => $group->id, 'season_id' => $season->id]);
         }
         foreach (['2026-07-01', '2026-08-01', '2026-09-01'] as $period) {
-            app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse($period));
+            issueMonth($this->jakare, substr($period, 0, 7));
         }
 
         // Benítez paga todo y deja ₲ 50.000 a favor; Ortiz no paga.
@@ -143,7 +142,7 @@ describe('informes', function () {
         $data = (new BalanceReport($this->jakare, CarbonImmutable::parse('2026-09-01'), CarbonImmutable::parse('2026-09-30')))->data();
 
         expect($data['opening_balance'])->toBe(2000000)
-            ->and($data['income'])->toBe(['total' => 500000, 'lines' => [['label' => 'Cuota mensual', 'amount' => 450000], ['label' => 'Saldo a favor', 'amount' => 50000]]])
+            ->and($data['income'])->toBe(['total' => 500000, 'lines' => [['label' => 'Cuota', 'amount' => 450000], ['label' => 'Saldo a favor', 'amount' => 50000]]])
             ->and($data['expenses'])->toBe(['total' => 250000, 'lines' => [['label' => 'Árbitros', 'amount' => 250000]]])
             ->and($data['closing_balance'])->toBe(2250000)
             ->and($data['opening_balance'] + $data['income']['total'] - $data['expenses']['total'] + $data['other'])->toBe($data['closing_balance'])
@@ -152,14 +151,15 @@ describe('informes', function () {
 
     it('un jugador sin familia también aparece en saldos y morosos', function () {
         $alone = Student::factory()->for($this->jakare)->create(['first_name' => 'Lucas', 'last_name' => 'Ramírez']);
-        Enrollment::factory()->create(['student_id' => $alone->id, 'season_id' => Season::currentOrNull()->id]);
-        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-08-01'));
+        // Se inscribe con la temporada ya cobrando: su cuota de septiembre sale al inscribirlo.
+        Enrollment::factory()->create(['student_id' => $alone->id, 'season_id' => Season::query()->orderBy('starts_on')->first()->id]);
+        issueMonth($this->jakare, '2026-08');
 
         $delinquents = (new DelinquentsReport($this->jakare))->data();
         $balances = (new FamilyBalancesReport($this->jakare))->data();
 
         expect(collect($delinquents['families'])->pluck('family'))->toContain('Lucas Ramírez')
-            ->and(collect($balances['families'])->firstWhere('family', 'Lucas Ramírez')['pending'])->toBe(150000);
+            ->and(collect($balances['families'])->firstWhere('family', 'Lucas Ramírez')['pending'])->toBe(300000);
     });
 
     it('un pago anulado en otro mes resta en ese mes', function () {

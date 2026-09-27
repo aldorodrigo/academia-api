@@ -37,7 +37,7 @@ class DatabaseSeeder extends Seeder
 
         $jakare->seasons()->updateOrCreate(
             ['name' => '2026'],
-            ['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true],
+            ['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31'],
         );
 
         app(CurrentOrganization::class)->run($jakare, fn () => $this->call(AcademicSeeder::class));

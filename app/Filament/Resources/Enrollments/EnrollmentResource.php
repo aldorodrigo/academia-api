@@ -67,7 +67,9 @@ class EnrollmentResource extends Resource
                 SelectFilter::make('season')
                     ->label('Temporada')
                     ->relationship('season', 'name')
-                    ->default(fn () => Season::currentOrNull()?->id),
+                    ->multiple()
+                    // Por defecto, las vigentes y próximas (puede haber varias a la vez).
+                    ->default(fn () => Season::query()->open()->pluck('id')->all()),
                 SelectFilter::make('group')->label(Terms::label('group', 'Categoría'))->relationship('group', 'name')->preload(),
                 SelectFilter::make('status')->label('Estado')->options(EnrollmentStatus::class),
             ])

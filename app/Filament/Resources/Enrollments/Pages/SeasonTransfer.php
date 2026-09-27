@@ -44,13 +44,16 @@ class SeasonTransfer extends Page
         return auth()->user()?->can('create', Enrollment::class) ?? false;
     }
 
+    /**
+     * Viene preseleccionado desde "Pasar jugadores ahora" (?to=…&from=…); si no, la temporada
+     * más nueva que no terminó y la anterior de alguna de sus disciplinas.
+     */
     public function mount(): void
     {
-        $to = Season::currentOrNull();
-        $from = Season::query()
-            ->when($to, fn ($query) => $query->whereKeyNot($to->id)->where('starts_on', '<', $to->starts_on))
-            ->orderByDesc('starts_on')
-            ->first();
+        $to = Season::query()->find(request()->query('to'))
+            ?? Season::query()->open()->orderByDesc('starts_on')->first();
+        $from = Season::query()->find(request()->query('from'))
+            ?? ($to === null ? null : self::previousOf($to));
 
         $this->form->fill([
             'from_season_id' => $from?->id,
@@ -139,9 +142,25 @@ class SeasonTransfer extends Page
         Notification::make()
             ->success()
             ->title("Reinscriptos: {$created}.".($skipped > 0 ? " Quedaron sin reinscribir: {$skipped}." : ''))
+            ->body($created > 0 ? 'Las cuotas se crean en segundo plano: te avisamos cuando estén.' : null)
             ->send();
 
         $this->redirect(EnrollmentResource::getUrl());
+    }
+
+    /**
+     * Temporada anterior con alguna de las disciplinas de la dada.
+     */
+    public static function previousOf(Season $season): ?Season
+    {
+        $programs = $season->programs()->pluck('programs.id');
+
+        return Season::query()
+            ->whereKeyNot($season->id)
+            ->where('starts_on', '<', $season->starts_on)
+            ->when($programs->isNotEmpty(), fn ($query) => $query->whereHas('programs', fn ($p) => $p->whereIn('programs.id', $programs)))
+            ->orderByDesc('starts_on')
+            ->first();
     }
 
     /**

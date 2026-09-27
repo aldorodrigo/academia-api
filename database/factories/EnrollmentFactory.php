@@ -11,7 +11,7 @@ use App\Models\Student;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * Por defecto todo en la organización del alumno y en su temporada actual.
+ * Por defecto todo en la organización del alumno y en una temporada vigente.
  *
  * @extends Factory<Enrollment>
  */
@@ -25,15 +25,23 @@ class EnrollmentFactory extends Factory
             'group_id' => fn (array $attributes) => Group::factory()->for(
                 Program::factory()->state(['organization_id' => $this->student($attributes)->organization_id]),
             ),
-            // La temporada actual de la organización (se crea si no hay).
+            // Una temporada vigente de la organización (se crea una del año si no hay).
             'season_id' => function (array $attributes) {
                 $organizationId = $this->student($attributes)->organization_id;
+                $today = now()->toDateString();
 
                 return Season::query()->withoutGlobalScopes()
                     ->where('organization_id', $organizationId)
-                    ->where('is_current', true)
+                    ->whereDate('starts_on', '<=', $today)
+                    ->whereDate('ends_on', '>=', $today)
+                    ->orderByDesc('starts_on')
                     ->value('id')
-                    ?? Season::factory()->create(['organization_id' => $organizationId, 'is_current' => true])->id;
+                    ?? Season::factory()->create([
+                        'organization_id' => $organizationId,
+                        'name' => (string) now()->year,
+                        'starts_on' => now()->startOfYear()->toDateString(),
+                        'ends_on' => now()->endOfYear()->toDateString(),
+                    ])->id;
             },
             'status' => EnrollmentStatus::Active,
             'enrolled_on' => now()->toDateString(),
