@@ -101,6 +101,13 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
 
+### Finanzas (cargos)
+- `Charge` es inmutable (no se edita ni se borra): se anula con `VoidCharge` (motivo). Estado calculado: `Charge::status()`.
+- Cuota mensual: `App\Actions\Billing\GenerateMonthlyCharges` (lock + `unique_key`), comando `charges:generate`.
+- Descuentos y becas: `DiscountCalculator`, en el orden de `organizations.billing.discount_order`.
+- Tarifa aplicable: `Tariff::applicable()`. Configuración de cobros: `Organization::billing()`.
+- Becas: `ScholarshipDecision` (permiso `Approve:Scholarship`).
+
 ### Dinero
 - Montos en **enteros** (guaraníes, sin decimales). Nunca `float` para dinero.
 - Value object `App\Support\Money` (`Money::pyg(150000)->format()` → `₲ 150.000`).

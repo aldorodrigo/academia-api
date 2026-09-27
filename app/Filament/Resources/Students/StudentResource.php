@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Students;
 use App\Filament\Resources\Students\Pages\CreateStudent;
 use App\Filament\Resources\Students\Pages\EditStudent;
 use App\Filament\Resources\Students\Pages\ListStudents;
+use App\Filament\Resources\Students\RelationManagers\ChargesRelationManager;
 use App\Filament\Resources\Students\RelationManagers\EnrollmentsRelationManager;
 use App\Filament\Resources\Students\RelationManagers\GuardiansRelationManager;
 use App\Filament\Resources\Students\Schemas\StudentForm;
@@ -65,6 +66,7 @@ class StudentResource extends Resource
         return [
             EnrollmentsRelationManager::class,
             GuardiansRelationManager::class,
+            ChargesRelationManager::class,
         ];
     }
 

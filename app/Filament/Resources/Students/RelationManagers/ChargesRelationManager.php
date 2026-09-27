@@ -1,0 +1,48 @@
+<?php
+
+namespace App\Filament\Resources\Students\RelationManagers;
+
+use App\Filament\Support\MoneyColumn;
+use App\Models\Charge;
+use App\Support\Money;
+use Filament\Resources\RelationManagers\RelationManager;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * Cuenta del jugador: sus cargos con ajustes y el saldo. Solo lectura (se opera desde Cargos).
+ */
+class ChargesRelationManager extends RelationManager
+{
+    protected static string $relationship = 'charges';
+
+    protected static ?string $title = 'Cuenta';
+
+    public static function getBadge(Model $ownerRecord, string $pageClass): ?string
+    {
+        $balance = (int) $ownerRecord->charges()->notVoided()->sum('final_amount');
+
+        return $balance > 0 ? Money::pyg($balance)->format() : null;
+    }
+
+    public function isReadOnly(): bool
+    {
+        return true;
+    }
+
+    public function table(Table $table): Table
+    {
+        return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['adjustments', 'organization']))
+            ->columns([
+                TextColumn::make('description')->label('Concepto')
+                    ->description(fn (Charge $record) => $record->adjustments->pluck('label')->join(' · ') ?: null),
+                TextColumn::make('due_on')->label('Vence')->date('d/m/Y'),
+                TextColumn::make('status')->label('Estado')->badge()->state(fn (Charge $record) => $record->status()),
+                MoneyColumn::make('final_amount')->label('Monto'),
+            ])
+            ->defaultSort('due_on', 'desc');
+    }
+}

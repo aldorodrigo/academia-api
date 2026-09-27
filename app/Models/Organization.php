@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Actions\Organizations\EnsureFeeConcepts;
 use App\Actions\Organizations\EnsureOrganizationRoles;
 use App\Enums\Feature;
 use App\Enums\OrganizationType;
@@ -16,7 +17,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'features', 'suspended_at', 'suspension_reason'])]
+#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'features', 'billing', 'suspended_at', 'suspension_reason'])]
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
@@ -36,6 +37,21 @@ class Organization extends Model
     ];
 
     /**
+     * Configuración de cobros por defecto (ver billing()).
+     *
+     * @var array<string, mixed>
+     */
+    public const DEFAULT_BILLING = [
+        // Día del mes en que vence la cuota y días de gracia antes de figurar "vencido".
+        'due_day' => 10,
+        'grace_days' => 0,
+        // Orden en que se aplican los descuentos (cada uno sobre lo que queda).
+        'discount_order' => ['beca', 'hermanos', 'convenio', 'otro'],
+        // Recargo por mora: se configura ahora y se aplica desde el registro de pagos (Sprint 4).
+        'late_fee' => ['enabled' => false, 'type' => 'percent', 'value' => 0, 'frequency' => 'once', 'cap' => null],
+    ];
+
+    /**
      * Mismos valores por defecto que la migración, para que el modelo recién
      * creado los tenga sin volver a leerlo de la base.
      *
@@ -50,7 +66,10 @@ class Organization extends Model
 
     protected static function booted(): void
     {
-        static::created(fn (Organization $organization) => app(EnsureOrganizationRoles::class)->handle($organization));
+        static::created(function (Organization $organization): void {
+            app(EnsureOrganizationRoles::class)->handle($organization);
+            app(EnsureFeeConcepts::class)->handle($organization);
+        });
     }
 
     protected function casts(): array
@@ -59,6 +78,7 @@ class Organization extends Model
             'type' => OrganizationType::class,
             'terminology' => 'array',
             'features' => 'array',
+            'billing' => 'array',
             'suspended_at' => 'datetime',
         ];
     }
@@ -212,11 +232,61 @@ class Organization extends Model
     }
 
     /**
+     * @return HasMany<FeeConcept, $this>
+     */
+    public function feeConcepts(): HasMany
+    {
+        return $this->hasMany(FeeConcept::class);
+    }
+
+    /**
+     * @return HasMany<Tariff, $this>
+     */
+    public function tariffs(): HasMany
+    {
+        return $this->hasMany(Tariff::class);
+    }
+
+    /**
+     * @return HasMany<Charge, $this>
+     */
+    public function charges(): HasMany
+    {
+        return $this->hasMany(Charge::class);
+    }
+
+    /**
+     * @return HasMany<DiscountRule, $this>
+     */
+    public function discountRules(): HasMany
+    {
+        return $this->hasMany(DiscountRule::class);
+    }
+
+    /**
+     * @return HasMany<Scholarship, $this>
+     */
+    public function scholarships(): HasMany
+    {
+        return $this->hasMany(Scholarship::class);
+    }
+
+    /**
      * Hoy en la zona horaria de la organización (los mandatos vencen por fecha local).
      */
     public function today(): CarbonImmutable
     {
         return CarbonImmutable::now($this->timezone)->startOfDay();
+    }
+
+    /**
+     * Configuración de cobros combinada con los valores por defecto.
+     */
+    public function billing(?string $key = null): mixed
+    {
+        $billing = array_replace(self::DEFAULT_BILLING, $this->billing ?? []);
+
+        return $key === null ? $billing : ($billing[$key] ?? null);
     }
 
     public function hasFeature(Feature $feature): bool

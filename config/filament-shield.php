@@ -255,6 +255,8 @@ return [
     'custom_permissions' => [
         // Tutores, alumnos adultos e instructores de su grupo la ven sin este permiso.
         'ViewMedical:Student' => 'Ver fichas médicas',
+        // Aprobar, rechazar o revocar becas (el admin lo tiene por Gate::before).
+        'Approve:Scholarship' => 'Aprobar becas',
     ],
 
     /*

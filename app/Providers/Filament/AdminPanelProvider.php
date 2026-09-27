@@ -45,7 +45,7 @@ class AdminPanelProvider extends PanelProvider
             ], isPersistent: true)
             // Avisos de importaciones terminadas (corren en cola).
             ->databaseNotifications()
-            ->navigationGroups(['Académico', 'Personas'])
+            ->navigationGroups(['Académico', 'Finanzas', 'Personas'])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

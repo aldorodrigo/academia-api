@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Actions\Billing\GenerateEnrollmentCharge;
 use App\Enums\EnrollmentStatus;
 use App\Models\Concerns\BelongsToOrganization;
 use Database\Factories\EnrollmentFactory;
@@ -11,6 +12,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Inscripción = alumno + grupo + temporada. Cada una genera sus propios cargos (Sprint 3).
@@ -28,6 +30,9 @@ class Enrollment extends Model
         static::creating(function (Enrollment $enrollment): void {
             $enrollment->organization_id ??= $enrollment->student?->organization_id;
         });
+
+        // Cargo de inscripción, si hay tarifa (alta, Inscribir, pase de temporada, importación).
+        static::created(fn (Enrollment $enrollment) => app(GenerateEnrollmentCharge::class)->handle($enrollment));
 
         // Al pasar a baja queda registrada la fecha; al reactivarla se limpia.
         static::saving(function (Enrollment $enrollment): void {
@@ -60,14 +65,15 @@ class Enrollment extends Model
     }
 
     /**
-     * Las que generan cuota: temporada actual y estado activo (regla del Sprint 3).
+     * Las que generan cuota: temporada actual, activo o becado (la beca total no se
+     * cobra; la parcial se aplica como ajuste).
      *
      * @param  Builder<self>  $query
      */
     #[Scope]
     protected function billable(Builder $query): void
     {
-        $query->current()->where('status', EnrollmentStatus::Active);
+        $query->current()->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Scholarship]);
     }
 
     /**
@@ -86,6 +92,22 @@ class Enrollment extends Model
     public function statusColor(): string
     {
         return $this->isFinished() ? 'gray' : $this->status->getColor();
+    }
+
+    /**
+     * @return HasMany<Scholarship, $this>
+     */
+    public function scholarships(): HasMany
+    {
+        return $this->hasMany(Scholarship::class);
+    }
+
+    /**
+     * @return HasMany<Charge, $this>
+     */
+    public function charges(): HasMany
+    {
+        return $this->hasMany(Charge::class);
     }
 
     /**

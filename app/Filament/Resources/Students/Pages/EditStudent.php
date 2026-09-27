@@ -35,7 +35,8 @@ class EditStudent extends EditRecord
                     // Recarga la ficha con la pestaña Inscripciones al día.
                     $this->redirect(static::getUrl(['record' => $this->getStudent()]));
                 }),
-            DeleteAction::make(),
+            // Un jugador con cargos no se borra (queda su cuenta corriente).
+            DeleteAction::make()->hidden(fn () => $this->getStudent()->charges()->exists()),
         ];
     }
 

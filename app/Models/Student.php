@@ -131,6 +131,14 @@ class Student extends Model implements HasMedia
         return $this->enrollments()->whereHas('season', fn (Builder $season) => $season->where('is_current', true));
     }
 
+    /**
+     * @return HasMany<Charge, $this>
+     */
+    public function charges(): HasMany
+    {
+        return $this->hasMany(Charge::class);
+    }
+
     public function isAdult(): bool
     {
         return $this->birth_date !== null && $this->birth_date->age >= self::ADULT_AGE;

@@ -2,19 +2,24 @@
 
 namespace App\Filament\Pages\Tenancy;
 
+use App\Enums\AdjustmentType;
 use App\Enums\Feature;
 use App\Enums\OrganizationType;
 use App\Models\Organization;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
+use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
 use Filament\Pages\Tenancy\EditTenantProfile;
+use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 /**
- * Configuración de la organización: datos, vocabulario y módulos.
+ * Configuración de la organización: datos, vocabulario, cobros y módulos.
  */
 class EditOrganizationProfile extends EditTenantProfile
 {
@@ -59,6 +64,45 @@ class EditOrganizationProfile extends EditTenantProfile
                         ->placeholder(Organization::DEFAULT_TERMINOLOGY[$key])
                         ->maxLength(40),
                 )->values()->all()),
+            Section::make('Cobros')
+                ->description('Vencimiento de las cuotas, orden de los descuentos y mora.')
+                ->columns(2)
+                ->schema([
+                    TextInput::make('billing.due_day')
+                        ->label('Día de vencimiento')
+                        ->helperText('Las cuotas vencen ese día de cada mes (o el último, si el mes es más corto).')
+                        ->numeric()->minValue(1)->maxValue(31)->required(),
+                    TextInput::make('billing.grace_days')
+                        ->label('Días de gracia')
+                        ->helperText('Días después del vencimiento antes de figurar como vencida.')
+                        ->numeric()->minValue(0)->maxValue(60)->required(),
+                    Repeater::make('billing.discount_order')
+                        ->label('Orden de los descuentos')
+                        ->helperText('Cada descuento se calcula sobre lo que queda del anterior. Arrastrá para cambiar el orden.')
+                        ->simple(Select::make('type')->options(collect(AdjustmentType::DISCOUNTS)
+                            ->mapWithKeys(fn (AdjustmentType $type) => [$type->value => $type->getLabel()]))->disabled()->dehydrated())
+                        ->addable(false)
+                        ->deletable(false)
+                        ->reorderable()
+                        ->columnSpanFull(),
+                    Fieldset::make('Recargo por mora')
+                        ->columnSpanFull()
+                        ->columns(4)
+                        ->schema([
+                            Toggle::make('billing.late_fee.enabled')->label('Cobrar recargo')->live()->columnSpanFull()
+                                ->helperText('Se aplica desde el registro de pagos (próxima etapa); ahora queda configurado.'),
+                            Select::make('billing.late_fee.type')->label('Tipo')
+                                ->options(['percent' => 'Porcentaje', 'fixed' => 'Monto fijo'])
+                                ->visible(fn (Get $get) => $get('billing.late_fee.enabled')),
+                            TextInput::make('billing.late_fee.value')->label('Valor')->numeric()->minValue(0)
+                                ->visible(fn (Get $get) => $get('billing.late_fee.enabled')),
+                            Select::make('billing.late_fee.frequency')->label('Frecuencia')
+                                ->options(['once' => 'Una vez', 'monthly' => 'Cada mes de atraso'])
+                                ->visible(fn (Get $get) => $get('billing.late_fee.enabled')),
+                            TextInput::make('billing.late_fee.cap')->label('Tope (₲)')->numeric()->minValue(0)
+                                ->visible(fn (Get $get) => $get('billing.late_fee.enabled')),
+                        ]),
+                ]),
             Section::make('Módulos')
                 ->schema([
                     // Los módulos los habilita la plataforma (super admin); el admin solo los ve.
@@ -72,8 +116,23 @@ class EditOrganizationProfile extends EditTenantProfile
         ]);
     }
 
+    protected function mutateFormDataBeforeFill(array $data): array
+    {
+        $data['billing'] = Filament::getTenant()->billing();
+
+        return $data;
+    }
+
     protected function mutateFormDataBeforeSave(array $data): array
     {
+        $billing = $data['billing'] ?? [];
+        $data['billing'] = [
+            ...$billing,
+            'due_day' => (int) $billing['due_day'],
+            'grace_days' => (int) $billing['grace_days'],
+            'discount_order' => array_values($billing['discount_order'] ?? Organization::DEFAULT_BILLING['discount_order']),
+        ];
+
         $data['terminology'] = collect($data['terminology'] ?? [])
             ->map(fn (?string $value) => filled($value) ? trim($value) : null)
             ->filter()

@@ -103,7 +103,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Estados de inscripción: `pendiente`, `activo`, `becado`, `suspendido`, `baja`.
 - Una inscripción de una temporada que ya no es la actual está **finalizada** (sin estado propio):
   no genera cuotas ni se muestra en la app, y queda como historial. Solo generan cuota las
-  inscripciones `activo` de la temporada actual (`Enrollment::billable()`).
+  inscripciones `activo` o `becado` de la temporada actual (`Enrollment::billable()`).
 - **Pase de temporada:** se reinscribe en bloque a los jugadores `activo`, `becado` o `pendiente`
   de la temporada anterior, con la categoría que corresponde por edad; los que no siguen quedan como están.
 - Criterio de grupo por programa: año de nacimiento (fútbol) o nivel (pádel, danza).
@@ -123,7 +123,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 
 - **Tarifa** = concepto (inscripción, cuota mensual, torneo…) + grupo + temporada + monto + vigencia.
 - Cambiar una tarifa **no altera** cargos ya emitidos; rige desde su fecha de vigencia.
-- **Cuota mensual automática** para inscripciones `activo` (no para `becado` total ni `baja`).
+- **Cuota mensual automática** para inscripciones `activo` o `becado` de la temporada actual (la beca total no genera cuota; la parcial se aplica como ajuste; `baja` no se cobra).
   - La generación es **idempotente**: lock en Redis + índice único en BD
     (inscripción + concepto + período). Nunca se cobra dos veces el mismo mes.
 - Todo **cargo** pertenece a un alumno (y a su inscripción) y guarda: monto base,
@@ -135,7 +135,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   porcentaje **o** monto fijo, conceptos a los que aplica, vigencia.
 - **Hermanos:** según la posición del hijo entre las inscripciones activas de la familia
   (ej. 2º −20 %, 3º −50 %). Configurable.
-- **Beca:** parcial (%) o total, con motivo, vigencia y **aprobación**.
+- **Beca:** parcial (%) o total, con motivo, vigencia y **aprobación** de quien tenga el permiso "Aprobar becas". Se aplica a la cuota mensual desde su vigencia.
 - Orden de aplicación configurable. Un cargo **nunca** queda negativo.
 
 ## 7. Mora *(Sprint 3)*
