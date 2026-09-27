@@ -168,3 +168,54 @@ Ficha del alumno. Responde `404` si no existe **o no está a cargo del usuario**
 ### Invitaciones de tutores
 
 Una invitación creada desde un tutor (panel o importación) queda vinculada a él. Al aceptarla, el tutor se asocia a la cuenta y desde ese momento `GET students` devuelve sus hijos.
+
+## Sprint 3 (contrato)
+
+Estado de cuenta. Requieren token + organización. Montos en guaraníes enteros.
+
+### `GET account`
+
+Consolidado de la familia: los alumnos a cargo del usuario (sus hijos, o él mismo si es alumno adulto).
+
+```json
+{
+  "data": {
+    "balance": 270000,
+    "overdue": 150000,
+    "students": [
+      { "id": 12, "full_name": "Mateo Benítez", "balance": 150000, "overdue": 150000 },
+      { "id": 13, "full_name": "Sofía Benítez", "balance": 120000, "overdue": 0 }
+    ],
+    "charges": [
+      {
+        "id": 501,
+        "student": { "id": 13, "first_name": "Sofía" },
+        "concept": "Cuota mensual",
+        "description": "Cuota septiembre 2026",
+        "period": "2026-09",
+        "group": "Sub-8",
+        "issued_on": "2026-09-01",
+        "due_on": "2026-09-10",
+        "status": "pendiente",
+        "status_label": "Pendiente",
+        "base_amount": 150000,
+        "final_amount": 60000,
+        "adjustments": [
+          { "type": "beca", "label": "Beca 50 %", "amount": -75000 },
+          { "type": "hermanos", "label": "Hermanos (2º hijo) −20 %", "amount": -15000 }
+        ]
+      }
+    ]
+  }
+}
+```
+
+### `GET students/{id}/account`
+
+Misma forma con un solo alumno en `students`. Responde `404` si el alumno no está a cargo del usuario.
+
+- `status`: `pendiente`, `vencido` (pasó el vencimiento más los días de gracia), `pagado` (desde el Sprint 4) o `anulado`.
+- `balance`: suma de `final_amount` de los cargos no anulados, menos los pagos (desde el Sprint 4). `overdue`: la parte vencida.
+- `charges`: los de la temporada actual y cualquier cargo impago anterior; sin los anulados. Ordenados por vencimiento, del más nuevo al más viejo.
+- `period` es `null` en los cargos que no son mensuales (inscripción, torneo…). `group` puede ser `null` en cargos manuales.
+- `adjustments[].amount` lleva signo: negativo para descuentos y becas, positivo para recargos (desde el Sprint 4).
