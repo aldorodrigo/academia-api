@@ -109,6 +109,7 @@ class AcademicSeeder extends Seeder
         }
 
         $this->call(BillingSeeder::class);
+        $this->call(TreasurySeeder::class);
     }
 
     private function member(User $user, OrganizationRole $role): void
