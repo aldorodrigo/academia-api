@@ -2,9 +2,14 @@
 
 namespace App\Reports;
 
+use App\Models\Family;
+use App\Models\Guardian;
 use App\Models\Organization;
+use App\Models\Student;
 use App\Support\Money;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\URL;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Style;
@@ -104,6 +109,33 @@ abstract class Report
                 array_keys($row),
             ), $section['rows']),
         ], $this->sections());
+    }
+
+    /**
+     * Grupos que pagan: cada familia con sus jugadores, y cada jugador sin familia
+     * (cargado sin tutores) como su propio grupo, para que no quede afuera.
+     *
+     * @return Collection<int, array{name: string, students: Collection<int, Student>, guardians: Collection<int, Guardian>, family: ?Family}>
+     */
+    protected function households(): Collection
+    {
+        $families = Family::query()->with(['students', 'guardians', 'payments.allocations'])->get()
+            ->filter(fn (Family $family) => $family->students->isNotEmpty())
+            ->map(fn (Family $family) => [
+                'name' => $family->name,
+                'students' => $family->students,
+                'guardians' => $family->guardians,
+                'family' => $family,
+            ]);
+
+        $alone = Student::query()->whereNull('family_id')->get()->map(fn (Student $student) => [
+            'name' => $student->full_name,
+            'students' => new EloquentCollection([$student]),
+            'guardians' => collect(),
+            'family' => null,
+        ]);
+
+        return $families->concat($alone)->values();
     }
 
     private function fileName(): string

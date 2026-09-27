@@ -161,7 +161,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
     - Aviso o bloqueo por deuda de más de N meses: opcional y nunca automático sin decisión del club.
 12. **Imputación de pagos:** un pago se imputa a uno o varios cargos de uno o varios hijos, por defecto los más antiguos primero. Lo que sobra queda como **saldo a favor** de la familia.
 13. **Comprobante subido por el padre:** queda `pendiente` hasta que el tesorero lo valida; recién ahí impacta en la cuenta.
-14. **Gasto > umbral** requiere doble aprobación (tesorero **y** presidente).
+14. **Gastos:** los registra y paga quien tiene el permiso (sin doble aprobación); se anulan con motivo.
 15. **Mandatos que vencen solos.**
 16. **Actas:** un acta aprobada no se edita; se corrige con una nueva resolución.
 17. **Resoluciones:** una resolución publicada a un grupo notifica a sus tutores y puede generar un cargo.
@@ -206,7 +206,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 | **2. Académico** | "Mis hijos": lista, ficha, grupo, horarios e inscripciones | Temporadas, programas, grupos, horarios, alumnos, tutores, familias, ficha médica, inscripciones con estados, importación Excel, endpoints de "mis hijos" |
 | **3. Finanzas** ✅ | Estado de cuenta por hijo y consolidado por familia (cargos con detalle de ajustes) | Tarifario, cuota mensual automática, descuentos, becas, vencimientos y configuración de mora, cargos manuales, endpoints de cuenta corriente |
 | **4a. Cobros** ✅ | Pagos y recibos PDF en el estado de cuenta, saldo a favor | Cuentas (caja, banco, billetera) y libro mayor, pagos con imputación, pronto pago, saldo a favor, anulación, recibo PDF |
-| **4b. Gastos e informes** | — | Gastos con doble aprobación, proveedores, transferencias entre cuentas, informes (balance, saldos, morosos; PDF/Excel) |
+| **4b. Gastos e informes** ✅ | Informes para la comisión (balance, saldos, morosos; PDF/Excel) | Gastos (sueltos y recurrentes), proveedores, transferencias entre cuentas, informes (balance, saldos, morosos; PDF/Excel) |
 | **5. Avisos** | Avisos con lectura, push (firebase_messaging), registro del dispositivo | Avisos segmentados con lectura, push por lotes vía Horizon, recordatorios de cuotas, documentación OpenAPI |
 | **6. Publicación** | Pulido, builds: web + Android (interno) + iOS (TestFlight) | Ajustes de rendimiento y seguridad; backups verificados |
 | **7. Piloto Jakare** | Correcciones del uso real | Carga de datos reales, capacitación, invitación a padres |
@@ -367,4 +367,16 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
 - Encontrado al probar: el recibo cambiaba al aplicarse el saldo a favor; los links directos de la web se perdían al recargar.
 - Fuera del sprint: recargos por mora (queda la configuración).
 
-### Próximo: Sprint 4b — gastos e informes
+### Sprint 4b — gastos e informes
+- **Contrato:** `membership.permissions` en `GET organization`; `GET reports/balance`, `reports/balances`, `reports/delinquents` con links firmados a PDF/Excel.
+- **App:** tarjeta "Informes" en el inicio y `/informes` (balance por mes, saldos por familia, morosos con "Llamar", PDF/Excel) para quien tiene "Ver informes".
+- **API y panel:**
+  - Gastos pagados (salen de la cuenta) o pendientes (de un recurrente), con comprobante en disco privado; anular con contra-movimiento. Sin doble aprobación.
+  - Gastos recurrentes (alquiler de cancha…): pendiente del mes con `expenses:generate` el día 1 o "Generar los del mes".
+  - Proveedores, categorías de gasto (por defecto) y transferencias entre cuentas (dos movimientos enlazados).
+  - Informes sobre el libro mayor (inicial + ingresos − gastos + otros = final), por concepto y por categoría; PDF (dompdf) y Excel (openspout).
+  - Panel: Gastos, Gastos recurrentes, Proveedores, Transferencias e Informes.
+- **Probado de punta a punta** con capturas (panel y app como tesorera y como tutor).
+- Encontrado al probar: los jugadores sin familia quedaban fuera de saldos y morosos; la app no mostraba "Otros movimientos" y el balance no cerraba a la vista.
+
+### Próximo: Sprint 5 — avisos y push

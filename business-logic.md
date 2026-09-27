@@ -160,12 +160,15 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - **Comprobante subido por el padre** (transferencia) queda `pendiente` hasta que el
   tesorero lo valida; recién ahí impacta en la cuenta. *(Fase 2)*
 
-## 9. Gastos *(Sprint 4)*
+## 9. Gastos *(Sprint 4b)*
 
-- Cada gasto: cuenta de salida, categoría, proveedor, comprobante adjunto.
-- Gastos por encima de un **umbral configurable** requieren **doble aprobación**
-  (ej. tesorero + presidente).
-- Transferencias entre cuentas (ej. caja → banco) son dos movimientos enlazados.
+- Cada gasto: cuenta de salida, categoría, proveedor, comprobante adjunto. Lo registra y paga
+  quien tiene el permiso (sin doble aprobación). Se anula con motivo (contra-movimiento).
+- **Gastos recurrentes** (ej. alquiler de cancha): cada mes generan un gasto pendiente que se
+  confirma al pagarlo; recién ahí sale de la cuenta.
+- Transferencias entre cuentas (ej. caja → banco) son dos movimientos enlazados; no son ingreso ni gasto.
+- **Balance:** saldo inicial + ingresos (por concepto) − gastos (por categoría) + otros movimientos
+  (saldos iniciales, ajustes) = saldo final. Una anulación resta en el período en que se hace.
 
 ## 10. Comunicación *(Sprint 5)*
 

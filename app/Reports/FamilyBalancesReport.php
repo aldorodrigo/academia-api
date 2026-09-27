@@ -4,7 +4,6 @@ namespace App\Reports;
 
 use App\Enums\ChargeStatus;
 use App\Models\Charge;
-use App\Models\Family;
 
 /**
  * Saldos por familia: lo pendiente, lo vencido y el saldo a favor.
@@ -31,21 +30,19 @@ class FamilyBalancesReport extends Report
      */
     public function families(): array
     {
-        return Family::query()
-            ->with(['students', 'payments.allocations'])
-            ->get()
-            ->map(function (Family $family) {
+        return $this->households()
+            ->map(function (array $household) {
                 $charges = Charge::query()->notVoided()
-                    ->whereIn('student_id', $family->students->modelKeys())
+                    ->whereIn('student_id', $household['students']->modelKeys())
                     ->with(['allocations.payment', 'organization'])
                     ->get();
 
                 return [
-                    'family' => $family->name,
-                    'students' => $family->students->pluck('first_name')->all(),
+                    'family' => $household['name'],
+                    'students' => $household['students']->pluck('first_name')->all(),
                     'pending' => (int) $charges->sum(fn (Charge $c) => $c->pendingAmount()),
                     'overdue' => (int) $charges->filter(fn (Charge $c) => $c->status() === ChargeStatus::Overdue)->sum(fn (Charge $c) => $c->pendingAmount()),
-                    'credit' => (int) $family->payments->whereNull('voided_at')->sum(fn ($payment) => $payment->credit()),
+                    'credit' => (int) ($household['family']?->payments->whereNull('voided_at')->sum(fn ($payment) => $payment->credit()) ?? 0),
                 ];
             })
             ->filter(fn (array $row) => $row['pending'] > 0 || $row['credit'] > 0)

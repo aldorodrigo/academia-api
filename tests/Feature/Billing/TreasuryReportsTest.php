@@ -27,6 +27,8 @@ use App\Models\Supplier;
 use App\Models\Tariff;
 use App\Models\User;
 use App\Reports\BalanceReport;
+use App\Reports\DelinquentsReport;
+use App\Reports\FamilyBalancesReport;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
@@ -146,6 +148,18 @@ describe('informes', function () {
             ->and($data['closing_balance'])->toBe(2250000)
             ->and($data['opening_balance'] + $data['income']['total'] - $data['expenses']['total'] + $data['other'])->toBe($data['closing_balance'])
             ->and(collect($data['accounts'])->pluck('balance', 'name')->all())->toBe(['Banco Itaú' => 1850000, 'Caja' => 400000]);
+    });
+
+    it('un jugador sin familia también aparece en saldos y morosos', function () {
+        $alone = Student::factory()->for($this->jakare)->create(['first_name' => 'Lucas', 'last_name' => 'Ramírez']);
+        Enrollment::factory()->create(['student_id' => $alone->id, 'season_id' => Season::currentOrNull()->id]);
+        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-08-01'));
+
+        $delinquents = (new DelinquentsReport($this->jakare))->data();
+        $balances = (new FamilyBalancesReport($this->jakare))->data();
+
+        expect(collect($delinquents['families'])->pluck('family'))->toContain('Lucas Ramírez')
+            ->and(collect($balances['families'])->firstWhere('family', 'Lucas Ramírez')['pending'])->toBe(150000);
     });
 
     it('un pago anulado en otro mes resta en ese mes', function () {

@@ -22,7 +22,7 @@
         <x-filament::button tag="a" :href="$report['links']['xlsx_url']" icon="heroicon-o-table-cells" color="gray">Excel</x-filament::button>
     </div>
 
-    @php($row = fn ($label, $amount, $bold = false) => '<tr><td style="padding:.4rem 0;'.($bold ? 'font-weight:600;' : '').'">'.e($label).'</td><td style="text-align:right;'.($bold ? 'font-weight:600;' : '').'">'.e($this->money($amount)).'</td></tr>')
+    @php($row = fn ($label, $amount, $bold = false) => '<tr><td style="padding:.4rem 0;'.($bold ? 'font-weight:600;' : '').'">'.e($label).'</td><td style="text-align:right;white-space:nowrap;padding-left:1rem;'.($bold ? 'font-weight:600;' : '').'">'.e($this->money($amount)).'</td></tr>')
 
     @if ($tab === 'balance')
         <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem;">
@@ -61,7 +61,7 @@
                         @if ($tab === 'saldos')
                             <th style="text-align:right;">Pendiente</th><th style="text-align:right;">Vencido</th><th style="text-align:right;">Saldo a favor</th>
                         @else
-                            <th style="text-align:right;">Vencido</th><th style="text-align:right;">Meses</th><th>Desde</th><th>Contacto</th>
+                            <th style="text-align:right;">Vencido</th><th style="text-align:right;padding-right:1rem;">Meses</th><th>Desde</th><th>Contacto</th>
                         @endif
                     </tr>
                 </thead>
@@ -76,7 +76,7 @@
                                 <td style="text-align:right;">{{ $this->money($family['credit']) }}</td>
                             @else
                                 <td style="text-align:right;">{{ $this->money($family['overdue']) }}</td>
-                                <td style="text-align:right;">{{ $family['months_overdue'] }}</td>
+                                <td style="text-align:right;padding-right:1rem;">{{ $family['months_overdue'] }}</td>
                                 <td>{{ \Carbon\Carbon::parse($family['oldest_due_on'])->format('d/m/Y') }}</td>
                                 <td>{{ $family['contact']['name'] ?? '' }} {{ $family['contact']['phone'] ?? '' }}</td>
                             @endif

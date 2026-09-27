@@ -258,7 +258,7 @@ Pagos en el estado de cuenta. `GET account` y `GET students/{id}/account` **se a
 - `credit_generated`: lo que el pago dejó como saldo a favor.
 - Un pago anulado viene con `voided: true`, no cuenta para los cargos y su recibo sale con la marca "ANULADO".
 
-## Sprint 4b (contrato)
+## Sprint 4b (implementado)
 
 Informes para quien tiene el permiso "Ver informes" (comisión). Requieren token + organización; sin el permiso responden `403`.
 

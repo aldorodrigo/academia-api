@@ -4,12 +4,12 @@ namespace App\Reports;
 
 use App\Enums\ChargeStatus;
 use App\Models\Charge;
-use App\Models\Family;
 use App\Models\Guardian;
 use App\Models\Organization;
 
 /**
- * Morosos: familias con cuotas vencidas en al menos `min_months` meses distintos.
+ * Morosos: familias (o jugadores sin familia) con cuotas vencidas en al menos
+ * `min_months` meses distintos.
  */
 class DelinquentsReport extends Report
 {
@@ -35,12 +35,10 @@ class DelinquentsReport extends Report
 
     public function data(): array
     {
-        $families = Family::query()
-            ->with(['students', 'guardians'])
-            ->get()
-            ->map(function (Family $family) {
+        $families = $this->households()
+            ->map(function (array $household) {
                 $overdue = Charge::query()->notVoided()
-                    ->whereIn('student_id', $family->students->modelKeys())
+                    ->whereIn('student_id', $household['students']->modelKeys())
                     ->with(['allocations.payment', 'organization'])
                     ->orderBy('due_on')
                     ->get()
@@ -50,11 +48,11 @@ class DelinquentsReport extends Report
                     return null;
                 }
 
-                $contact = $family->guardians->first(fn (Guardian $g) => filled($g->phone)) ?? $family->guardians->first();
+                $contact = $household['guardians']->first(fn (Guardian $g) => filled($g->phone)) ?? $household['guardians']->first();
 
                 return [
-                    'family' => $family->name,
-                    'students' => $family->students->pluck('first_name')->all(),
+                    'family' => $household['name'],
+                    'students' => $household['students']->pluck('first_name')->all(),
                     'overdue' => (int) $overdue->sum(fn (Charge $c) => $c->pendingAmount()),
                     'oldest_due_on' => $overdue->first()->due_on->toDateString(),
                     'months_overdue' => $overdue->map(fn (Charge $c) => $c->due_on->format('Y-m'))->unique()->count(),
