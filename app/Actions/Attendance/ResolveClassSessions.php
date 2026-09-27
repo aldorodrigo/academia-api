@@ -45,7 +45,7 @@ class ResolveClassSessions
         return ClassSession::query()
             ->whereIn('group_id', $groups->pluck('id'))
             ->whereDate('date', $date->toDateString())
-            ->with(['group.program', 'venue', 'organization'])
+            ->with(['group.program', 'venue', 'organization', 'rescheduledTo.venue', 'rescheduledFrom.venue'])
             ->orderBy('starts_at')
             ->get()
             ->toBase();

@@ -2,13 +2,18 @@
 
 use App\Actions\Attendance\SendClassReminders;
 use App\Actions\Billing\GenerateSeasonCharges;
+use App\Actions\Billing\RegisterPayment;
+use App\Actions\Billing\WaiveSuspendedClass;
+use App\Enums\AdjustmentType;
 use App\Enums\EnrollmentStatus;
 use App\Enums\GuardianResponse;
 use App\Enums\OrganizationRole;
+use App\Enums\PaymentMethod;
 use App\Filament\Resources\Groups\Pages\EditGroup;
 use App\Filament\Resources\Groups\RelationManagers\ClassSessionsRelationManager;
 use App\Models\Attendance;
 use App\Models\Charge;
+use App\Models\ChargeWaiver;
 use App\Models\ClassReminderPreference;
 use App\Models\ClassSession;
 use App\Models\DeviceToken;
@@ -17,6 +22,8 @@ use App\Models\Family;
 use App\Models\FeeConcept;
 use App\Models\Group;
 use App\Models\Guardian;
+use App\Models\MoneyAccount;
+use App\Models\NotificationSetting;
 use App\Models\Organization;
 use App\Models\Program;
 use App\Models\Role;
@@ -27,7 +34,10 @@ use App\Models\Tariff;
 use App\Models\User;
 use App\Models\Venue;
 use App\Notifications\ClassReminder;
+use App\Notifications\ClassRescheduled;
 use App\Notifications\ClassSuspended;
+use App\Notifications\InstructorClassReminder;
+use App\Support\Push\FcmPushSender;
 use App\Support\Push\PushChannel;
 use App\Support\Push\PushMessage;
 use App\Support\Push\PushSender;
@@ -35,6 +45,8 @@ use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Notification;
+use Kreait\Firebase\Contract\Messaging;
+use Kreait\Firebase\Messaging\MulticastSendReport;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -329,8 +341,8 @@ describe('aviso de los días de clase', function () {
         $session = new ClassSession(['date' => '2026-09-30', 'starts_at' => '08:00:00', 'ends_at' => '09:00:00']);
         $session->setRelation('organization', $this->jakare);
 
-        expect(SendClassReminders::sendAt($session, 3)->format('Y-m-d H:i'))->toBe('2026-09-29 20:00')
-            ->and(SendClassReminders::sendAt($session->fill(['starts_at' => '17:00:00']), 3)->format('Y-m-d H:i'))->toBe('2026-09-30 14:00');
+        expect(SendClassReminders::sendAt($session, 180)->format('Y-m-d H:i'))->toBe('2026-09-29 20:00')
+            ->and(SendClassReminders::sendAt($session->fill(['starts_at' => '17:00:00']), 180)->format('Y-m-d H:i'))->toBe('2026-09-30 14:00');
     });
 });
 
@@ -434,4 +446,378 @@ it('en el panel: toma asistencia del grupo (con los que no van justificados) y s
 
     expect($wednesday->fresh()->isSuspended())->toBeTrue();
     Notification::assertSentTo($this->tutor, ClassSuspended::class);
+});
+
+describe('reprogramar', function () {
+    beforeEach(fn () => Notification::fake());
+
+    it('crea la recuperación, deja la original reprogramada y avisa', function () {
+        $venue = Venue::factory()->for($this->jakare)->create(['name' => 'Cancha 2']);
+        $id = todayClassId($this->instructor);
+
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/reschedule", [
+            'date' => '2026-10-03', 'starts_at' => '09:00', 'ends_at' => '10:30', 'venue_id' => $venue->id, 'reason' => 'Lluvia',
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'reprogramada')
+            ->assertJsonPath('data.rescheduled_to.date', '2026-10-03')
+            ->assertJsonPath('data.rescheduled_to.starts_at', '09:00')
+            ->assertJsonPath('data.rescheduled_to.venue.name', 'Cancha 2');
+
+        Notification::assertSentTo($this->tutor, ClassRescheduled::class,
+            fn (ClassRescheduled $n) => $n->body === 'La clase de Fútbol Sub-10 del lunes 28/09 a las 17:00 por Lluvia pasa al sábado 03/10 a las 09:00 (Cancha 2).');
+
+        attendanceApi($this->instructor, 'GET', 'classes?date=2026-10-03')
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.is_makeup', true)
+            ->assertJsonPath('data.0.rescheduled_from.date', '2026-09-28')
+            ->assertJsonPath('data.0.counts.enrolled', 2);
+
+        // La original ya no se toma ni se responde; la agenda salta a la siguiente.
+        attendanceApi($this->instructor, 'PUT', "classes/{$id}/attendance", ['marks' => [
+            ['student_id' => $this->lucas->id, 'status' => 'presente'],
+        ]])->assertUnprocessable();
+        attendanceApi($this->tutor, 'GET', 'agenda')->assertJsonPath('data.0.class.date', '2026-09-30');
+    });
+
+    it('cambia el horario del mismo día sin motivo', function () {
+        $id = todayClassId($this->instructor);
+
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/reschedule", ['date' => '2026-09-28', 'starts_at' => '18:30', 'ends_at' => '20:00'])
+            ->assertOk();
+
+        Notification::assertSentTo($this->tutor, ClassRescheduled::class,
+            fn (ClassRescheduled $n) => $n->body === 'La clase de Fútbol Sub-10 del lunes 28/09 a las 17:00 pasa a las 18:30 (Cancha 1).');
+        expect(ClassSession::query()->whereKey($id)->value('suspension_reason'))->toBeNull();
+    });
+
+    it('rechaza el pasado, fin antes del inicio y superposiciones', function () {
+        $id = todayClassId($this->instructor);
+        $reschedule = fn (array $data) => attendanceApi($this->instructor, 'POST', "classes/{$id}/reschedule", $data);
+
+        $reschedule(['date' => '2026-09-28', 'starts_at' => '08:00', 'ends_at' => '09:00'])->assertUnprocessable()->assertJsonValidationErrors('date');
+        $reschedule(['date' => '2026-10-03', 'starts_at' => '10:00', 'ends_at' => '09:00'])->assertUnprocessable()->assertJsonValidationErrors('ends_at');
+        $reschedule(['date' => '2026-09-30', 'starts_at' => '18:00', 'ends_at' => '19:00'])->assertUnprocessable()->assertJsonValidationErrors('starts_at');
+        $reschedule(['date' => '2026-09-30', 'starts_at' => '18:30', 'ends_at' => '19:30'])->assertOk();
+    });
+
+    it('cancelar la reprogramación la vuelve a suspendida y avisa', function () {
+        $id = todayClassId($this->instructor);
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/reschedule", ['date' => '2026-10-03', 'starts_at' => '09:00', 'ends_at' => '10:30', 'reason' => 'Lluvia']);
+
+        attendanceApi($this->instructor, 'DELETE', "classes/{$id}/reschedule")
+            ->assertOk()
+            ->assertJsonPath('data.status', 'suspendida')
+            ->assertJsonPath('data.rescheduled_to', null);
+
+        expect(ClassSession::query()->where('is_makeup', true)->exists())->toBeFalse();
+        Notification::assertSentTo($this->tutor, ClassRescheduled::class, fn (ClassRescheduled $n) => str_contains($n->body, 'ya no se recupera'));
+    });
+
+    it('en la recuperación se toma asistencia', function () {
+        $id = todayClassId($this->instructor);
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/reschedule", ['date' => '2026-10-03', 'starts_at' => '09:00', 'ends_at' => '10:30']);
+        $makeup = ClassSession::query()->where('is_makeup', true)->sole();
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-03 10:00', 'America/Asuncion'));
+        attendanceApi($this->instructor, 'GET', 'classes')->assertJsonPath('data.0.id', $makeup->id);
+        attendanceApi($this->instructor, 'PUT', "classes/{$makeup->id}/attendance", ['marks' => [
+            ['student_id' => $this->mateo->id, 'status' => 'presente'],
+        ]])->assertOk()->assertJsonPath('data.counts.present', 1);
+    });
+
+    it('lista las canchas', function () {
+        Venue::factory()->for($this->ajena)->create(['name' => 'Ajena']);
+
+        attendanceApi($this->instructor, 'GET', 'venues')->assertJsonCount(1, 'data')->assertJsonPath('data.0.name', 'Cancha 1');
+    });
+});
+
+describe('clase suspendida sin cobrar (por día de entrenamiento)', function () {
+    beforeEach(function () {
+        Notification::fake();
+        app(CurrentOrganization::class)->set($this->jakare);
+        $monthly = FeeConcept::monthlyFee($this->jakare);
+        $this->family = Family::factory()->for($this->jakare)->create();
+        $this->mateo->update(['family_id' => $this->family->id]);
+
+        // Semanal, por día de entrenamiento: Sub-10 entrena lunes y miércoles a ₲ 20.000.
+        $this->colonia = Season::factory()->for($this->jakare)->create([
+            'name' => 'Colonia', 'starts_on' => '2026-09-28', 'ends_on' => '2026-10-11',
+            'fee_frequency' => 'diaria', 'daily_basis' => 'entrenamiento', 'daily_grouping' => 'semana', 'due_days' => 3,
+        ]);
+        Tariff::factory()->create(['fee_concept_id' => $monthly->id, 'season_id' => $this->colonia->id, 'amount' => 20000, 'valid_from' => '2026-09-28']);
+        Enrollment::query()->where('student_id', $this->mateo->id)->update(['season_id' => $this->colonia->id]);
+
+        app(GenerateSeasonCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-09-28'));
+        $this->week1 = Charge::query()->sole();
+        $this->wednesday = fn () => attendanceApi($this->instructor, 'GET', 'classes?date=2026-09-30')->json('data.0.id');
+    });
+
+    it('la cuota impaga recibe el ajuste; volver a programar lo quita', function () {
+        expect($this->week1->final_amount)->toBe(40000);
+        $id = ($this->wednesday)();
+        attendanceApi($this->instructor, 'GET', "classes/{$id}")->assertJsonPath('data.can_waive_charge', true);
+
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/suspension", ['reason' => 'Lluvia', 'waive_charge' => true])
+            ->assertOk()
+            ->assertJsonPath('data.charge_waived', true);
+
+        $charge = $this->week1->fresh('adjustments');
+        expect($charge->final_amount)->toBe(20000)
+            ->and($charge->adjustments->sole()->label)->toBe('Clase suspendida 30/09')
+            ->and($charge->adjustments->sole()->type)->toBe(AdjustmentType::SuspendedClass);
+
+        // Idempotente: suspender de nuevo no descuenta dos veces.
+        app(WaiveSuspendedClass::class)->apply(ClassSession::query()->find($id));
+        expect($this->week1->fresh()->final_amount)->toBe(20000);
+
+        attendanceApi($this->instructor, 'DELETE', "classes/{$id}/suspension")->assertOk();
+        expect($this->week1->fresh()->final_amount)->toBe(40000)
+            ->and($this->week1->adjustments()->count())->toBe(0);
+    });
+
+    it('sin la casilla no descuenta', function () {
+        attendanceApi($this->instructor, 'POST', 'classes/'.($this->wednesday)().'/suspension', ['reason' => 'Lluvia'])
+            ->assertJsonPath('data.charge_waived', false);
+
+        expect($this->week1->fresh()->final_amount)->toBe(40000);
+    });
+
+    it('si la cuota todavía no se emitió, sale con un día menos', function () {
+        $monday = attendanceApi($this->instructor, 'GET', 'classes?date=2026-10-05')->json('data.0.id');
+        attendanceApi($this->instructor, 'POST', "classes/{$monday}/suspension", ['reason' => 'Feriado', 'waive_charge' => true])->assertOk();
+
+        app(GenerateSeasonCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-05'));
+
+        $week2 = Charge::query()->whereDate('period_start', '2026-10-05')->sole();
+        expect([$week2->quantity, $week2->final_amount])->toBe([1, 20000])
+            ->and($week2->adjustments()->count())->toBe(0);
+    });
+
+    it('si la cuota ya se pagó, el descuento va a la próxima', function () {
+        app(RegisterPayment::class)->handle($this->family, MoneyAccount::query()->first(), 40000, PaymentMethod::Cash, CarbonImmutable::parse('2026-09-28'), allocations: [$this->week1->id => 40000]);
+
+        attendanceApi($this->instructor, 'POST', 'classes/'.($this->wednesday)().'/suspension', ['reason' => 'Lluvia', 'waive_charge' => true])->assertOk();
+        expect($this->week1->fresh()->final_amount)->toBe(40000)
+            ->and(ChargeWaiver::query()->sole()->applied_charge_id)->toBeNull();
+
+        app(GenerateSeasonCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-05'));
+
+        $week2 = Charge::query()->whereDate('period_start', '2026-10-05')->sole();
+        expect($week2->final_amount)->toBe(20000)
+            ->and($week2->adjustments()->sole()->label)->toBe('Clase suspendida 30/09')
+            ->and(ChargeWaiver::query()->sole()->applied_charge_id)->toBe($week2->id);
+    });
+
+    it('reprogramar no descuenta y deshace el descuento', function () {
+        $id = ($this->wednesday)();
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/suspension", ['reason' => 'Lluvia', 'waive_charge' => true]);
+        expect($this->week1->fresh()->final_amount)->toBe(20000);
+
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/reschedule", ['date' => '2026-10-03', 'starts_at' => '09:00', 'ends_at' => '10:30'])
+            ->assertOk()
+            ->assertJsonPath('data.charge_waived', false);
+
+        expect($this->week1->fresh()->final_amount)->toBe(40000);
+    });
+
+    it('con cuota fija no se puede no cobrar', function () {
+        $this->colonia->update(['fee_frequency' => 'mensual', 'daily_basis' => null]);
+        $id = ($this->wednesday)();
+
+        attendanceApi($this->instructor, 'GET', "classes/{$id}")->assertJsonPath('data.can_waive_charge', false);
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/suspension", ['reason' => 'Lluvia', 'waive_charge' => true])
+            ->assertJsonPath('data.charge_waived', false);
+        expect($this->week1->fresh()->final_amount)->toBe(40000);
+    });
+});
+
+describe('avisos configurables', function () {
+    beforeEach(function () {
+        Notification::fake();
+        app(CurrentOrganization::class)->set($this->jakare);
+    });
+
+    it('muestra los avisos del club por defecto y guarda los elegidos', function () {
+        attendanceApi($this->tutor, 'PUT', "students/{$this->mateo->id}/reminders", ['enabled' => true]);
+
+        attendanceApi($this->tutor, 'GET', 'me/notification-settings')
+            ->assertOk()
+            ->assertJsonPath('data.instructor', null)
+            ->assertJsonPath('data.guardian.offsets', [180])
+            ->assertJsonPath('data.guardian.students.0.first_name', 'Mateo')
+            ->assertJsonPath('data.guardian.students.0.enabled', true)
+            ->assertJsonPath('data.options.0.value', 'eve')
+            ->assertJsonPath('data.max', 3);
+
+        attendanceApi($this->instructor, 'GET', 'me/notification-settings')
+            ->assertJsonPath('data.instructor', ['enabled' => true, 'offsets' => [120]])
+            ->assertJsonPath('data.guardian', null);
+
+        attendanceApi($this->tutor, 'PUT', 'me/notification-settings', ['guardian' => ['offsets' => [60, 'eve', 60]]])
+            ->assertOk()
+            ->assertJsonPath('data.guardian.offsets', ['eve', 60]);
+    });
+
+    it('valida la cantidad y las opciones', function () {
+        attendanceApi($this->tutor, 'PUT', 'me/notification-settings', ['guardian' => ['offsets' => ['eve', 360, 180, 60]]])
+            ->assertUnprocessable()->assertJsonValidationErrors('guardian.offsets');
+        attendanceApi($this->tutor, 'PUT', 'me/notification-settings', ['guardian' => ['offsets' => [45]]])
+            ->assertUnprocessable()->assertJsonValidationErrors('guardian.offsets.0');
+        attendanceApi($this->tutor, 'PUT', 'me/notification-settings', ['guardian' => ['offsets' => []]])
+            ->assertUnprocessable();
+    });
+
+    it('el tutor recibe cada aviso elegido mientras no responda', function () {
+        ClassReminderPreference::query()->create(['user_id' => $this->tutor->id, 'student_id' => $this->mateo->id, 'enabled' => true]);
+        NotificationSetting::query()->create(['user_id' => $this->tutor->id, 'guardian_offsets' => ['eve', 60]]);
+        // Solo se cuentan los del tutor.
+        NotificationSetting::query()->create(['user_id' => $this->instructor->id, 'instructor_enabled' => false]);
+        $remind = fn (string $at) => app(SendClassReminders::class)->handle($this->jakare, CarbonImmutable::parse($at, 'America/Asuncion'));
+
+        // El miércoles 30/09 a las 17:00: aviso el martes 20:00 y el miércoles 16:00.
+        expect($remind('2026-09-29 19:59'))->toBe(0)
+            ->and($remind('2026-09-29 20:00'))->toBe(1)
+            ->and($remind('2026-09-29 20:15'))->toBe(0)
+            ->and($remind('2026-09-30 16:00'))->toBe(1)
+            ->and($remind('2026-09-30 16:15'))->toBe(0);
+
+        Notification::assertSentTo($this->tutor, ClassReminder::class,
+            fn (ClassReminder $n) => $n->body === 'Mañana Mateo tiene Fútbol a las 17:00 (Cancha 1). ¿Lo llevás?');
+    });
+
+    it('si ya respondió, no llegan los avisos siguientes', function () {
+        ClassReminderPreference::query()->create(['user_id' => $this->tutor->id, 'student_id' => $this->mateo->id, 'enabled' => true]);
+        NotificationSetting::query()->create(['user_id' => $this->tutor->id, 'guardian_offsets' => [360, 60]]);
+        // Solo se cuentan los del tutor.
+        NotificationSetting::query()->create(['user_id' => $this->instructor->id, 'instructor_enabled' => false]);
+        $remind = fn (string $at) => app(SendClassReminders::class)->handle($this->jakare, CarbonImmutable::parse($at, 'America/Asuncion'));
+
+        expect($remind('2026-09-28 11:00'))->toBe(1);
+        $id = todayClassId($this->instructor);
+        attendanceApi($this->tutor, 'PUT', "classes/{$id}/students/{$this->mateo->id}/response", ['going' => true]);
+
+        expect($remind('2026-09-28 16:00'))->toBe(0);
+    });
+
+    it('un solo aviso por usuario con varios hijos en la clase', function () {
+        $this->lucas->guardians()->attach(Guardian::query()->where('user_id', $this->tutor->id)->sole(), ['relationship' => 'madre']);
+        foreach ([$this->mateo, $this->lucas] as $child) {
+            ClassReminderPreference::query()->create(['user_id' => $this->tutor->id, 'student_id' => $child->id, 'enabled' => true]);
+        }
+
+        expect(app(SendClassReminders::class)->handle($this->jakare, CarbonImmutable::parse('2026-09-28 14:00', 'America/Asuncion')))->toBe(1);
+
+        Notification::assertSentToTimes($this->tutor, ClassReminder::class, 1);
+        Notification::assertSentTo($this->tutor, ClassReminder::class,
+            fn (ClassReminder $n) => $n->body === 'Hoy Lucas y Mateo tienen Fútbol a las 17:00 (Cancha 1). ¿Los llevás?');
+    });
+
+    it('el técnico recibe su aviso con los contadores y lo puede apagar', function () {
+        $id = todayClassId($this->instructor);
+        attendanceApi($this->tutor, 'PUT', "classes/{$id}/students/{$this->mateo->id}/response", ['going' => false]);
+        $remind = fn (string $at) => app(SendClassReminders::class)->handle($this->jakare, CarbonImmutable::parse($at, 'America/Asuncion'));
+
+        expect($remind('2026-09-28 14:59'))->toBe(0)
+            ->and($remind('2026-09-28 15:00'))->toBe(1)
+            ->and($remind('2026-09-28 15:30'))->toBe(0);
+        Notification::assertSentTo($this->instructor, InstructorClassReminder::class,
+            fn (InstructorClassReminder $n) => $n->body === 'Hoy tenés clase con Sub-10 a las 17:00 (Cancha 1) · 0 van, 1 no van, 1 sin responder'
+                && $n->toPush($this->instructor)->data['route'] === "/clases/{$id}");
+
+        attendanceApi($this->instructor, 'PUT', 'me/notification-settings', ['instructor' => ['enabled' => false]])->assertOk();
+        expect($remind('2026-09-30 15:00'))->toBe(0);
+    });
+});
+
+describe('responder desde la notificación', function () {
+    beforeEach(function () {
+        Notification::fake();
+        app(CurrentOrganization::class)->set($this->jakare);
+        ClassReminderPreference::query()->create(['user_id' => $this->tutor->id, 'student_id' => $this->mateo->id, 'enabled' => true]);
+        app(SendClassReminders::class)->handle($this->jakare, CarbonImmutable::parse('2026-09-28 14:00', 'America/Asuncion'));
+
+        $this->push = null;
+        Notification::assertSentTo($this->tutor, ClassReminder::class, function (ClassReminder $n) {
+            $this->push = $n->toPush($this->tutor);
+
+            return true;
+        });
+    });
+
+    it('trae los botones con links firmados', function () {
+        expect($this->push->withActions)->toBeTrue()
+            ->and($this->push->category)->toBe('CLASS_REMINDER')
+            ->and($this->push->data['type'])->toBe('class_reminder')
+            ->and($this->push->data['student_ids'])->toBe((string) $this->mateo->id);
+    });
+
+    it('"No va" responde sin sesión', function () {
+        $this->postJson($this->push->data['not_going_url'])
+            ->assertOk()
+            ->assertJsonPath('data.message', 'Listo: avisaste que Mateo no va.');
+
+        expect(Attendance::query()->withoutGlobalScopes()->sole()->guardian_response)->toBe(GuardianResponse::NotGoing);
+    });
+
+    it('alterado o vencido → 403', function () {
+        $this->postJson(str_replace('going=0', 'going=1', $this->push->data['not_going_url']))->assertForbidden();
+
+        $this->travelTo(CarbonImmutable::parse('2026-09-28 17:01', 'America/Asuncion'));
+        $this->postJson($this->push->data['going_url'])->assertForbidden();
+    });
+
+    it('clase suspendida → 422', function () {
+        ClassSession::query()->withoutGlobalScopes()->update(['status' => 'suspendida']);
+
+        $this->postJson($this->push->data['going_url'])
+            ->assertUnprocessable()
+            ->assertJsonPath('message', 'La clase está suspendida.');
+    });
+});
+
+it('el push con botones va solo con datos en Android y con categoría en iOS', function () {
+    $sent = null;
+    $messaging = Mockery::mock(Messaging::class);
+    $messaging->shouldReceive('sendMulticast')->andReturnUsing(function ($message) use (&$sent) {
+        $sent = $message->jsonSerialize();
+
+        return MulticastSendReport::withItems([]);
+    });
+
+    (new FcmPushSender($messaging))->send(['t'], new PushMessage('Día de clase', 'Hoy Mateo…', ['type' => 'class_reminder'], withActions: true, category: 'CLASS_REMINDER'));
+
+    expect($sent)->not->toHaveKey('notification')
+        ->and($sent['data'])->toMatchArray(['type' => 'class_reminder', 'title' => 'Día de clase', 'body' => 'Hoy Mateo…'])
+        ->and($sent['android']['priority'])->toBe('high')
+        ->and($sent['apns']['payload']['aps']['category'])->toBe('CLASS_REMINDER');
+});
+
+it('en el panel: suspender y reprogramar, y cancelar la reprogramación', function () {
+    Notification::fake();
+    $admin = memberOf($this->jakare);
+    app(RoleAssigner::class)->assign($this->jakare, $admin, Role::query()->where('organization_id', $this->jakare->id)->where('name', OrganizationRole::Admin->value)->firstOrFail());
+    $this->actingAs($admin);
+    filament()->setTenant($this->jakare);
+    app(CurrentOrganization::class)->set($this->jakare);
+
+    $manager = fn () => Livewire::test(ClassSessionsRelationManager::class, ['ownerRecord' => $this->sub10, 'pageClass' => EditGroup::class]);
+    $manager()->assertOk();
+    $wednesday = ClassSession::query()->whereDate('date', '2026-09-30')->sole();
+
+    $manager()
+        ->callTableAction('suspend', $wednesday, [
+            'reason' => 'Lluvia', 'then' => 'reschedule', 'date' => '2026-10-03', 'starts_at' => '09:00', 'ends_at' => '10:30',
+        ])
+        ->assertHasNoTableActionErrors();
+
+    $wednesday->refresh();
+    expect($wednesday->isRescheduled())->toBeTrue()
+        ->and($wednesday->rescheduledTo->date->toDateString())->toBe('2026-10-03')
+        ->and($wednesday->suspension_reason)->toBe('Lluvia');
+    Notification::assertSentTo($this->tutor, ClassRescheduled::class);
+
+    $manager()->callTableAction('cancel_reschedule', $wednesday)->assertHasNoTableActionErrors();
+    expect($wednesday->fresh()->isSuspended())->toBeTrue();
 });

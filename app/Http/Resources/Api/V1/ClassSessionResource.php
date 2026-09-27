@@ -54,6 +54,10 @@ class ClassSessionResource extends JsonResource
             ],
             'status' => $this->status->value,
             'suspension_reason' => $this->suspension_reason,
+            'charge_waived' => (bool) $this->charge_waived,
+            'is_makeup' => (bool) $this->is_makeup,
+            'rescheduled_to' => self::slot($this->rescheduledTo),
+            'rescheduled_from' => self::slot($this->rescheduledFrom),
             'attendance_taken' => $this->isAttendanceTaken(),
         ];
 
@@ -70,6 +74,7 @@ class ClassSessionResource extends JsonResource
         return [
             ...$data,
             'editable' => $this->isEditable(),
+            'can_waive_charge' => $this->canWaiveCharge(),
             'students' => $this->students()->map(function (Student $student) use ($attendances) {
                 /** @var Attendance|null $attendance */
                 $attendance = $attendances->get($student->id);
@@ -83,6 +88,22 @@ class ClassSessionResource extends JsonResource
                     'note' => $attendance?->note,
                 ];
             })->values(),
+        ];
+    }
+
+    /**
+     * La otra clase de una reprogramación.
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function slot(?ClassSession $session): ?array
+    {
+        return $session === null ? null : [
+            'id' => $session->id,
+            'date' => $session->date->toDateString(),
+            'starts_at' => Schedule::time($session->starts_at),
+            'ends_at' => Schedule::time($session->ends_at),
+            'venue' => $session->venue ? ['name' => $session->venue->name] : null,
         ];
     }
 }

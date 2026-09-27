@@ -2,9 +2,11 @@
 
 namespace App\Actions\Billing;
 
+use App\Enums\ClassStatus;
 use App\Enums\DailyBasis;
 use App\Enums\DailyGrouping;
 use App\Enums\FeeFrequency;
+use App\Models\ClassSession;
 use App\Models\Group;
 use App\Models\Season;
 use Carbon\CarbonImmutable;
@@ -39,6 +41,7 @@ class SeasonPeriods
         $from = ($from ?? $seasonStart)->startOfDay()->max($seasonStart);
         $to = ($to ?? $seasonEnd)->startOfDay()->min($seasonEnd);
         $weekdays = $frequency === FeeFrequency::Daily ? $this->trainingWeekdays($group) : null;
+        $waived = $weekdays === null ? [] : $this->waivedDates($season, $group, $from, $to);
 
         $periods = collect();
         $cursor = $this->unitStart($season, $from);
@@ -48,7 +51,7 @@ class SeasonPeriods
             $start = $cursor->max($seasonStart);
             $end = $nominalEnd->min($seasonEnd);
 
-            $quantity = $weekdays === null ? null : $this->countDays($start, $end, $weekdays);
+            $quantity = $weekdays === null ? null : $this->countDays($start, $end, $weekdays, $waived);
 
             if ($quantity !== 0) {
                 $periods->push(new BillingPeriod(
@@ -79,7 +82,7 @@ class SeasonPeriods
      */
     public function quantityBetween(Season $season, ?Group $group, CarbonImmutable $start, CarbonImmutable $end): int
     {
-        return $this->countDays($start, $end, $this->trainingWeekdays($group));
+        return $this->countDays($start, $end, $this->trainingWeekdays($group), $this->waivedDates($season, $group, $start, $end));
     }
 
     private function unitStart(Season $season, CarbonImmutable $date): CarbonImmutable
@@ -132,14 +135,40 @@ class SeasonPeriods
     }
 
     /**
-     * @param  list<int>  $weekdays
+     * Días con clase suspendida que no se cobra (solo por día de entrenamiento).
+     *
+     * @return list<string> fechas AAAA-MM-DD
      */
-    private function countDays(CarbonImmutable $start, CarbonImmutable $end, array $weekdays): int
+    private function waivedDates(Season $season, ?Group $group, CarbonImmutable $from, CarbonImmutable $to): array
+    {
+        if ($group === null || ($season->daily_basis ?? DailyBasis::Training) !== DailyBasis::Training) {
+            return [];
+        }
+
+        // El rango se amplía al período completo que contiene cada punta.
+        return ClassSession::query()->withoutGlobalScopes()
+            ->where('group_id', $group->id)
+            ->where('status', ClassStatus::Suspended)
+            ->where('charge_waived', true)
+            ->whereDate('date', '>=', $this->unitStart($season, $from)->toDateString())
+            ->whereDate('date', '<=', $this->unitEnd($season, $this->unitStart($season, $to))->toDateString())
+            ->pluck('date')
+            ->map(fn ($date) => CarbonImmutable::parse($date)->toDateString())
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  list<int>  $weekdays
+     * @param  list<string>  $waived  fechas que no se cuentan
+     */
+    private function countDays(CarbonImmutable $start, CarbonImmutable $end, array $weekdays, array $waived = []): int
     {
         $count = 0;
 
         for ($day = $start; $day->lte($end); $day = $day->addDay()) {
-            $count += in_array($day->dayOfWeekIso, $weekdays, true) ? 1 : 0;
+            $count += in_array($day->dayOfWeekIso, $weekdays, true) && ! in_array($day->toDateString(), $waived, true) ? 1 : 0;
         }
 
         return $count;

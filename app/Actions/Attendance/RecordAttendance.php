@@ -19,8 +19,8 @@ class RecordAttendance
      */
     public function handle(ClassSession $session, array $marks, User $user, bool $fromPanel = false): void
     {
-        if ($session->isSuspended()) {
-            throw ValidationException::withMessages(['marks' => 'La clase está suspendida.']);
+        if ($session->isOff()) {
+            throw ValidationException::withMessages(['marks' => $session->isRescheduled() ? 'La clase se reprogramó: tomá la asistencia en la recuperación.' : 'La clase está suspendida.']);
         }
 
         if (! $fromPanel && ! $session->isEditable()) {

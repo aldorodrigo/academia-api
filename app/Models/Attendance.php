@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Un alumno en una clase: la marca del técnico y la respuesta del tutor.
  */
-#[Fillable(['organization_id', 'class_session_id', 'student_id', 'status', 'note', 'marked_by', 'marked_at', 'guardian_response', 'responded_by', 'responded_at', 'reminded_at'])]
+#[Fillable(['organization_id', 'class_session_id', 'student_id', 'status', 'note', 'marked_by', 'marked_at', 'guardian_response', 'responded_by', 'responded_at'])]
 class Attendance extends Model
 {
     use BelongsToOrganization;
@@ -31,7 +31,6 @@ class Attendance extends Model
             'guardian_response' => GuardianResponse::class,
             'marked_at' => 'immutable_datetime',
             'responded_at' => 'immutable_datetime',
-            'reminded_at' => 'immutable_datetime',
         ];
     }
 

@@ -2,6 +2,7 @@
 
 namespace App\Actions\Attendance;
 
+use App\Actions\Billing\WaiveSuspendedClass;
 use App\Enums\ClassStatus;
 use App\Models\ClassSession;
 use App\Models\Student;
@@ -17,13 +18,25 @@ use Illuminate\Support\Facades\Notification;
  */
 class SuspendClass
 {
-    public function handle(ClassSession $session, string $reason, ?User $user): void
+    public function __construct(private WaiveSuspendedClass $waiver) {}
+
+    /**
+     * @param  bool  $waiveCharge  "No cobrar esta clase" (solo si la temporada cobra por día de entrenamiento)
+     */
+    public function handle(ClassSession $session, string $reason, ?User $user, bool $waiveCharge = false): void
     {
+        $waive = $waiveCharge && $session->canWaiveCharge();
+
         $session->update([
             'status' => ClassStatus::Suspended,
             'suspension_reason' => trim($reason),
             'suspended_by' => $user?->id,
+            'charge_waived' => $waive,
         ]);
+
+        if ($waive) {
+            $this->waiver->apply($session);
+        }
 
         $recipients = self::usersInChargeOf($session->students())
             ->reject(fn (User $recipient) => $recipient->is($user));
@@ -33,7 +46,11 @@ class SuspendClass
 
     public function resume(ClassSession $session): void
     {
-        $session->update(['status' => ClassStatus::Scheduled, 'suspension_reason' => null, 'suspended_by' => null]);
+        if ($session->charge_waived) {
+            $this->waiver->undo($session);
+        }
+
+        $session->update(['status' => ClassStatus::Scheduled, 'suspension_reason' => null, 'suspended_by' => null, 'charge_waived' => false]);
     }
 
     /**

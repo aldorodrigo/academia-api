@@ -18,8 +18,8 @@ class RespondToClass
 {
     public function handle(ClassSession $session, Student $student, bool $going, User $user): Attendance
     {
-        if ($session->isSuspended()) {
-            throw ValidationException::withMessages(['going' => 'La clase está suspendida.']);
+        if ($session->isOff()) {
+            throw ValidationException::withMessages(['going' => $session->isRescheduled() ? 'La clase se pasó a otro día.' : 'La clase está suspendida.']);
         }
 
         if ($session->hasStarted(CarbonImmutable::now())) {

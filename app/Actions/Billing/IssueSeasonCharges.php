@@ -40,6 +40,7 @@ class IssueSeasonCharges
         private DiscountCalculator $discounts,
         private IssueCharge $issue,
         private ApplyCredit $applyCredit,
+        private WaiveSuspendedClass $waivers,
     ) {}
 
     /**
@@ -119,7 +120,7 @@ class IssueSeasonCharges
                 }
 
                 try {
-                    $this->issue->handle([
+                    $issued = $this->issue->handle([
                         ...$charge,
                         'organization_id' => $organization->id,
                         'student_id' => $enrollment->student_id,
@@ -135,6 +136,9 @@ class IssueSeasonCharges
                         'unique_key' => $key,
                         'created_by' => $createdBy ?? auth()->id(),
                     ], $discounts['adjustments']);
+
+                    // Clases suspendidas sin cobrar de cuotas que ya estaban pagadas.
+                    $this->waivers->applyPending($issued);
 
                     $summary['created']++;
                     $summary['amount'] += $discounts['final'];

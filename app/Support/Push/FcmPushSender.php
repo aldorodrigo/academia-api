@@ -14,10 +14,20 @@ class FcmPushSender implements PushSender
 
     public function send(array $tokens, PushMessage $message): array
     {
-        $cloudMessage = CloudMessage::new()
-            ->withNotification(['title' => $message->title, 'body' => $message->body])
-            ->withData($message->data)
-            ->withDefaultSounds();
+        $cloudMessage = $message->withActions
+            // Android: solo datos (la app la dibuja con botones); iOS: alerta con categoría.
+            ? CloudMessage::new()
+                ->withData([...$message->data, 'title' => $message->title, 'body' => $message->body])
+                ->withAndroidConfig(['priority' => 'high'])
+                ->withApnsConfig(['payload' => ['aps' => [
+                    'alert' => ['title' => $message->title, 'body' => $message->body],
+                    'category' => $message->category,
+                    'sound' => 'default',
+                ]]])
+            : CloudMessage::new()
+                ->withNotification(['title' => $message->title, 'body' => $message->body])
+                ->withData($message->data)
+                ->withDefaultSounds();
 
         $invalid = [];
 

@@ -72,7 +72,8 @@ class AgendaController extends Controller
     {
         for ($date = $today; $date->lte($today->addDays(self::DAYS)); $date = $date->addDay()) {
             $next = $sessions->forDate($groups, $date)
-                ->first(fn (ClassSession $session) => $now->lt($session->endsAt())
+                ->first(fn (ClassSession $session) => ! $session->isRescheduled()
+                    && $now->lt($session->endsAt())
                     && $session->students()->contains('id', $student->id));
 
             if ($next !== null) {
@@ -102,7 +103,7 @@ class AgendaController extends Controller
             ],
             'class' => (new ClassSessionResource($session))->withoutCounts()->toArray($request),
             'response' => $attendance?->guardian_response?->value,
-            'can_respond' => ! $session->isSuspended() && ! $session->hasStarted($now),
+            'can_respond' => ! $session->isOff() && ! $session->hasStarted($now),
             'class_reminders' => ClassReminderPreference::for($request->user(), $student),
         ];
     }

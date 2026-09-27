@@ -30,11 +30,33 @@ class Charge extends Model
     /** Lo único que cambia después de emitido: la anulación. */
     private const VOID_FIELDS = ['voided_at', 'void_reason', 'voided_by', 'updated_at'];
 
+    /** Mientras se agrega o quita un ajuste de clase suspendida (ver withSuspendedClassAdjustment). */
+    private static bool $adjusting = false;
+
+    /**
+     * Única excepción a "un cargo no se modifica": el monto final de una cuota impaga cambia
+     * por el ajuste "Clase suspendida" (queda en la auditoría). Ver WaiveSuspendedClass.
+     */
+    public static function withSuspendedClassAdjustment(callable $callback): mixed
+    {
+        self::$adjusting = true;
+
+        try {
+            return $callback();
+        } finally {
+            self::$adjusting = false;
+        }
+    }
+
     protected static function booted(): void
     {
         static::updating(function (Charge $charge): void {
             // Al anular se puede liberar la clave para volver a emitir el período.
-            $allowed = $charge->isDirty('voided_at') ? [...self::VOID_FIELDS, 'unique_key'] : self::VOID_FIELDS;
+            $allowed = match (true) {
+                $charge->isDirty('voided_at') => [...self::VOID_FIELDS, 'unique_key'],
+                self::$adjusting => ['final_amount', 'updated_at'],
+                default => self::VOID_FIELDS,
+            };
 
             if (array_diff(array_keys($charge->getDirty()), $allowed) !== []) {
                 throw new LogicException('Un cargo no se modifica: anulalo y cargá uno nuevo.');

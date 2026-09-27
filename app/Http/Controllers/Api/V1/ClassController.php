@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Attendance\AttendanceAccess;
 use App\Actions\Attendance\RecordAttendance;
+use App\Actions\Attendance\RescheduleClass;
 use App\Actions\Attendance\ResolveClassSessions;
 use App\Actions\Attendance\SuspendClass;
 use App\Enums\AttendanceStatus;
@@ -63,8 +64,13 @@ class ClassController extends Controller
         $session = $this->find($request, $class);
         abort_if($session->isPast(), 422, 'Una clase que ya pasó no se puede suspender.');
 
-        $data = $request->validate(['reason' => ['required', 'string', 'max:120']]);
-        $suspend->handle($session, $data['reason'], $request->user());
+        abort_if($session->isRescheduled(), 422, 'La clase está reprogramada: primero cancelá la reprogramación.');
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:120'],
+            'waive_charge' => ['sometimes', 'boolean'],
+        ]);
+        $suspend->handle($session, $data['reason'], $request->user(), (bool) ($data['waive_charge'] ?? false));
 
         return $this->respond($request, $session->refresh());
     }
@@ -72,7 +78,33 @@ class ClassController extends Controller
     public function resume(Request $request, int $class, SuspendClass $suspend): JsonResponse
     {
         $session = $this->find($request, $class);
+        abort_unless($session->isSuspended(), 422, 'La clase no está suspendida.');
         $suspend->resume($session);
+
+        return $this->respond($request, $session->refresh());
+    }
+
+    public function reschedule(Request $request, int $class, RescheduleClass $reschedule): JsonResponse
+    {
+        $session = $this->find($request, $class);
+
+        $data = $request->validate([
+            'date' => ['required', 'date_format:Y-m-d'],
+            'starts_at' => ['required', 'date_format:H:i'],
+            'ends_at' => ['required', 'date_format:H:i'],
+            'venue_id' => ['nullable', 'integer', Rule::exists('venues', 'id')->where('organization_id', $session->organization_id)],
+            'reason' => ['nullable', 'string', 'max:120'],
+        ]);
+
+        $reschedule->handle($session, $data, $request->user());
+
+        return $this->respond($request, $session->refresh());
+    }
+
+    public function cancelReschedule(Request $request, int $class, RescheduleClass $reschedule): JsonResponse
+    {
+        $session = $this->find($request, $class);
+        $reschedule->cancel($session, $request->user());
 
         return $this->respond($request, $session->refresh());
     }
@@ -82,7 +114,7 @@ class ClassController extends Controller
      */
     private function find(Request $request, int $id): ClassSession
     {
-        $session = ClassSession::query()->with(['group.program', 'venue', 'organization'])->find($id);
+        $session = ClassSession::query()->with(['group.program', 'venue', 'organization', 'rescheduledTo.venue', 'rescheduledFrom.venue'])->find($id);
 
         abort_if($session === null || ! AttendanceAccess::allows($request->user(), $session), 404, 'No encontramos esta clase.');
 

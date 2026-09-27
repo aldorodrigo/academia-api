@@ -4,7 +4,9 @@ namespace App\Models;
 
 use App\Enums\AttendanceStatus;
 use App\Enums\ClassStatus;
+use App\Enums\DailyBasis;
 use App\Enums\EnrollmentStatus;
+use App\Enums\FeeFrequency;
 use App\Enums\GuardianResponse;
 use App\Models\Concerns\BelongsToOrganization;
 use Carbon\CarbonImmutable;
@@ -14,12 +16,13 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Clase: un día concreto de un horario del grupo. Se crea sola al consultarla
  * (ver ResolveClassSessions).
  */
-#[Fillable(['organization_id', 'group_id', 'date', 'starts_at', 'ends_at', 'venue_id', 'status', 'suspension_reason', 'suspended_by', 'attendance_taken_at', 'attendance_taken_by'])]
+#[Fillable(['organization_id', 'group_id', 'date', 'starts_at', 'ends_at', 'venue_id', 'status', 'suspension_reason', 'suspended_by', 'charge_waived', 'rescheduled_to_id', 'is_makeup', 'attendance_taken_at', 'attendance_taken_by'])]
 class ClassSession extends Model
 {
     use BelongsToOrganization;
@@ -35,6 +38,8 @@ class ClassSession extends Model
             'date' => 'immutable_date',
             'status' => ClassStatus::class,
             'attendance_taken_at' => 'immutable_datetime',
+            'charge_waived' => 'boolean',
+            'is_makeup' => 'boolean',
         ];
     }
 
@@ -55,6 +60,26 @@ class ClassSession extends Model
     }
 
     /**
+     * La recuperación (si se reprogramó).
+     *
+     * @return BelongsTo<ClassSession, $this>
+     */
+    public function rescheduledTo(): BelongsTo
+    {
+        return $this->belongsTo(ClassSession::class, 'rescheduled_to_id');
+    }
+
+    /**
+     * La original (si esta es una recuperación).
+     *
+     * @return HasOne<ClassSession, $this>
+     */
+    public function rescheduledFrom(): HasOne
+    {
+        return $this->hasOne(ClassSession::class, 'rescheduled_to_id');
+    }
+
+    /**
      * @return HasMany<Attendance, $this>
      */
     public function attendances(): HasMany
@@ -65,6 +90,39 @@ class ClassSession extends Model
     public function isSuspended(): bool
     {
         return $this->status === ClassStatus::Suspended;
+    }
+
+    public function isRescheduled(): bool
+    {
+        return $this->status === ClassStatus::Rescheduled;
+    }
+
+    /**
+     * No se dicta en su día y hora: suspendida o reprogramada.
+     */
+    public function isOff(): bool
+    {
+        return $this->isSuspended() || $this->isRescheduled();
+    }
+
+    /**
+     * Temporadas vigentes ese día que cobran por día de entrenamiento (donde una
+     * suspensión puede no cobrarse).
+     *
+     * @return Builder<Season>
+     */
+    public function trainingDaySeasons(): Builder
+    {
+        return Season::query()
+            ->active($this->date)
+            ->forProgram($this->group->program_id)
+            ->where('fee_frequency', FeeFrequency::Daily)
+            ->where('daily_basis', DailyBasis::Training);
+    }
+
+    public function canWaiveCharge(): bool
+    {
+        return $this->trainingDaySeasons()->exists();
     }
 
     public function isAttendanceTaken(): bool

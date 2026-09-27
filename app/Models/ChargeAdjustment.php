@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Descuento, beca o recargo aplicado a un cargo. Monto con signo.
  */
-#[Fillable(['organization_id', 'charge_id', 'type', 'label', 'amount', 'discount_rule_id', 'scholarship_id'])]
+#[Fillable(['organization_id', 'charge_id', 'type', 'label', 'amount', 'discount_rule_id', 'scholarship_id', 'class_session_id'])]
 class ChargeAdjustment extends Model
 {
     use BelongsToOrganization;

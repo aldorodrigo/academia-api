@@ -20,6 +20,9 @@ enum AdjustmentType: string implements HasLabel
 
     case LateFee = 'recargo';
 
+    /** Clase suspendida que no se cobra (temporadas por día de entrenamiento). */
+    case SuspendedClass = 'clase_suspendida';
+
     /** @var list<self> */
     public const DISCOUNTS = [self::Scholarship, self::Siblings, self::Agreement, self::Other];
 
@@ -32,6 +35,7 @@ enum AdjustmentType: string implements HasLabel
             self::Other => 'Otro descuento',
             self::EarlyPayment => 'Pronto pago',
             self::LateFee => 'Recargo por mora',
+            self::SuspendedClass => 'Clase suspendida',
         };
     }
 }

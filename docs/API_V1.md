@@ -574,7 +574,7 @@ Los push traen en `data` el tipo y la ruta de la app que abre: `{ "type": "class
 
 `membership.permissions` suma `"take_attendance"` (técnico con grupos o permiso "Tomar asistencia").
 
-## Sprint 5a+ (contrato)
+## Sprint 5a+ (implementado)
 
 Clases suspendidas sin cobrar, reprogramación, avisos configurables, aviso al técnico y respuesta desde la
 notificación. Los campos anteriores no cambian. La asistencia sin conexión es solo de la app (sin cambios de API).
