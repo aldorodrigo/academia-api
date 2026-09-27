@@ -8,7 +8,7 @@
     @endforeach
     <hr>
     <div style="display: flex; justify-content: space-between; font-weight: 600;">
-        <span>Total</span>
+        <span>Pendiente</span>
         <span>{{ $total }}</span>
     </div>
     <div style="font-size: .875rem; opacity: .7;">

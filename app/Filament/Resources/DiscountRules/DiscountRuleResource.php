@@ -57,13 +57,19 @@ class DiscountRuleResource extends Resource
                 ->visible(fn (Get $get) => self::isSiblings($get))
                 ->required(fn (Get $get) => self::isSiblings($get))
                 ->helperText('El mayor de los hermanos inscriptos paga completo.'),
+            TextInput::make('until_day')
+                ->label('Pagando hasta el día')
+                ->numeric()->minValue(1)->maxValue(31)
+                ->visible(fn (Get $get) => self::isType($get, DiscountType::EarlyPayment))
+                ->required(fn (Get $get) => self::isType($get, DiscountType::EarlyPayment))
+                ->helperText('Se aplica al registrar un pago que salda la cuota hasta ese día de su mes.'),
             Select::make('students')
                 ->label(ucfirst(Terms::plural('student', 'Jugador')))
                 ->relationship('students', 'last_name')
                 ->getOptionLabelFromRecordUsing(fn ($student) => "{$student->last_name}, {$student->first_name}")
                 ->multiple()
                 ->searchable(['first_name', 'last_name'])
-                ->visible(fn (Get $get) => ! self::isSiblings($get)),
+                ->visible(fn (Get $get) => self::isType($get, DiscountType::Agreement) || self::isType($get, DiscountType::Other)),
             Radio::make('mode')->label('Descuento')
                 ->options(['percent' => 'Porcentaje', 'fixed' => 'Monto fijo'])
                 ->default('percent')
@@ -96,9 +102,14 @@ class DiscountRuleResource extends Resource
 
     private static function isSiblings(Get $get): bool
     {
-        $type = $get('type');
+        return self::isType($get, DiscountType::Siblings);
+    }
 
-        return ($type instanceof DiscountType ? $type : DiscountType::tryFrom((string) $type)) === DiscountType::Siblings;
+    private static function isType(Get $get, DiscountType $type): bool
+    {
+        $value = $get('type');
+
+        return ($value instanceof DiscountType ? $value : DiscountType::tryFrom((string) $value)) === $type;
     }
 
     public static function table(Table $table): Table
@@ -110,7 +121,7 @@ class DiscountRuleResource extends Resource
                 TextColumn::make('label')->label('Descuento')->state(fn (DiscountRule $record) => $record->adjustmentLabel()),
                 TextColumn::make('feeConcepts.name')->label('Sobre')->badge()->color('gray'),
                 TextColumn::make('students_count')->label(ucfirst(Terms::plural('student', 'Jugador')))->counts('students')
-                    ->formatStateUsing(fn ($state, DiscountRule $record) => $record->type === DiscountType::Siblings ? '—' : $state),
+                    ->formatStateUsing(fn ($state, DiscountRule $record) => in_array($record->type, [DiscountType::Siblings, DiscountType::EarlyPayment], true) ? '—' : $state),
                 TextColumn::make('valid_from')->label('Desde')->date('d/m/Y'),
                 TextColumn::make('valid_to')->label('Hasta')->date('d/m/Y')->placeholder('Sin fin'),
             ])

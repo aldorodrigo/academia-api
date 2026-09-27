@@ -22,7 +22,8 @@ class ChargesRelationManager extends RelationManager
 
     public static function getBadge(Model $ownerRecord, string $pageClass): ?string
     {
-        $balance = (int) $ownerRecord->charges()->notVoided()->sum('final_amount');
+        $balance = (int) $ownerRecord->charges()->notVoided()->with('allocations.payment')->get()
+            ->sum(fn (Charge $charge) => $charge->pendingAmount());
 
         return $balance > 0 ? Money::pyg($balance)->format() : null;
     }
@@ -35,13 +36,16 @@ class ChargesRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['adjustments', 'organization']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['adjustments', 'organization', 'allocations.payment']))
+            ->description(fn () => ($credit = $this->getOwnerRecord()->family?->credit()) ? 'Saldo a favor de la familia: '.Money::pyg($credit)->format() : null)
             ->columns([
                 TextColumn::make('description')->label('Concepto')
                     ->description(fn (Charge $record) => $record->adjustments->pluck('label')->join(' · ') ?: null),
                 TextColumn::make('due_on')->label('Vence')->date('d/m/Y'),
                 TextColumn::make('status')->label('Estado')->badge()->state(fn (Charge $record) => $record->status()),
                 MoneyColumn::make('final_amount')->label('Monto'),
+                MoneyColumn::make('pending')->label('Pendiente')
+                    ->state(fn (Charge $record) => $record->isVoided() ? null : $record->pendingAmount()),
             ])
             ->defaultSort('due_on', 'desc');
     }

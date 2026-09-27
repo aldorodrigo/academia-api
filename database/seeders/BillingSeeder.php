@@ -3,11 +3,16 @@
 namespace Database\Seeders;
 
 use App\Actions\Billing\GenerateMonthlyCharges;
+use App\Actions\Billing\RegisterPayment;
 use App\Enums\DiscountType;
+use App\Enums\MoneyAccountType;
+use App\Enums\PaymentMethod;
 use App\Enums\ScholarshipStatus;
 use App\Models\DiscountRule;
 use App\Models\Enrollment;
+use App\Models\Family;
 use App\Models\FeeConcept;
+use App\Models\MoneyAccount;
 use App\Models\Scholarship;
 use App\Models\Season;
 use App\Models\Tariff;
@@ -65,10 +70,27 @@ class BillingSeeder extends Seeder
             );
         }
 
+        $pronto = DiscountRule::query()->firstOrCreate(
+            ['type' => DiscountType::EarlyPayment],
+            ['name' => 'Pronto pago', 'percent' => 10, 'until_day' => 5, 'valid_from' => $season->starts_on],
+        );
+        $pronto->feeConcepts()->syncWithoutDetaching([$monthly->id]);
+
         $last = $organization->today()->startOfMonth()->min(CarbonImmutable::parse($season->ends_on)->startOfMonth());
 
         for ($period = CarbonImmutable::parse($season->starts_on)->startOfMonth(); $period->lte($last); $period = $period->addMonth()) {
             app(GenerateMonthlyCharges::class)->handle($organization, $period);
+        }
+
+        // Un pago de la familia Benítez que salda los primeros meses y deja saldo a favor.
+        $bank = MoneyAccount::query()->firstOrCreate(['name' => 'Banco Itaú'], ['type' => MoneyAccountType::Bank]);
+        $family = Family::query()->where('name', 'Familia Benítez')->first();
+
+        if ($family !== null && $family->payments()->doesntExist()) {
+            app(RegisterPayment::class)->handle(
+                $family, $bank, 1_000_000, PaymentMethod::Transfer, CarbonImmutable::parse($season->starts_on)->addMonths(2)->setDay(3),
+                payer: $family->guardians()->first(), reference: 'Transferencia 4471',
+            );
         }
     }
 }

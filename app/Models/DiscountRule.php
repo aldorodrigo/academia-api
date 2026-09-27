@@ -67,9 +67,11 @@ class DiscountRule extends Model
      */
     public function adjustmentLabel(): string
     {
-        $name = $this->type === DiscountType::Siblings
-            ? 'Hermanos ('.$this->sibling_position.'º hijo'.($this->sibling_position >= 3 ? ' o más' : '').')'
-            : $this->name;
+        $name = match ($this->type) {
+            DiscountType::Siblings => 'Hermanos ('.$this->sibling_position.'º hijo'.($this->sibling_position >= 3 ? ' o más' : '').')',
+            DiscountType::EarlyPayment => 'Pronto pago',
+            default => $this->name,
+        };
 
         return $this->percent !== null
             ? "{$name} −{$this->percent} %"
