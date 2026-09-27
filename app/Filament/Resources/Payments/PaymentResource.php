@@ -56,14 +56,14 @@ class PaymentResource extends Resource
                     ->searchable(),
                 TextColumn::make('allocations')->label('Aplicado a')
                     ->state(fn (Payment $record) => $record->allocations
-                        ->map(fn (PaymentAllocation $a) => "{$a->charge->student->first_name} · {$a->charge->description}")
+                        ->map(fn (PaymentAllocation $a) => "{$a->charge->student->first_name} · {$a->charge->description}".($a->from_credit ? ' (con saldo a favor)' : ''))
                         ->push(...($record->credit() > 0 ? ['Saldo a favor '.Money::pyg($record->credit())->format()] : []))
                         ->all())
                     ->listWithLineBreaks()
-                    ->limitList(3)
+                    ->limitList(2)
                     ->expandableLimitedList(),
                 TextColumn::make('method')->label('Método')->badge()->color('gray'),
-                TextColumn::make('moneyAccount.name')->label('Cuenta')->toggleable(),
+                TextColumn::make('moneyAccount.name')->label('Cuenta')->toggleable(isToggledHiddenByDefault: true),
                 MoneyColumn::make('amount')->label('Monto'),
                 TextColumn::make('voided_at')->label('Estado')->badge()
                     ->state(fn (Payment $record) => $record->isVoided() ? 'Anulado' : 'Registrado')

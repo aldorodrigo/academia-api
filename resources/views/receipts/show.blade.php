@@ -48,7 +48,7 @@
             <tr><th>Jugador</th><th>Concepto</th><th class="amount">Monto</th></tr>
         </thead>
         <tbody>
-            @foreach ($payment->allocations as $allocation)
+            @foreach ($allocations as $allocation)
                 <tr>
                     <td>{{ $allocation->charge->student->full_name }}</td>
                     <td>

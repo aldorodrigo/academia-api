@@ -107,6 +107,9 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Descuentos y becas: `DiscountCalculator`, en el orden de `organizations.billing.discount_order`.
 - Tarifa aplicable: `Tariff::applicable()`. Configuración de cobros: `Organization::billing()`.
 - Becas: `ScholarshipDecision` (permiso `Approve:Scholarship`).
+- Cobros: `RegisterPayment` (imputación, pronto pago con `EarlyPaymentDiscount`, recibo correlativo, `LedgerEntry`),
+  `ApplyCredit` (saldo a favor, se llama al generar cargos), `VoidPayment`. `Payment`, `PaymentAllocation` y
+  `LedgerEntry` son inmutables. Recibo: `ReceiptController` (ruta firmada `recibos/{payment}`).
 
 ### Dinero
 - Montos en **enteros** (guaraníes, sin decimales). Nunca `float` para dinero.

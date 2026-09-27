@@ -12,7 +12,7 @@ use LogicException;
  * Parte de un pago aplicada a un cargo (más el pronto pago, si saldó a tiempo).
  * Deja de contar si el pago se anula. Inmutable.
  */
-#[Fillable(['organization_id', 'payment_id', 'charge_id', 'amount', 'early_payment_discount', 'early_payment_label'])]
+#[Fillable(['organization_id', 'payment_id', 'charge_id', 'amount', 'early_payment_discount', 'early_payment_label', 'from_credit'])]
 class PaymentAllocation extends Model
 {
     use BelongsToOrganization;
@@ -32,6 +32,7 @@ class PaymentAllocation extends Model
         return [
             'amount' => 'integer',
             'early_payment_discount' => 'integer',
+            'from_credit' => 'boolean',
         ];
     }
 

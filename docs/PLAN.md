@@ -205,7 +205,8 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 | **1. Organizaciones y roles** | Aceptar invitación (link/QR → crear cuenta o entrar), perfiles y roles del usuario (tutor + cargo), vocabulario y módulos de la organización, "Mi cuenta" | Invitaciones (email/link/QR) y sus endpoints, cargos con mandato que vencen solos, feature flags, vocabulario en el panel, roles en `GET organization`, tests de aislamiento |
 | **2. Académico** | "Mis hijos": lista, ficha, grupo, horarios e inscripciones | Temporadas, programas, grupos, horarios, alumnos, tutores, familias, ficha médica, inscripciones con estados, importación Excel, endpoints de "mis hijos" |
 | **3. Finanzas** ✅ | Estado de cuenta por hijo y consolidado por familia (cargos con detalle de ajustes) | Tarifario, cuota mensual automática, descuentos, becas, vencimientos y configuración de mora, cargos manuales, endpoints de cuenta corriente |
-| **4. Cobros y gastos** | Pagos y recibos PDF en la cuenta, saldo a favor | Cuentas (caja, banco, billetera) y libro mayor, pagos con imputación, recibo PDF, saldo a favor, recargos por mora y pronto pago, gastos con aprobación, proveedores, transferencias, informes (balance, saldos, morosos; PDF/Excel) |
+| **4a. Cobros** ✅ | Pagos y recibos PDF en el estado de cuenta, saldo a favor | Cuentas (caja, banco, billetera) y libro mayor, pagos con imputación, pronto pago, saldo a favor, anulación, recibo PDF |
+| **4b. Gastos e informes** | — | Gastos con doble aprobación, proveedores, transferencias entre cuentas, informes (balance, saldos, morosos; PDF/Excel) |
 | **5. Avisos** | Avisos con lectura, push (firebase_messaging), registro del dispositivo | Avisos segmentados con lectura, push por lotes vía Horizon, recordatorios de cuotas, documentación OpenAPI |
 | **6. Publicación** | Pulido, builds: web + Android (interno) + iOS (TestFlight) | Ajustes de rendimiento y seguridad; backups verificados |
 | **7. Piloto Jakare** | Correcciones del uso real | Carga de datos reales, capacitación, invitación a padres |
@@ -349,4 +350,21 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
   (Sofía: ₲ 150.000 − beca ₲ 75.000 − hermanos ₲ 15.000 = ₲ 60.000) → volver a generar no duplica.
 - **Se pasó al Sprint 4:** cuentas y libro mayor, recargos por mora y descuento por pronto pago (dependen de los pagos).
 
-### Próximo: Sprint 4 — cobros y gastos (pagos en la cuenta primero en la app)
+### Sprint 4a — cobros
+- **Contrato:** el estado de cuenta suma `paid_amount`/`pending_amount` por cargo, `credit` (saldo a favor) y `payments` con recibo (link firmado).
+- **App:** cargos pagados en parte ("Pagado ₲ X de ₲ Y"), saldo a favor, pestaña Pagos con "Ver recibo"; los links
+  directos (web) sobreviven a la carga de la sesión (`/?from=…`).
+- **API y panel:**
+  - Cuentas (caja, banco, billetera) con libro mayor inmutable (saldo = suma de movimientos, contra-movimiento para anular).
+  - Pagos por familia imputados del vencimiento más viejo al más nuevo (o a los cargos que elige el tesorero), pronto pago
+    si salda a tiempo, saldo a favor que se aplica solo a los próximos cargos, recibo correlativo con monto en letras.
+  - El recibo no cambia cuando su saldo a favor se aplica después (`from_credit`).
+  - Anular pago: los cargos vuelven a pendientes, contra-movimiento y se revierte el saldo a favor aplicado.
+  - Panel: Pagos (Registrar pago con preselección y resumen, Recibo, Anular), Cuentas con movimientos, pronto pago en Descuentos.
+- **Probado de punta a punta** en el panel y la app (capturas): cuenta con saldo inicial → pago de ₲ 1.500.000 (pronto pago
+  en octubre) → recibo PDF → pago con saldo a favor → diciembre se descuenta solo → la app muestra lo pagado y los recibos
+  → anular vuelve los cargos a pendiente.
+- Encontrado al probar: el recibo cambiaba al aplicarse el saldo a favor; los links directos de la web se perdían al recargar.
+- Fuera del sprint: recargos por mora (queda la configuración).
+
+### Próximo: Sprint 4b — gastos e informes

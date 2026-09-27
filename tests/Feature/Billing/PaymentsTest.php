@@ -106,6 +106,18 @@ describe('registrar pago', function () {
             ->and($this->family->credit())->toBe(0);
     });
 
+    it('el recibo no cambia cuando el saldo a favor se aplica después', function () {
+        $payment = pay(700000);
+        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-01'));
+
+        $payment = $payment->fresh('allocations');
+        expect($payment->creditGenerated())->toBe(100000)
+            ->and($payment->credit())->toBe(0)
+            ->and($payment->originalAllocations())->toHaveCount(4)
+            ->and($payment->allocations)->toHaveCount(5)
+            ->and($payment->allocations->last()->from_credit)->toBeTrue();
+    });
+
     it('respeta la imputación elegida y no deja pasar lo pendiente', function () {
         $september = chargeOf($this->sofia, '2026-09-01');
 

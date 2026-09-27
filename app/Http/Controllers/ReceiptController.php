@@ -9,7 +9,8 @@ use Illuminate\Support\Facades\URL;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
- * Recibo en PDF. Se abre con un link firmado y temporal (desde la app o el panel),
+ * Recibo en PDF: lo imputado al registrar el pago y el saldo a favor que dejó
+ * (no cambia aunque ese saldo se aplique después). Se abre con un link firmado y temporal (desde la app o el panel),
  * sin token: la firma protege el id.
  */
 class ReceiptController extends Controller
@@ -30,7 +31,8 @@ class ReceiptController extends Controller
         $pdf = Pdf::loadView('receipts.show', [
             'payment' => $payment,
             'organization' => $payment->organization,
-            'credit' => $payment->credit(),
+            'allocations' => $payment->originalAllocations(),
+            'credit' => $payment->creditGenerated(),
             'money' => fn (int $amount) => Money::pyg($amount),
         ]);
 

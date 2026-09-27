@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
+use Illuminate\Support\Collection;
 use LogicException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
@@ -88,6 +89,24 @@ class Payment extends Model
             : $this->allocations()->sum('amount');
 
         return max(0, $this->amount - (int) $allocated);
+    }
+
+    /**
+     * Lo imputado al registrar el pago (lo que dice el recibo).
+     *
+     * @return Collection<int, PaymentAllocation>
+     */
+    public function originalAllocations(): Collection
+    {
+        return $this->allocations->where('from_credit', false)->values();
+    }
+
+    /**
+     * Saldo a favor que dejó el pago al registrarse (aunque después se haya aplicado).
+     */
+    public function creditGenerated(): int
+    {
+        return max(0, $this->amount - (int) $this->originalAllocations()->sum('amount'));
     }
 
     /**

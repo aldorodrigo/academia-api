@@ -150,7 +150,12 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - La **cuenta corriente** es por alumno; la **familia** ve el consolidado de sus hijos.
 - Un **pago** se **imputa** a uno o varios cargos, de uno o varios hijos
   (por defecto los más antiguos primero; el tesorero puede elegir).
-- Pago de más → **saldo a favor** de la familia, que se aplica al próximo cargo.
+- Pago de más → **saldo a favor** de la familia, que se aplica solo al próximo cargo (el recibo
+  original no cambia: muestra lo imputado ese día y el saldo a favor que dejó).
+- **Pronto pago:** si un pago salda la cuota hasta el día configurado de su mes, se descuenta al
+  imputarlo (el cargo no se modifica).
+- Anular un pago: los cargos vuelven a pendientes y se registra el contra-movimiento en la cuenta.
+- Recargos por mora: configurados, todavía no se generan.
 - Cada pago genera un **recibo PDF**.
 - **Comprobante subido por el padre** (transferencia) queda `pendiente` hasta que el
   tesorero lo valida; recién ahí impacta en la cuenta. *(Fase 2)*

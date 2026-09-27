@@ -220,7 +220,7 @@ Misma forma con un solo alumno en `students`. Responde `404` si el alumno no est
 - `period` es `null` en los cargos que no son mensuales (inscripción, torneo…). `group` puede ser `null` en cargos manuales.
 - `adjustments[].amount` lleva signo: negativo para descuentos y becas, positivo para recargos (desde el Sprint 4).
 
-## Sprint 4a (contrato)
+## Sprint 4a (implementado)
 
 Pagos en el estado de cuenta. `GET account` y `GET students/{id}/account` **se amplían** (los campos anteriores no cambian).
 

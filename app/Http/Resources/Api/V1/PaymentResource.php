@@ -27,13 +27,14 @@ class PaymentResource extends JsonResource
             'method_label' => $this->method->label(),
             'voided' => $this->isVoided(),
             'receipt_url' => ReceiptController::signedUrl($this->resource),
-            'allocations' => $this->allocations->map(fn (PaymentAllocation $allocation) => [
+            // Lo que dice el recibo: lo imputado al registrar el pago.
+            'allocations' => $this->originalAllocations()->map(fn (PaymentAllocation $allocation) => [
                 'charge_id' => $allocation->charge_id,
                 'description' => $allocation->charge->description,
                 'student_first_name' => $allocation->charge->student->first_name,
                 'amount' => $allocation->amount,
             ])->values(),
-            'credit_generated' => $this->credit(),
+            'credit_generated' => $this->creditGenerated(),
         ];
     }
 }

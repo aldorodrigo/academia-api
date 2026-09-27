@@ -45,6 +45,7 @@ class ApplyCredit
                         'organization_id' => $payment->organization_id,
                         'charge_id' => $charge->id,
                         'amount' => $amount,
+                        'from_credit' => true,
                     ]);
                     $applied += $amount;
                 }
