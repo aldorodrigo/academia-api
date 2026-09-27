@@ -14,6 +14,10 @@ enum AdjustmentType: string implements HasLabel
     case Siblings = 'hermanos';
     case Agreement = 'convenio';
     case Other = 'otro';
+
+    /** Se aplica al registrar el pago (en la imputación), no al emitir el cargo. */
+    case EarlyPayment = 'pronto_pago';
+
     case LateFee = 'recargo';
 
     /** @var list<self> */
@@ -26,6 +30,7 @@ enum AdjustmentType: string implements HasLabel
             self::Siblings => 'Hermanos',
             self::Agreement => 'Convenio',
             self::Other => 'Otro descuento',
+            self::EarlyPayment => 'Pronto pago',
             self::LateFee => 'Recargo por mora',
         };
     }

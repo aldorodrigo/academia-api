@@ -74,4 +74,43 @@ final readonly class Money
             throw new InvalidArgumentException('No se pueden operar montos de distinta moneda.');
         }
     }
+
+    /**
+     * Monto en letras para el recibo: 150000 → "ciento cincuenta mil guaraníes".
+     */
+    public function inWords(): string
+    {
+        $words = $this->amount === 0 ? 'cero' : self::words(abs($this->amount));
+
+        return ($this->amount < 0 ? 'menos ' : '').$words.' guaraníes';
+    }
+
+    private static function words(int $n): string
+    {
+        $units = ['', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez',
+            'once', 'doce', 'trece', 'catorce', 'quince', 'dieciséis', 'diecisiete', 'dieciocho', 'diecinueve', 'veinte',
+            'veintiuno', 'veintidós', 'veintitrés', 'veinticuatro', 'veinticinco', 'veintiséis', 'veintisiete', 'veintiocho', 'veintinueve'];
+        $tens = [3 => 'treinta', 4 => 'cuarenta', 5 => 'cincuenta', 6 => 'sesenta', 7 => 'setenta', 8 => 'ochenta', 9 => 'noventa'];
+        $hundreds = [1 => 'ciento', 2 => 'doscientos', 3 => 'trescientos', 4 => 'cuatrocientos', 5 => 'quinientos',
+            6 => 'seiscientos', 7 => 'setecientos', 8 => 'ochocientos', 9 => 'novecientos'];
+
+        return match (true) {
+            $n < 30 => $units[$n],
+            $n < 100 => $tens[intdiv($n, 10)].($n % 10 ? ' y '.$units[$n % 10] : ''),
+            $n === 100 => 'cien',
+            $n < 1000 => $hundreds[intdiv($n, 100)].($n % 100 ? ' '.self::words($n % 100) : ''),
+            $n < 1_000_000 => (intdiv($n, 1000) === 1 ? 'mil' : self::apocope(self::words(intdiv($n, 1000))).' mil')
+                .($n % 1000 ? ' '.self::words($n % 1000) : ''),
+            default => (intdiv($n, 1_000_000) === 1 ? 'un millón' : self::apocope(self::words(intdiv($n, 1_000_000))).' millones')
+                .($n % 1_000_000 ? ' '.self::words($n % 1_000_000) : ''),
+        };
+    }
+
+    /**
+     * "veintiuno mil" → "veintiún mil", "treinta y uno mil" → "treinta y un mil".
+     */
+    private static function apocope(string $words): string
+    {
+        return preg_replace(['/veintiuno$/u', '/uno$/u'], ['veintiún', 'un'], $words);
+    }
 }

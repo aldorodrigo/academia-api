@@ -17,6 +17,7 @@ class GenerateEnrollmentCharge
     public function __construct(
         private DiscountCalculator $discounts,
         private IssueCharge $issue,
+        private ApplyCredit $applyCredit,
     ) {}
 
     public function handle(Enrollment $enrollment): ?Charge
@@ -41,7 +42,7 @@ class GenerateEnrollmentCharge
 
         $discounts = $this->discounts->calculate($enrollment, $concept, $on, $tariff->amount);
 
-        return $this->issue->handle([
+        $charge = $this->issue->handle([
             'organization_id' => $organization->id,
             'student_id' => $enrollment->student_id,
             'enrollment_id' => $enrollment->id,
@@ -55,5 +56,12 @@ class GenerateEnrollmentCharge
             'unique_key' => $key,
             'created_by' => auth()->id(),
         ], $discounts['adjustments']);
+
+        // El saldo a favor de la familia se aplica solo al nuevo cargo.
+        if ($enrollment->student->family !== null) {
+            $this->applyCredit->forFamily($enrollment->student->family);
+        }
+
+        return $charge;
     }
 }

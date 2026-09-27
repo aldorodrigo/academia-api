@@ -18,7 +18,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * Regla de descuento: hermanos (por posición), convenio u otro (para jugadores
  * puntuales). Porcentaje o monto fijo, sobre ciertos conceptos, con vigencia.
  */
-#[Fillable(['organization_id', 'name', 'type', 'percent', 'fixed_amount', 'sibling_position', 'valid_from', 'valid_to'])]
+#[Fillable(['organization_id', 'name', 'type', 'percent', 'fixed_amount', 'sibling_position', 'until_day', 'valid_from', 'valid_to'])]
 class DiscountRule extends Model
 {
     /** @use HasFactory<DiscountRuleFactory> */
@@ -31,6 +31,7 @@ class DiscountRule extends Model
             'percent' => 'integer',
             'fixed_amount' => 'integer',
             'sibling_position' => 'integer',
+            'until_day' => 'integer',
             'valid_from' => 'date',
             'valid_to' => 'date',
         ];

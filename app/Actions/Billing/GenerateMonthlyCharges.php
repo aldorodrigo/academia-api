@@ -4,6 +4,7 @@ namespace App\Actions\Billing;
 
 use App\Models\Charge;
 use App\Models\Enrollment;
+use App\Models\Family;
 use App\Models\FeeConcept;
 use App\Models\Organization;
 use App\Models\Season;
@@ -26,6 +27,7 @@ class GenerateMonthlyCharges
         private CurrentOrganization $current,
         private DiscountCalculator $discounts,
         private IssueCharge $issue,
+        private ApplyCredit $applyCredit,
     ) {}
 
     /**
@@ -71,6 +73,7 @@ class GenerateMonthlyCharges
         }
 
         $enrollments = Enrollment::query()->billable()->with(['student', 'group', 'organization'])->get();
+        $families = [];
 
         foreach ($enrollments as $enrollment) {
             $key = "enr:{$enrollment->id}:con:{$concept->id}:per:{$period->format('Y-m')}";
@@ -120,12 +123,18 @@ class GenerateMonthlyCharges
                 ], $discounts['adjustments']);
 
                 $summary['created']++;
+                $families[] = $enrollment->student->family_id;
             } catch (UniqueConstraintViolationException) {
                 $summary['existing']++;
             }
         }
 
         $summary['without_tariff'] = array_values(array_unique($summary['without_tariff']));
+
+        // El saldo a favor se aplica solo al próximo cargo.
+        Family::query()->whereKey(array_unique(array_filter($families)))
+            ->get()
+            ->each(fn (Family $family) => $this->applyCredit->forFamily($family));
 
         return $summary;
     }

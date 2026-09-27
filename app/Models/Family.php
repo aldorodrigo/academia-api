@@ -61,4 +61,39 @@ class Family extends Model
 
         return static::query()->find($familyId);
     }
+
+    /**
+     * La familia del alumno; si no tiene (alumno adulto sin tutores), se crea.
+     * Los pagos y el saldo a favor son por familia.
+     */
+    public static function ensureFor(Student $student): self
+    {
+        if ($student->family_id !== null) {
+            return static::query()->withoutGlobalScopes()->findOrFail($student->family_id);
+        }
+
+        $family = static::query()->create([
+            'organization_id' => $student->organization_id,
+            'name' => "Familia {$student->last_name}",
+        ]);
+        $student->update(['family_id' => $family->id]);
+
+        return $family;
+    }
+
+    /**
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * Saldo a favor: lo pagado que todavía no se imputó.
+     */
+    public function credit(): int
+    {
+        return (int) $this->payments()->notVoided()->with('allocations')->get()->sum(fn (Payment $payment) => $payment->credit());
+    }
 }

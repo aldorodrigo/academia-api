@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Collection;
 use LogicException;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
@@ -64,12 +65,16 @@ class Charge extends Model
 
     /**
      * Estado calculado: anulado, vencido (pasó el vencimiento más los días de
-     * gracia, en fecha local de la organización) o pendiente. Pagado: Sprint 4.
+     * gracia, en fecha local de la organización), pagado (no falta nada) o pendiente.
      */
     public function status(): ChargeStatus
     {
         if ($this->voided_at !== null) {
             return ChargeStatus::Voided;
+        }
+
+        if ($this->pendingAmount() === 0) {
+            return ChargeStatus::Paid;
         }
 
         $organization = $this->organization;
@@ -78,6 +83,41 @@ class Charge extends Model
         return $organization->today()->gt($this->due_on->copy()->addDays($graceDays))
             ? ChargeStatus::Overdue
             : ChargeStatus::Pending;
+    }
+
+    /**
+     * Imputaciones de pagos no anulados.
+     *
+     * @return Collection<int, PaymentAllocation>
+     */
+    public function activeAllocations(): Collection
+    {
+        $allocations = $this->relationLoaded('allocations')
+            ? $this->allocations
+            : $this->allocations()->with('payment')->get();
+
+        return $allocations->filter(fn (PaymentAllocation $allocation) => ! $allocation->payment->isVoided())->values();
+    }
+
+    /**
+     * Lo cubierto por pagos no anulados (incluye el pronto pago).
+     */
+    public function paidAmount(): int
+    {
+        return (int) $this->activeAllocations()->sum(fn (PaymentAllocation $allocation) => $allocation->covered());
+    }
+
+    public function pendingAmount(): int
+    {
+        return max(0, $this->final_amount - $this->paidAmount());
+    }
+
+    /**
+     * @return HasMany<PaymentAllocation, $this>
+     */
+    public function allocations(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class)->orderBy('id');
     }
 
     public function isVoided(): bool

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Actions\Organizations\EnsureFeeConcepts;
+use App\Actions\Organizations\EnsureMoneyAccounts;
 use App\Actions\Organizations\EnsureOrganizationRoles;
 use App\Enums\Feature;
 use App\Enums\OrganizationType;
@@ -69,6 +70,7 @@ class Organization extends Model
         static::created(function (Organization $organization): void {
             app(EnsureOrganizationRoles::class)->handle($organization);
             app(EnsureFeeConcepts::class)->handle($organization);
+            app(EnsureMoneyAccounts::class)->handle($organization);
         });
     }
 
@@ -269,6 +271,30 @@ class Organization extends Model
     public function scholarships(): HasMany
     {
         return $this->hasMany(Scholarship::class);
+    }
+
+    /**
+     * @return HasMany<MoneyAccount, $this>
+     */
+    public function moneyAccounts(): HasMany
+    {
+        return $this->hasMany(MoneyAccount::class);
+    }
+
+    /**
+     * @return HasMany<Payment, $this>
+     */
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class);
+    }
+
+    /**
+     * @return HasMany<LedgerEntry, $this>
+     */
+    public function ledgerEntries(): HasMany
+    {
+        return $this->hasMany(LedgerEntry::class);
     }
 
     /**
