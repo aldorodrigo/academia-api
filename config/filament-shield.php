@@ -257,6 +257,8 @@ return [
         'ViewMedical:Student' => 'Ver fichas médicas',
         // Aprobar, rechazar o revocar becas (el admin lo tiene por Gate::before).
         'Approve:Scholarship' => 'Aprobar becas',
+        // Balance, saldos y morosos (panel y app).
+        'View:Reports' => 'Ver informes',
     ],
 
     /*

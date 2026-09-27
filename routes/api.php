@@ -5,6 +5,7 @@ use App\Http\Controllers\Api\V1\AuthTokenController;
 use App\Http\Controllers\Api\V1\CurrentOrganizationController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\StudentController;
 use Illuminate\Support\Facades\Route;
 
@@ -30,6 +31,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
             Route::get('account', [AccountController::class, 'index'])->name('account.index');
             Route::get('students/{student}/account', [AccountController::class, 'show'])->whereNumber('student')->name('students.account');
+
+            Route::get('reports/balance', [ReportController::class, 'balance'])->name('reports.balance');
+            Route::get('reports/balances', [ReportController::class, 'balances'])->name('reports.balances');
+            Route::get('reports/delinquents', [ReportController::class, 'delinquents'])->name('reports.delinquents');
         });
     });
 });

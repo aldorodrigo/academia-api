@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Actions\Organizations\EnsureExpenseCategories;
 use App\Actions\Organizations\EnsureFeeConcepts;
 use App\Actions\Organizations\EnsureMoneyAccounts;
 use App\Actions\Organizations\EnsureOrganizationRoles;
@@ -71,6 +72,7 @@ class Organization extends Model
             app(EnsureOrganizationRoles::class)->handle($organization);
             app(EnsureFeeConcepts::class)->handle($organization);
             app(EnsureMoneyAccounts::class)->handle($organization);
+            app(EnsureExpenseCategories::class)->handle($organization);
         });
     }
 
@@ -295,6 +297,46 @@ class Organization extends Model
     public function ledgerEntries(): HasMany
     {
         return $this->hasMany(LedgerEntry::class);
+    }
+
+    /**
+     * @return HasMany<Supplier, $this>
+     */
+    public function suppliers(): HasMany
+    {
+        return $this->hasMany(Supplier::class);
+    }
+
+    /**
+     * @return HasMany<ExpenseCategory, $this>
+     */
+    public function expenseCategories(): HasMany
+    {
+        return $this->hasMany(ExpenseCategory::class);
+    }
+
+    /**
+     * @return HasMany<Expense, $this>
+     */
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
+    }
+
+    /**
+     * @return HasMany<RecurringExpense, $this>
+     */
+    public function recurringExpenses(): HasMany
+    {
+        return $this->hasMany(RecurringExpense::class);
+    }
+
+    /**
+     * @return HasMany<Transfer, $this>
+     */
+    public function transfers(): HasMany
+    {
+        return $this->hasMany(Transfer::class);
     }
 
     /**

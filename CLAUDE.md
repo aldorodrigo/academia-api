@@ -110,6 +110,10 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Cobros: `RegisterPayment` (imputación, pronto pago con `EarlyPaymentDiscount`, recibo correlativo, `LedgerEntry`),
   `ApplyCredit` (saldo a favor, se llama al generar cargos), `VoidPayment`. `Payment`, `PaymentAllocation` y
   `LedgerEntry` son inmutables. Recibo: `ReceiptController` (ruta firmada `recibos/{payment}`).
+- Tesorería: `App\Actions\Treasury\ExpenseLedger` (registrar, pagar, anular, recurrentes) y `TransferFunds`.
+- Informes: `App\Reports\*` (`data()` para API/panel, `pdf()`, `xlsx()` con openspout); descarga por ruta firmada
+  `informes/{report}.{format}` (`ReportDownloadController`). Permiso `View:Reports`; la app lo recibe en
+  `membership.permissions` como `view_reports`. Los jugadores sin familia cuentan como su propio grupo.
 
 ### Dinero
 - Montos en **enteros** (guaraníes, sin decimales). Nunca `float` para dinero.
