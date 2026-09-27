@@ -424,8 +424,17 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
 - **Pasó al Sprint 5a+:** descontar clases suspendidas del cobro por día de entrenamiento, modo sin conexión con cola,
   botones de respuesta dentro de la notificación.
 
-### Próximo: Sprint 5a+ — clases suspendidas, reprogramación, sin conexión, respuesta desde la notificación y avisos configurables
-Plan aprobado el 2026-09-27. Orden: contrato → app con fakes → API y panel.
+### Sprint 5a+ — clases suspendidas, reprogramación, sin conexión, respuesta desde la notificación y avisos configurables ✅
+Plan aprobado e implementado el 2026-09-27 (contrato en `API_V1.md` "Sprint 5a+"). Probado de punta a punta con Sail +
+web (reprogramar como técnico, recuperación en la agenda del tutor, avisos configurables, asistencia sin conexión que
+se envía al volver la señal, link firmado del push). Notas:
+- Única excepción a "un cargo no se modifica": el monto final de una cuota impaga baja por el ajuste
+  `clase_suspendida` (`Charge::withSuspendedClassAdjustment`, queda en la auditoría).
+- El descuento pendiente de una cuota ya pagada se aplica a la próxima cuota del alumno (`charge_waivers`); si no hay
+  más cuotas queda pendiente (no se genera saldo a favor, para no crear movimientos de dinero).
+- Los links firmados usan `APP_URL`: en producción tiene que ser la URL pública de la API.
+- Los botones del push en Android/iOS y el APNs quedan por probar en un dispositivo cuando exista el proyecto Firebase.
+
 1. **Clases suspendidas sin cobrar** (solo temporadas *por día de entrenamiento*): al suspender, casilla "No cobrar
    esta clase" (marcada por defecto). Cuota no emitida → cuenta un día menos (`SeasonPeriods`). Cuota emitida e impaga →
    ajuste `clase_suspendida` en esa cuota; ya pagada (aunque sea en parte) → ajuste en la próxima cuota de la
