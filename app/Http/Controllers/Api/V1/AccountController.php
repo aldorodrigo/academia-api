@@ -5,7 +5,9 @@ namespace App\Http\Controllers\Api\V1;
 use App\Enums\ChargeStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\ChargeResource;
+use App\Http\Resources\Api\V1\PaymentResource;
 use App\Models\Charge;
+use App\Models\Payment;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -36,7 +38,7 @@ class AccountController extends Controller
     }
 
     /**
-     * Cargos no anulados de los alumnos (hasta el Sprint 4 todos están impagos).
+     * Cargos no anulados de los alumnos, pagos de sus familias y saldo a favor.
      *
      * @param  Collection<int, Student>  $students
      * @return array<string, mixed>
@@ -46,24 +48,40 @@ class AccountController extends Controller
         $charges = Charge::query()
             ->notVoided()
             ->whereIn('student_id', $students->modelKeys())
-            ->with(['student', 'feeConcept', 'group', 'adjustments', 'organization'])
+            ->with(['student', 'feeConcept', 'group', 'adjustments', 'organization', 'allocations.payment'])
             ->orderByDesc('due_on')
             ->orderByDesc('id')
             ->get();
 
+        $familyIds = $students->pluck('family_id')->filter()->unique()->values();
+        $payments = Payment::query()
+            ->whereIn('family_id', $familyIds)
+            ->with(['allocations.charge.student'])
+            ->orderByDesc('received_on')
+            ->orderByDesc('id')
+            ->limit(50)
+            ->get();
+        $credit = (int) $payments->sum(fn (Payment $payment) => $payment->credit());
+
         $totals = fn ($charges) => [
-            'balance' => (int) $charges->sum('final_amount'),
-            'overdue' => (int) $charges->filter(fn (Charge $charge) => $charge->status() === ChargeStatus::Overdue)->sum('final_amount'),
+            'balance' => (int) $charges->sum(fn (Charge $charge) => $charge->pendingAmount()),
+            'overdue' => (int) $charges->filter(fn (Charge $charge) => $charge->status() === ChargeStatus::Overdue)
+                ->sum(fn (Charge $charge) => $charge->pendingAmount()),
         ];
+        $family = $totals($charges);
 
         return [
-            ...$totals($charges),
+            // El saldo a favor se descuenta del total a pagar (nunca negativo).
+            'balance' => max(0, $family['balance'] - $credit),
+            'overdue' => $family['overdue'],
+            'credit' => $credit,
             'students' => $students->map(fn (Student $student) => [
                 'id' => $student->id,
                 'full_name' => $student->full_name,
                 ...$totals($charges->where('student_id', $student->id)),
             ])->values(),
             'charges' => ChargeResource::collection($charges)->toArray($request),
+            'payments' => PaymentResource::collection($payments)->toArray($request),
         ];
     }
 }

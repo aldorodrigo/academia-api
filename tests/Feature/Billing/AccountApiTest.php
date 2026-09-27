@@ -1,7 +1,9 @@
 <?php
 
 use App\Actions\Billing\GenerateMonthlyCharges;
+use App\Actions\Billing\RegisterPayment;
 use App\Actions\Billing\VoidCharge;
+use App\Enums\PaymentMethod;
 use App\Models\Charge;
 use App\Models\DiscountRule;
 use App\Models\Enrollment;
@@ -9,6 +11,7 @@ use App\Models\Family;
 use App\Models\FeeConcept;
 use App\Models\Group;
 use App\Models\Guardian;
+use App\Models\MoneyAccount;
 use App\Models\Organization;
 use App\Models\Program;
 use App\Models\Scholarship;
@@ -105,4 +108,29 @@ it('un alumno ajeno responde 404 y no se mezclan organizaciones', function () {
     accountApi($other, "students/{$this->mateo->id}/account")->assertNotFound();
     accountApi($other, 'account')->assertOk()->assertJsonPath('data.balance', 0)->assertJsonCount(0, 'data.charges');
     accountApi($this->user, 'account', 'ajena')->assertForbidden();
+});
+
+it('pagos, saldo a favor y lo pagado de cada cargo según el contrato', function () {
+    $family = $this->mateo->family;
+    $bank = MoneyAccount::factory()->for($this->jakare)->create();
+    // Debe 420.000 (Mateo 150.000 × 2, Sofía 60.000 × 2); paga 500.000.
+    $payment = app(RegisterPayment::class)->handle($family, $bank, 500000, PaymentMethod::Transfer, CarbonImmutable::parse('2026-09-05'));
+
+    $response = accountApi($this->user, 'account')
+        ->assertOk()
+        ->assertJsonPath('data.balance', 0)
+        ->assertJsonPath('data.credit', 80000)
+        ->assertJsonPath('data.charges.0.status', 'pagado')
+        ->assertJsonPath('data.charges.0.paid_amount', 60000)
+        ->assertJsonPath('data.charges.0.pending_amount', 0)
+        ->assertJsonPath('data.payments.0.receipt_number', '000001')
+        ->assertJsonPath('data.payments.0.method_label', 'Transferencia')
+        ->assertJsonPath('data.payments.0.credit_generated', 80000)
+        ->assertJsonCount(4, 'data.payments.0.allocations');
+
+    expect(collect($response->json('data.charges'))->pluck('pending_amount')->unique()->all())->toBe([0]);
+    $this->get($response->json('data.payments.0.receipt_url'))->assertOk();
+
+    // Otra familia no ve el pago.
+    accountApi(memberOf($this->jakare), 'account')->assertJsonCount(0, 'data.payments');
 });

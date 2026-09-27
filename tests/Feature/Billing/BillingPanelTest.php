@@ -1,19 +1,26 @@
 <?php
 
+use App\Actions\Billing\GenerateMonthlyCharges;
 use App\Enums\OrganizationRole;
 use App\Filament\Resources\Charges\Pages\ManageCharges;
 use App\Filament\Resources\DiscountRules\Pages\ManageDiscountRules;
+use App\Filament\Resources\MoneyAccounts\Pages\ListMoneyAccounts;
+use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Resources\Scholarships\Pages\ManageScholarships;
 use App\Models\Charge;
 use App\Models\Enrollment;
+use App\Models\Family;
 use App\Models\FeeConcept;
+use App\Models\MoneyAccount;
 use App\Models\Organization;
+use App\Models\Payment;
 use App\Models\Scholarship;
 use App\Models\Season;
 use App\Models\Student;
 use App\Models\Tariff;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
+use Carbon\CarbonImmutable;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -88,4 +95,78 @@ it('descuentos y becas nuevos cuentan para la cuota del mes en curso', function 
     Livewire::test(ManageScholarships::class)
         ->mountAction('request')
         ->assertSet('mountedActions.0.data.valid_from', '2026-09-01');
+});
+
+describe('cobros', function () {
+    beforeEach(function () {
+        $this->family = Family::factory()->for($this->jakare)->create(['name' => 'Familia Benítez']);
+        $this->enrollment->student->update(['family_id' => $this->family->id]);
+        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-08-01'));
+        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-09-01'));
+    });
+
+    it('las páginas de cobros cargan', function () {
+        $this->get('/admin/jakare/pagos')->assertOk();
+        $this->get('/admin/jakare/cuentas')->assertOk();
+        $this->get('/admin/jakare/cuentas/'.MoneyAccount::query()->first()->id)->assertOk();
+    });
+
+    it('cuenta nueva con saldo inicial como primer movimiento', function () {
+        Livewire::test(ListMoneyAccounts::class)
+            ->callAction('create', data: ['name' => 'Banco Itaú', 'type' => 'banco', 'opening_balance' => 500000])
+            ->assertHasNoActionErrors();
+
+        $bank = MoneyAccount::query()->where('name', 'Banco Itaú')->sole();
+        expect($bank->balance())->toBe(500000)
+            ->and($bank->entries()->sole()->description)->toBe('Saldo inicial');
+    });
+
+    it('registrar pago preselecciona del más viejo al más nuevo y deja saldo a favor', function () {
+        $page = Livewire::test(ManagePayments::class)
+            ->mountAction('register')
+            ->set('mountedActions.0.data.family_id', $this->family->id)
+            ->set('mountedActions.0.data.amount', 200000);
+
+        $august = Charge::query()->whereDate('period', '2026-08-01')->sole();
+        $september = Charge::query()->whereDate('period', '2026-09-01')->sole();
+        expect(array_map('intval', $page->get('mountedActions.0.data.charge_ids')))->toBe([$august->id, $september->id]);
+
+        $page->callMountedAction()->assertHasNoActionErrors();
+
+        $payment = Payment::query()->sole();
+        expect($payment->allocations->pluck('amount')->all())->toBe([150000, 50000])
+            ->and($august->fresh()->status()->value)->toBe('pagado')
+            ->and($september->fresh()->pendingAmount())->toBe(100000);
+    });
+
+    it('si el tesorero destilda un cargo, lo que sobra queda de saldo a favor', function () {
+        $september = Charge::query()->whereDate('period', '2026-09-01')->sole();
+
+        Livewire::test(ManagePayments::class)
+            ->mountAction('register')
+            ->set('mountedActions.0.data.family_id', $this->family->id)
+            ->set('mountedActions.0.data.amount', 200000)
+            ->set('mountedActions.0.data.charge_ids', [$september->id])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        expect(Payment::query()->sole()->credit())->toBe(50000)
+            ->and($september->fresh()->status()->value)->toBe('pagado');
+    });
+
+    it('anular un pago desde la lista', function () {
+        Livewire::test(ManagePayments::class)
+            ->mountAction('register')
+            ->set('mountedActions.0.data.family_id', $this->family->id)
+            ->set('mountedActions.0.data.amount', 150000)
+            ->callMountedAction();
+        $payment = Payment::query()->sole();
+
+        Livewire::test(ManagePayments::class)
+            ->callTableAction('void', $payment, data: ['reason' => 'Error'])
+            ->assertNotified('Recibo N° 000001 anulado.');
+
+        expect($payment->fresh()->isVoided())->toBeTrue()
+            ->and(Charge::query()->whereDate('period', '2026-08-01')->sole()->pendingAmount())->toBe(150000);
+    });
 });

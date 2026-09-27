@@ -17,12 +17,16 @@ enum DiscountType: string implements HasLabel
 
     case Other = 'otro';
 
+    /** Pagando hasta el día `until_day` del mes del cargo (se aplica al imputar el pago). */
+    case EarlyPayment = 'pronto_pago';
+
     public function getLabel(): string
     {
         return match ($this) {
             self::Siblings => 'Hermanos',
             self::Agreement => 'Convenio',
             self::Other => 'Otro',
+            self::EarlyPayment => 'Pronto pago',
         };
     }
 

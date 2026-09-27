@@ -2,8 +2,10 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Enums\AdjustmentType;
 use App\Models\Charge;
 use App\Models\ChargeAdjustment;
+use App\Models\PaymentAllocation;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -32,11 +34,23 @@ class ChargeResource extends JsonResource
             'status_label' => $status->label(),
             'base_amount' => $this->base_amount,
             'final_amount' => $this->final_amount,
-            'adjustments' => $this->adjustments->map(fn (ChargeAdjustment $adjustment) => [
-                'type' => $adjustment->type->value,
-                'label' => $adjustment->label,
-                'amount' => $adjustment->amount,
-            ])->values(),
+            'paid_amount' => $this->paidAmount(),
+            'pending_amount' => $this->pendingAmount(),
+            'adjustments' => [
+                ...$this->adjustments->map(fn (ChargeAdjustment $adjustment) => [
+                    'type' => $adjustment->type->value,
+                    'label' => $adjustment->label,
+                    'amount' => $adjustment->amount,
+                ]),
+                // Pronto pago: se aplicó al pagar (queda en la imputación, no en el cargo).
+                ...$this->activeAllocations()
+                    ->filter(fn (PaymentAllocation $allocation) => $allocation->early_payment_discount > 0)
+                    ->map(fn (PaymentAllocation $allocation) => [
+                        'type' => AdjustmentType::EarlyPayment->value,
+                        'label' => $allocation->early_payment_label,
+                        'amount' => -$allocation->early_payment_discount,
+                    ]),
+            ],
         ];
     }
 }
