@@ -409,7 +409,30 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
   - Panel: "Clases y asistencia" en cada grupo (tomar/corregir, suspender), "Asistencia" en la ficha del jugador,
     "Aviso de día de clase" en Configuración, permiso "Tomar asistencia en cualquier grupo".
 - **Pendiente para publicar:** proyecto de Firebase (app Android/iOS, credenciales del servidor y los `--dart-define`).
-- **Fuera de alcance:** descontar clases suspendidas del cobro por día de entrenamiento, modo sin conexión con cola,
+- **Pasó al Sprint 5a+:** descontar clases suspendidas del cobro por día de entrenamiento, modo sin conexión con cola,
   botones de respuesta dentro de la notificación.
 
-### Próximo: Sprint 5b — avisos segmentados con lectura
+### Próximo: Sprint 5a+ — clases suspendidas, reprogramación, sin conexión, respuesta desde la notificación y avisos configurables
+Plan aprobado el 2026-09-27. Orden: contrato → app con fakes → API y panel.
+1. **Clases suspendidas sin cobrar** (solo temporadas *por día de entrenamiento*): al suspender, casilla "No cobrar
+   esta clase" (marcada por defecto). Cuota no emitida → cuenta un día menos (`SeasonPeriods`). Cuota emitida e impaga →
+   ajuste `clase_suspendida` en esa cuota; ya pagada (aunque sea en parte) → ajuste en la próxima cuota de la
+   inscripción (pendiente hasta que se emita; si no hay más, saldo a favor). Nunca se rehace lo emitido. Volver a
+   programar la clase quita el ajuste si la cuota sigue impaga.
+2. **Reprogramar o cancelar** (cualquier temporada; en cuota mensual/quincenal/semanal fija **nunca se descuenta**):
+   al suspender se elige "Cancelar la clase" o "Reprogramar" (fecha, horas, cancha); también "Cambiar día u horario".
+   La recuperación es una clase más (Hoy, agenda, avisos, asistencia); la original queda "Reprogramada". Push a todos
+   los tutores del grupo. En por día de entrenamiento, reprogramar no descuenta. Se puede cancelar la reprogramación.
+   API: `POST/DELETE classes/{id}/reschedule`, `GET venues`, estado `reprogramada`, `rescheduled_to/from`, `is_makeup`.
+3. **Asistencia del técnico sin conexión** (solo eso; suspender/reprogramar requiere conexión): caché de las clases
+   de hoy y sus listas, cola por clase (`shared_preferences` + `connectivity_plus`), envío automático al volver la
+   señal, "Enviar ahora" y rechazos visibles.
+4. **Responder desde la notificación**: [Sí, va] [No va] en el push del tutor (Android: data + `flutter_local_notifications`;
+   iOS: categoría `CLASS_REMINDER`), con links firmados que vencen al empezar la clase (sin token).
+5. **Aviso al técnico y avisos configurables**: push "Hoy tenés clase con Sub-10 a las 17:00 · 15 van, 2 no van" con
+   "Tomar asistencia" (activado por defecto, 2 h antes). Cada técnico y tutor elige hasta 3 avisos por clase
+   (día anterior 20:00, 6/3/2/1 h, 30 min) en `/notificaciones`; los siguientes al primero del tutor solo si no
+   respondió; regla nocturna 22–7 → 20:00 del día anterior. API: `GET/PUT me/notification-settings`,
+   `notification_settings` y `class_reminder_logs` (reemplaza `attendances.reminded_at`).
+
+### Después: Sprint 5b — avisos segmentados con lectura
