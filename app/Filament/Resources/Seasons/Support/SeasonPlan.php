@@ -258,13 +258,11 @@ class SeasonPlan
             $text .= ' Inscripción '.Money::pyg((int) $state['enrollment_fee_amount'])->format().'.';
         }
 
-        $text .= $season->issue_upfront
-            ? ' Las '.self::periodsCount($state).' cuotas de cada jugador se crean todas al inscribirlo.'
-            : ' Cada cuota se crea al empezar su período.';
-
-        if ($season->chargesByAttendance()) {
-            $text .= ' Atención: el cobro por clase asistida empieza cuando exista el módulo de Asistencia.';
-        }
+        $text .= match (true) {
+            $season->chargesByAttendance() => ' Cada cuota se crea cuando termina su período, con las clases a las que vino según la asistencia.',
+            $season->issue_upfront => ' Las '.self::periodsCount($state).' cuotas de cada jugador se crean todas al inscribirlo.',
+            default => ' Cada cuota se crea al empezar su período.',
+        };
 
         return $text;
     }

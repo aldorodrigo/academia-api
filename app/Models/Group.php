@@ -60,6 +60,16 @@ class Group extends Model
     }
 
     /**
+     * Clases (días concretos de sus horarios).
+     *
+     * @return HasMany<ClassSession, $this>
+     */
+    public function classSessions(): HasMany
+    {
+        return $this->hasMany(ClassSession::class);
+    }
+
+    /**
      * @return HasMany<Enrollment, $this>
      */
     public function enrollments(): HasMany

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Attendance\AttendanceAccess;
 use App\Http\Controllers\Controller;
 use App\Models\RoleAssignment;
 use App\Support\Tenancy\CurrentOrganization;
@@ -46,6 +47,7 @@ class CurrentOrganizationController extends Controller
                     'permissions' => collect(['view_reports' => 'View:Reports'])
                         ->filter(fn (string $permission) => $user->can($permission))
                         ->keys()
+                        ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
                         ->values(),
                 ],
             ],

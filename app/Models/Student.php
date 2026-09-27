@@ -139,6 +139,14 @@ class Student extends Model implements HasMedia
         return $this->hasMany(Charge::class);
     }
 
+    /**
+     * @return HasMany<Attendance, $this>
+     */
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(Attendance::class);
+    }
+
     public function isAdult(): bool
     {
         return $this->birth_date !== null && $this->birth_date->age >= self::ADULT_AGE;

@@ -259,6 +259,8 @@ return [
         'Approve:Scholarship' => 'Aprobar becas',
         // Balance, saldos y morosos (panel y app).
         'View:Reports' => 'Ver informes',
+        // Asistencia de todos los grupos (coordinador); el instructor la toma en sus grupos sin este permiso.
+        'Take:Attendance' => 'Tomar asistencia en cualquier grupo',
     ],
 
     /*

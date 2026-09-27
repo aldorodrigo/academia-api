@@ -18,6 +18,7 @@ use App\Models\Venue;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Database\Seeder;
+use Spatie\Permission\Models\Permission;
 
 /**
  * Datos de desarrollo de la organización activa: Fútbol Sub-8…Sub-14 con horarios,
@@ -62,6 +63,8 @@ class AcademicSeeder extends Seeder
         );
         $this->member($instructor, OrganizationRole::Instructor);
         $groups->each(fn ($group) => $group->instructors()->syncWithoutDetaching([$instructor->id]));
+        // Permiso para un coordinador que toma asistencia en cualquier grupo (se asigna desde Roles).
+        Permission::findOrCreate('Take:Attendance');
 
         $tutor = User::query()->firstOrCreate(
             ['email' => 'tutor@academia.test'],

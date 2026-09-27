@@ -2,11 +2,14 @@
 
 namespace App\Actions\Billing;
 
+use App\Enums\AttendanceStatus;
 use App\Enums\DailyBasis;
 use App\Enums\DailyGrouping;
 use App\Enums\FeeFrequency;
 use App\Enums\MidPeriod;
+use App\Models\Attendance;
 use App\Models\Charge;
+use App\Models\ClassSession;
 use App\Models\Enrollment;
 use App\Models\FeeConcept;
 use App\Models\Organization;
@@ -24,7 +27,10 @@ use Illuminate\Database\UniqueConstraintViolationException;
  *
  * Primer período a mitad de camino: proporcional, completo o desde el próximo (lo que se
  * eligió al inscribir o lo del plan). Idempotente por `unique_key`: nunca cobra dos veces
- * el mismo período. Las temporadas sin plan o que cobran por asistencia no generan.
+ * el mismo período. Las temporadas sin plan no generan.
+ *
+ * Cobro por clase asistida: la cuota de un período se crea cuando ya terminó y pasaron los
+ * días en que el técnico puede corregir la asistencia; la cantidad es la de presentes.
  */
 class IssueSeasonCharges
 {
@@ -48,7 +54,7 @@ class IssueSeasonCharges
             $season = $enrollment->season;
             $concept = FeeConcept::monthlyFee($organization);
 
-            if ($concept === null || ! $season->hasFeePlan() || $season->chargesByAttendance() || ! $enrollment->isBillableStatus()) {
+            if ($concept === null || ! $season->hasFeePlan() || ! $enrollment->isBillableStatus()) {
                 return $summary;
             }
 
@@ -56,6 +62,12 @@ class IssueSeasonCharges
             $enrolledOn = CarbonImmutable::parse($enrollment->enrolled_on ?? $today)->startOfDay();
             $start = ($from ?? $enrolledOn)->startOfDay()->max($season->starts_on);
             $until ??= $season->issue_upfront ? $season->ends_on : $today;
+            $byAttendance = $season->chargesByAttendance();
+
+            if ($byAttendance) {
+                // Solo períodos cerrados (la asistencia ya no se corrige desde la app).
+                $until = $until->min(self::lastClosedDay($today));
+            }
 
             $existing = Charge::query()
                 ->where('enrollment_id', $enrollment->id)
@@ -65,7 +77,7 @@ class IssueSeasonCharges
 
             foreach ($this->periods->for($season, $enrollment->group, $start, $until) as $period) {
                 // En los períodos ya creados se cuenta; los futuros más allá de `until` no.
-                if ($period->start->gt($until)) {
+                if ($period->start->gt($until) || ($byAttendance && $period->end->gt($until))) {
                     continue;
                 }
 
@@ -77,7 +89,9 @@ class IssueSeasonCharges
                     continue;
                 }
 
-                $charge = $this->chargeFor($enrollment, $period, $enrolledOn, $concept);
+                $charge = $byAttendance
+                    ? $this->attendanceChargeFor($enrollment, $period, $concept, $today)
+                    : $this->chargeFor($enrollment, $period, $enrolledOn, $concept);
 
                 if ($charge === null) {
                     continue;
@@ -136,6 +150,55 @@ class IssueSeasonCharges
 
             return $summary;
         });
+    }
+
+    /**
+     * Último día de los períodos que ya se pueden cobrar por asistencia.
+     */
+    public static function lastClosedDay(CarbonImmutable $today): CarbonImmutable
+    {
+        return $today->subDays(ClassSession::EDITABLE_DAYS + 1);
+    }
+
+    /**
+     * Cuota por clases asistidas: presentes del alumno en su grupo dentro del período.
+     * Vence `due_days` después de crearse (el período ya terminó). Null sin clases asistidas.
+     *
+     * @return array{due_on: string, tariff_id: int, base_amount: int, quantity: int, unit_amount: int, description: string}|'without_tariff'|null
+     */
+    private function attendanceChargeFor(Enrollment $enrollment, BillingPeriod $period, FeeConcept $concept, CarbonImmutable $today): array|string|null
+    {
+        $season = $enrollment->season;
+        $tariff = Tariff::applicable($concept, $season, $enrollment->group, $period->start);
+
+        if ($tariff === null) {
+            return 'without_tariff';
+        }
+
+        $quantity = Attendance::query()
+            ->where('student_id', $enrollment->student_id)
+            ->where('status', AttendanceStatus::Present)
+            ->whereHas('classSession', fn ($query) => $query
+                ->where('group_id', $enrollment->group_id)
+                ->whereDate('date', '>=', $period->start->toDateString())
+                ->whereDate('date', '<=', $period->end->toDateString()))
+            ->count();
+
+        if ($quantity === 0) {
+            return null;
+        }
+
+        $shown = new BillingPeriod($period->start, $period->end, $period->dueOn, $quantity);
+        $wholeMonth = ($season->daily_grouping ?? DailyGrouping::Month) === DailyGrouping::Month;
+
+        return [
+            'due_on' => $today->addDays($season->due_days)->toDateString(),
+            'tariff_id' => $tariff->id,
+            'base_amount' => $quantity * $tariff->amount,
+            'quantity' => $quantity,
+            'unit_amount' => $tariff->amount,
+            'description' => $shown->description($season->fee_frequency, DailyBasis::Attendance, $wholeMonth),
+        ];
     }
 
     /**

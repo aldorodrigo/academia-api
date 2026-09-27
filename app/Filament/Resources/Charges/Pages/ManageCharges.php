@@ -152,10 +152,6 @@ class ManageCharges extends ManageRecords
             return 'Elegí la temporada.';
         }
 
-        if ($season->chargesByAttendance()) {
-            return 'Esta temporada cobra por clase asistida: las cuotas se crean cuando exista Asistencia.';
-        }
-
         $summary = app(GenerateSeasonCharges::class)->handle(Filament::getTenant(), dryRun: true, season: $season, wholeSeason: $scope === 'season');
 
         return "Se van a crear {$summary['created']} cuotas por ".Money::pyg($summary['amount'])->format().'. '.$this->summaryText($summary);

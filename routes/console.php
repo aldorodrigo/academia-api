@@ -17,3 +17,6 @@ Schedule::command('charges:generate')->dailyAt('00:30')->timezone('America/Asunc
 
 // Gastos recurrentes (alquiler de cancha…): pendientes del mes, el día 1. Idempotente.
 Schedule::command('expenses:generate')->monthlyOn(1, '00:40')->timezone('America/Asuncion')->withoutOverlapping();
+
+// Aviso "¿Lo llevás?" unas horas antes de cada clase, a quienes lo pidieron. Idempotente.
+Schedule::command('classes:remind')->everyFifteenMinutes()->withoutOverlapping();

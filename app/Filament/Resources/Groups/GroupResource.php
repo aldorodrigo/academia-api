@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Groups;
 use App\Filament\Resources\Groups\Pages\CreateGroup;
 use App\Filament\Resources\Groups\Pages\EditGroup;
 use App\Filament\Resources\Groups\Pages\ListGroups;
+use App\Filament\Resources\Groups\RelationManagers\ClassSessionsRelationManager;
 use App\Filament\Resources\Groups\Schemas\GroupForm;
 use App\Filament\Resources\Groups\Tables\GroupsTable;
 use App\Filament\Support\Terms;
@@ -48,6 +49,11 @@ class GroupResource extends Resource
     public static function table(Table $table): Table
     {
         return GroupsTable::configure($table);
+    }
+
+    public static function getRelations(): array
+    {
+        return [ClassSessionsRelationManager::class];
     }
 
     public static function getPages(): array

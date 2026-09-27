@@ -411,3 +411,165 @@ Una temporada es próxima si `starts_on` es posterior a hoy.
 ### `GET reports/balances` (se amplía)
 
 - `pending` ya no incluye las cuotas próximas; van aparte en `upcoming` (en `totals` y en cada familia).
+
+## Sprint 5 (implementado)
+
+Asistencia desde la app del técnico, "hoy hay clase, ¿lo llevás?" para el tutor y registro del dispositivo para push.
+Requieren token + organización.
+
+### Clases
+
+Una **clase** es un día concreto de un horario del grupo (ej. Sub-10 el lunes 28/09 de 17:00 a 18:30). La API las crea
+sola al consultarlas, a partir de los horarios, y solo dentro de las fechas de la temporada. Todas las fechas y horas
+son locales de la organización.
+
+```json
+{
+  "id": 81,
+  "date": "2026-09-28",
+  "starts_at": "17:00",
+  "ends_at": "18:30",
+  "venue": { "name": "Cancha 1" },
+  "group": { "id": 3, "name": "Sub-10", "program": { "id": 1, "name": "Fútbol" } },
+  "status": "programada",
+  "suspension_reason": null,
+  "attendance_taken": false,
+  "counts": {
+    "enrolled": 21, "going": 15, "not_going": 2, "no_answer": 4,
+    "present": 0, "absent": 0, "justified": 0
+  }
+}
+```
+
+- `status`: `programada` o `suspendida` (con `suspension_reason`). `venue` puede ser `null`.
+- `counts`: alumnos de la clase (inscripción activa o becada), respuestas de los tutores y, si ya se tomó, asistencia.
+
+### Técnico (permiso `take_attendance` en `GET organization`)
+
+El técnico ve las clases de sus grupos; quien tiene "Tomar asistencia" en cualquier grupo (coordinador) ve todas.
+
+#### `GET classes?date=2026-09-28`
+
+Clases del día (por defecto, hoy), por hora de inicio.
+
+#### `GET classes/{id}`
+
+La clase con `editable` y sus alumnos, por apellido:
+
+```json
+{
+  "editable": true,
+  "students": [
+    {
+      "id": 12, "full_name": "Mateo Benítez", "photo_url": null,
+      "status": null, "guardian_response": "no_va", "note": null
+    }
+  ]
+}
+```
+
+- `status`: `presente`, `ausente`, `justificado` o `null` (todavía no se tomó).
+- `guardian_response`: `va`, `no_va` o `null` (el tutor no respondió).
+- `editable`: el día de la clase y hasta 3 días después; después solo se corrige desde el panel.
+
+#### `PUT classes/{id}/attendance`
+
+```json
+{ "marks": [ { "student_id": 12, "status": "justificado", "note": "Avisó que no va" } ] }
+```
+
+Guarda todas las marcas de una vez (idempotente) y devuelve la clase como `GET classes/{id}`. `422` si no es
+editable, si está suspendida o si un alumno no es de la clase.
+
+#### `POST classes/{id}/suspension` · `DELETE classes/{id}/suspension`
+
+`{ "reason": "Lluvia" }`. Suspende la clase y avisa por push a los tutores del grupo (a todos, no depende de los
+avisos de días de clase). `DELETE` la vuelve a programar. Devuelven la clase.
+
+#### `GET groups`
+
+Grupos del técnico: `[{ "id", "name", "program", "schedules", "students_count" }]`.
+
+#### `GET groups/{id}?month=2026-09`
+
+```json
+{
+  "data": {
+    "id": 3, "name": "Sub-10", "program": { "id": 1, "name": "Fútbol" }, "schedules": [ … ],
+    "month": "2026-09",
+    "classes": [ { …clase… } ],
+    "students": [
+      { "id": 12, "full_name": "Mateo Benítez", "photo_url": null, "present": 7, "absent": 1, "justified": 1, "rate": 78 }
+    ]
+  }
+}
+```
+
+- `classes`: las del mes hasta hoy, de la más reciente a la más vieja.
+- `rate`: % de presentes sobre las clases tomadas; `null` si no hay ninguna.
+
+### Tutor
+
+#### `GET agenda`
+
+La próxima clase de cada alumno a cargo (hoy o en los próximos 7 días; la de hoy se muestra hasta que termina).
+
+```json
+{
+  "data": [
+    {
+      "student": { "id": 12, "first_name": "Mateo", "full_name": "Mateo Benítez", "photo_url": null },
+      "class": { "id": 81, "date": "2026-09-28", "starts_at": "17:00", "ends_at": "18:30", "venue": { "name": "Cancha 1" },
+                 "group": { … }, "status": "programada", "suspension_reason": null },
+      "response": null,
+      "can_respond": true,
+      "class_reminders": null
+    }
+  ]
+}
+```
+
+- `response`: `va`, `no_va` o `null`. `can_respond`: hasta que empieza la clase y si no está suspendida.
+- `class_reminders`: si el usuario pidió aviso los días de clase de ese alumno; `null` = nunca respondió.
+
+#### `PUT classes/{id}/students/{student}/response`
+
+`{ "going": false }`. Devuelve el elemento de la agenda. `422` si la clase ya empezó o está suspendida.
+"No va" deja al alumno **justificado** al tomar asistencia (el técnico lo puede cambiar).
+
+#### `GET students/{id}/attendance?month=2026-09`
+
+```json
+{
+  "data": {
+    "month": "2026-09", "present": 7, "absent": 1, "justified": 1, "rate": 78,
+    "classes": [
+      { "id": 81, "date": "2026-09-28", "starts_at": "17:00", "group": { … }, "status": "programada", "attendance": "presente" }
+    ]
+  }
+}
+```
+
+`attendance`: `presente`, `ausente`, `justificado` o `null` (no se tomó). Solo clases hasta hoy, de la más reciente a la más vieja.
+
+#### `PUT students/{id}/reminders`
+
+`{ "enabled": true }` → `{ "data": { "class_reminders": true } }`. `GET students/{id}` agrega `class_reminders`
+(`true`, `false` o `null`).
+
+Con el aviso activo, se manda un push por clase unas horas antes (el club lo configura; por defecto 3): "Hoy Mateo tiene
+Fútbol a las 17:00 (Cancha 1). ¿Lo llevás?". Si esa hora cae entre las 22:00 y las 7:00, sale a las 20:00 del día
+anterior ("Mañana …").
+
+### Dispositivos
+
+- `POST devices` `{ "token": "…", "platform": "android" }` (`android`, `ios` o `web`) → `204`. Si el token ya existe, se
+  asocia al usuario actual.
+- `DELETE devices/{token}` → `204` (al cerrar sesión).
+
+Los push traen en `data` el tipo y la ruta de la app que abre: `{ "type": "class_reminder", "route": "/inicio" }`,
+`{ "type": "class_suspended", "route": "/inicio" }`.
+
+### `GET organization` (se amplía)
+
+`membership.permissions` suma `"take_attendance"` (técnico con grupos o permiso "Tomar asistencia").

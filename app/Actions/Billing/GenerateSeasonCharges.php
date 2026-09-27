@@ -3,6 +3,7 @@
 namespace App\Actions\Billing;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\SeasonStatus;
 use App\Models\Enrollment;
 use App\Models\Family;
 use App\Models\Organization;
@@ -62,13 +63,18 @@ class GenerateSeasonCharges
     private function generate(CarbonImmutable $on, bool $dryRun, ?int $createdBy, ?Season $season, bool $wholeSeason): array
     {
         $summary = ['created' => 0, 'existing' => 0, 'full_scholarship' => 0, 'without_tariff' => [], 'amount' => 0, 'seasons' => 0];
+        // Las que cobran por asistencia se cobran también unos días después de terminar (último período).
         $seasons = $season !== null
             ? collect([$season])
-            : Season::query()->active($on)->whereNotNull('fee_frequency')->get();
+            : Season::query()->whereNotNull('fee_frequency')
+                ->whereDate('starts_on', '<=', $on->toDateString())
+                ->whereDate('ends_on', '>=', IssueSeasonCharges::lastClosedDay($on)->toDateString())
+                ->get()
+                ->filter(fn (Season $season) => $season->chargesByAttendance() || $season->status($on) === SeasonStatus::Active);
         $families = [];
 
         foreach ($seasons as $season) {
-            if (! $season->hasFeePlan() || $season->chargesByAttendance()) {
+            if (! $season->hasFeePlan()) {
                 continue;
             }
 

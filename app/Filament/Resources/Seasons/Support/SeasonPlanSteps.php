@@ -178,7 +178,7 @@ class SeasonPlanSteps
                         ->options(DailyBasis::class)
                         ->descriptions([
                             DailyBasis::Training->value => 'Los días con horario de la categoría.',
-                            DailyBasis::Attendance->value => 'Próximamente: requiere el módulo de Asistencia.',
+                            DailyBasis::Attendance->value => 'Las clases a las que vino, según la asistencia. La cuota se crea al terminar el período.',
                         ])
                         ->disabled(fn (?Season $record) => self::hasCharges($record))
                         ->required(fn (Get $get) => self::value($get, 'fee_frequency') === FeeFrequency::Daily->value)
@@ -259,6 +259,12 @@ class SeasonPlanSteps
         ];
     }
 
+    private static function byAttendance(Get $get): bool
+    {
+        return self::value($get, 'fee_frequency') === FeeFrequency::Daily->value
+            && self::value($get, 'daily_basis') === DailyBasis::Attendance->value;
+    }
+
     /**
      * @return list<mixed>
      */
@@ -267,12 +273,16 @@ class SeasonPlanSteps
         return [
             Radio::make('issue_upfront')
                 ->label('¿Cuándo se crean las cuotas de cada jugador?')
-                ->options(fn () => [
-                    '0' => 'Al empezar cada período (recomendado)',
-                    ...(self::canIssueUpfront() ? ['1' => 'Todas juntas al inscribir'] : []),
-                ])
+                ->options(fn (Get $get) => self::byAttendance($get)
+                    ? ['0' => 'Al terminar cada período']
+                    : [
+                        '0' => 'Al empezar cada período (recomendado)',
+                        ...(self::canIssueUpfront() ? ['1' => 'Todas juntas al inscribir'] : []),
+                    ])
                 ->descriptions(fn (Get $get) => [
-                    '0' => 'El padre ve solo la cuota del período en curso.',
+                    '0' => self::byAttendance($get)
+                        ? 'Con las clases a las que vino según la asistencia (unos días después, para que el técnico pueda corregirla).'
+                        : 'El padre ve solo la cuota del período en curso.',
                     '1' => 'El padre ve las '.SeasonPlan::periodsCount(self::state($get)).' cuotas: la del período en curso en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
                 ])
                 ->formatStateUsing(fn ($state) => filter_var($state, FILTER_VALIDATE_BOOLEAN) ? '1' : '0')

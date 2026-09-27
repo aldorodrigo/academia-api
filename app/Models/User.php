@@ -120,6 +120,36 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     }
 
     /**
+     * Sus fichas de tutor (una por organización).
+     *
+     * @return HasMany<Guardian, $this>
+     */
+    public function guardians(): HasMany
+    {
+        return $this->hasMany(Guardian::class);
+    }
+
+    /**
+     * Dispositivos registrados para push.
+     *
+     * @return HasMany<DeviceToken, $this>
+     */
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(DeviceToken::class);
+    }
+
+    /**
+     * Tokens de FCM para el canal de push.
+     *
+     * @return list<string>
+     */
+    public function routeNotificationForPush(): array
+    {
+        return $this->deviceTokens()->pluck('token')->all();
+    }
+
+    /**
      * Grupos que dirige como instructor.
      *
      * @return BelongsToMany<Group, $this>

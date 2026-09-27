@@ -171,7 +171,7 @@ describe('emisión', function () {
             ->and([$first->quantity, $first->unit_amount, $first->base_amount])->toBe([3, 20000, 60000]);
     });
 
-    it('por clase asistida no genera hasta que exista Asistencia', function () {
+    it('por clase asistida no genera al inscribir: se cobra al cerrar cada período', function () {
         $season = season(['starts_on' => '2027-01-04', 'ends_on' => '2027-01-17', 'fee_frequency' => 'diaria', 'daily_basis' => 'asistencia', 'daily_grouping' => 'semana', 'issue_upfront' => true], amount: 20000);
         enroll($season);
 

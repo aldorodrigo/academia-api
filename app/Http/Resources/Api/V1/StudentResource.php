@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1;
 
 use App\Enums\GuardianRelationship;
+use App\Models\ClassReminderPreference;
 use App\Models\Guardian;
 use App\Models\Student;
 use Illuminate\Http\Request;
@@ -67,6 +68,7 @@ class StudentResource extends JsonResource
                 ? (new MedicalRecordResource($this->medicalRecord))->toArray($request)
                 : null,
             'permissions' => ['view_medical' => $canViewMedical],
+            'class_reminders' => ClassReminderPreference::for($user, $this->resource),
         ];
     }
 }

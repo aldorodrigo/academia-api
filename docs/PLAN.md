@@ -208,13 +208,13 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 | **4a. Cobros** ✅ | Pagos y recibos PDF en el estado de cuenta, saldo a favor | Cuentas (caja, banco, billetera) y libro mayor, pagos con imputación, pronto pago, saldo a favor, anulación, recibo PDF |
 | **4b. Gastos e informes** ✅ | Informes para la comisión (balance, saldos, morosos; PDF/Excel) | Gastos (sueltos y recurrentes), proveedores, transferencias entre cuentas, informes (balance, saldos, morosos; PDF/Excel) |
 | **4c. Temporadas con plan de cobro** | "A pagar ahora" y "Próximas cuotas", temporada en cada cuota, temporadas próximas en la ficha | Temporadas por disciplina vigentes por fechas, asistente de temporada (duración, frecuencia, montos, cuándo se crean), generador diario, mitad de período, baja anula futuras, pase al crear |
-| **5. Avisos** | Avisos con lectura, push (firebase_messaging), registro del dispositivo | Avisos segmentados con lectura, push por lotes vía Horizon, recordatorios de cuotas, documentación OpenAPI |
+| **5. Avisos y asistencia** | Asistencia del técnico, "¿Lo llevás?" y aviso de días de clase para el tutor, push (firebase_messaging), registro del dispositivo; después avisos con lectura | Clases y asistencia, suspensión con push, aviso de días de clase, cobro por clase asistida, push por lotes vía Horizon; después avisos segmentados con lectura, recordatorios de cuotas, documentación OpenAPI |
 | **6. Publicación** | Pulido, builds: web + Android (interno) + iOS (TestFlight) | Ajustes de rendimiento y seguridad; backups verificados |
 | **7. Piloto Jakare** | Correcciones del uso real | Carga de datos reales, capacitación, invitación a padres |
 
 ### Fase 2 — Institucional y deportiva
 - Comisión: reuniones, actas y resoluciones (PDF, votación, publicación a grupos que notifica y genera cargos).
-- Asistencia desde la app del instructor y suspensión de prácticas con aviso.
+- ~~Asistencia desde la app del instructor y suspensión de prácticas con aviso~~ (adelantado al Sprint 5).
 - Eventos y torneos con confirmación de los padres.
 - Comprobante de pago subido por el padre + validación del tesorero.
 - Solicitud de inscripción online, calendario, encuestas y preferencias de notificación.
@@ -390,4 +390,26 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
   - Permisos: sin "crear tarifas" no se ven los pasos de cobro (la temporada queda "Sin plan de cobro" y se completa con "Configurar cobro"); "todas al inscribir" pide permiso de cuotas.
   - Generador diario (`charges:generate`), "Generar cuotas" por temporada (hasta hoy / toda), mitad de período en la inscripción con el efecto en vivo, baja o suspensión anula futuras, "Volver a emitirla" al anular, aviso al aprobar una beca con cuotas ya emitidas, pase en segundo plano con aviso.
 
-### Próximo: Sprint 5 — avisos y push
+### Sprint 5a — asistencia, "¿Lo llevás?" y push
+- **Pedido:** que al técnico le cueste lo menos posible tomar asistencia y que el tutor reciba "hoy hay clase, ¿lo llevás?".
+- **Decisiones del usuario:** junto con el push del Sprint 5; la lista arranca con todos presentes; "No va" del tutor =
+  justificado; el aviso es opt-in (se pregunta una vez por hijo) y sale N horas antes (el club lo configura, 3 por defecto).
+- **Contrato:** sección Sprint 5 de `API_V1.md` (clases, asistencia, suspensión, grupos, agenda, respuesta, asistencia
+  del alumno, aviso de días de clase, dispositivos, permiso `take_attendance`).
+- **App:** tarjeta "Hoy" del técnico, planilla (un toque = ausente, ⋮ = justificar con motivo, guardado único con
+  reintento, suspender), mis grupos con % por alumno; para el tutor, "Próxima clase" con "¿Lo llevás?" y la pregunta
+  del aviso, asistencia del mes e interruptor en la ficha; push con firebase_messaging por `--dart-define` (sin push en web).
+- **API y panel:**
+  - Clases creadas a partir de los horarios al consultarlas (solo dentro de temporadas vigentes), asistencia por
+    alumno con la respuesta del tutor; el técnico corrige hasta 3 días después, el panel siempre.
+  - Suspensión con push a los tutores del grupo; `classes:remind` cada 15 minutos (de noche se adelanta a las 20:00
+    del día anterior; uno por clase; no si ya respondió).
+  - Canal `push` propio (FCM con kreait si hay `FIREBASE_CREDENTIALS`; si no, al log) que borra tokens inválidos.
+  - Cobro por clase asistida: la cuota se crea al cerrar el período + 3 días, con la cantidad de presentes.
+  - Panel: "Clases y asistencia" en cada grupo (tomar/corregir, suspender), "Asistencia" en la ficha del jugador,
+    "Aviso de día de clase" en Configuración, permiso "Tomar asistencia en cualquier grupo".
+- **Pendiente para publicar:** proyecto de Firebase (app Android/iOS, credenciales del servidor y los `--dart-define`).
+- **Fuera de alcance:** descontar clases suspendidas del cobro por día de entrenamiento, modo sin conexión con cola,
+  botones de respuesta dentro de la notificación.
+
+### Próximo: Sprint 5b — avisos segmentados con lectura

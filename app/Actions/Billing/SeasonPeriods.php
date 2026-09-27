@@ -146,7 +146,7 @@ class SeasonPeriods
     }
 
     /**
-     * La cantidad sale de la asistencia (todavía no hay módulo): no se puede calcular.
+     * La cantidad sale de la asistencia: no se puede calcular por adelantado.
      */
     public static function needsAttendance(Season $season): bool
     {
