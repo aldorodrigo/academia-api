@@ -51,7 +51,8 @@ function newSeason(): Season
 
 describe('inscripciones de temporadas anteriores', function () {
     it('se cierran solas al cambiar la temporada actual', function () {
-        expect(Enrollment::query()->billable()->count())->toBe(1)
+        // Activo y becado (la beca parcial se cobra con descuento).
+        expect(Enrollment::query()->billable()->count())->toBe(2)
             ->and($this->enrollMateo->fresh()->isFinished())->toBeFalse();
 
         newSeason();

@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AuthTokenController;
 use App\Http\Controllers\Api\V1\CurrentOrganizationController;
 use App\Http\Controllers\Api\V1\InvitationController;
@@ -26,6 +27,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
             Route::get('students', [StudentController::class, 'index'])->name('students.index');
             Route::get('students/{student}', [StudentController::class, 'show'])->whereNumber('student')->name('students.show');
+
+            Route::get('account', [AccountController::class, 'index'])->name('account.index');
+            Route::get('students/{student}/account', [AccountController::class, 'show'])->whereNumber('student')->name('students.account');
         });
     });
 });

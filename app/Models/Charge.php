@@ -1,0 +1,152 @@
+<?php
+
+namespace App\Models;
+
+use App\Enums\ChargeStatus;
+use App\Models\Concerns\BelongsToOrganization;
+use Database\Factories\ChargeFactory;
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use LogicException;
+use Spatie\Activitylog\Models\Concerns\LogsActivity;
+use Spatie\Activitylog\Support\LogOptions;
+
+/**
+ * Cargo de la cuenta corriente de un alumno. Inmutable: no se edita ni se borra;
+ * se anula con motivo (VoidCharge) y, si hace falta, se carga uno nuevo.
+ */
+#[Fillable(['organization_id', 'student_id', 'enrollment_id', 'group_id', 'fee_concept_id', 'tariff_id', 'period', 'description', 'base_amount', 'final_amount', 'issued_on', 'due_on', 'unique_key', 'voided_at', 'void_reason', 'voided_by', 'created_by'])]
+class Charge extends Model
+{
+    /** @use HasFactory<ChargeFactory> */
+    use BelongsToOrganization, HasFactory, LogsActivity;
+
+    /** Lo único que cambia después de emitido: la anulación. */
+    private const VOID_FIELDS = ['voided_at', 'void_reason', 'voided_by', 'updated_at'];
+
+    protected static function booted(): void
+    {
+        static::updating(function (Charge $charge): void {
+            if (array_diff(array_keys($charge->getDirty()), self::VOID_FIELDS) !== []) {
+                throw new LogicException('Un cargo no se modifica: anulalo y cargá uno nuevo.');
+            }
+        });
+
+        static::deleting(function (): void {
+            throw new LogicException('Un cargo no se borra: se anula con motivo.');
+        });
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'period' => 'date',
+            'base_amount' => 'integer',
+            'final_amount' => 'integer',
+            'issued_on' => 'date',
+            'due_on' => 'date',
+            'voided_at' => 'datetime',
+        ];
+    }
+
+    public function getActivitylogOptions(): LogOptions
+    {
+        return LogOptions::defaults()
+            ->logOnly(['description', 'final_amount', 'voided_at', 'void_reason'])
+            ->logOnlyDirty()
+            ->useLogName('billing');
+    }
+
+    /**
+     * Estado calculado: anulado, vencido (pasó el vencimiento más los días de
+     * gracia, en fecha local de la organización) o pendiente. Pagado: Sprint 4.
+     */
+    public function status(): ChargeStatus
+    {
+        if ($this->voided_at !== null) {
+            return ChargeStatus::Voided;
+        }
+
+        $organization = $this->organization;
+        $graceDays = (int) $organization->billing('grace_days');
+
+        return $organization->today()->gt($this->due_on->copy()->addDays($graceDays))
+            ? ChargeStatus::Overdue
+            : ChargeStatus::Pending;
+    }
+
+    public function isVoided(): bool
+    {
+        return $this->voided_at !== null;
+    }
+
+    /**
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function notVoided(Builder $query): void
+    {
+        $query->whereNull('voided_at');
+    }
+
+    /**
+     * @return BelongsTo<Student, $this>
+     */
+    public function student(): BelongsTo
+    {
+        return $this->belongsTo(Student::class);
+    }
+
+    /**
+     * @return BelongsTo<Enrollment, $this>
+     */
+    public function enrollment(): BelongsTo
+    {
+        return $this->belongsTo(Enrollment::class);
+    }
+
+    /**
+     * @return BelongsTo<Group, $this>
+     */
+    public function group(): BelongsTo
+    {
+        return $this->belongsTo(Group::class);
+    }
+
+    /**
+     * @return BelongsTo<FeeConcept, $this>
+     */
+    public function feeConcept(): BelongsTo
+    {
+        return $this->belongsTo(FeeConcept::class);
+    }
+
+    /**
+     * @return BelongsTo<Tariff, $this>
+     */
+    public function tariff(): BelongsTo
+    {
+        return $this->belongsTo(Tariff::class);
+    }
+
+    /**
+     * @return HasMany<ChargeAdjustment, $this>
+     */
+    public function adjustments(): HasMany
+    {
+        return $this->hasMany(ChargeAdjustment::class)->orderBy('id');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function voidedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'voided_by');
+    }
+}

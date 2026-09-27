@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Mandatos: vencen y empiezan por fecha local de cada organización.
 Schedule::command('roles:expire')->dailyAt('00:05')->timezone('America/Asuncion')->withoutOverlapping();
+
+// Cuota mensual: el día 1 en la fecha local. Idempotente (lock + índice único).
+Schedule::command('charges:generate')->monthlyOn(1, '00:30')->timezone('America/Asuncion')->withoutOverlapping();
