@@ -359,3 +359,55 @@ Morosos: familias con cuotas vencidas hace al menos `min_months` meses (por defe
 ```
 
 - `contact` puede ser `null` (familia sin tutor con teléfono).
+
+## Sprint 4c (implementado)
+
+Temporadas por disciplina, vigentes por fechas (puede haber varias a la vez: la anual de fútbol y una colonia),
+con plan de cobro propio (mensual, quincenal, semanal o por día). Los campos anteriores no cambian.
+
+### Inscripciones (`GET students`, `GET students/{id}`)
+
+- Se incluyen las inscripciones de temporadas **vigentes o próximas** (antes: solo la temporada actual).
+- `season` se amplía:
+
+```json
+"season": {
+  "id": 3,
+  "name": "Colonia de verano 2027",
+  "starts_on": "2027-01-04",
+  "ends_on": "2027-01-17",
+  "programs": [ { "id": 1, "name": "Fútbol" }, { "id": 2, "name": "Pádel" } ]
+}
+```
+
+Una temporada es próxima si `starts_on` es posterior a hoy.
+
+### En cada cargo (`GET account`, `GET students/{id}/account`)
+
+```json
+{
+  "season": { "id": 3, "name": "Colonia de verano 2027" },
+  "period": "2027-01",
+  "period_start": "2027-01-04",
+  "period_end": "2027-01-10",
+  "quantity": 5,
+  "unit_amount": 20000,
+  "is_upcoming": false
+}
+```
+
+- `season`: `null` en cargos manuales sin temporada.
+- `period_start` / `period_end`: período que cubre la cuota (mes, quincena, semana o día); `null` en cargos que no son cuotas
+  (inscripción, torneo…). `period` (`AAAA-MM` de `period_start`) se mantiene por compatibilidad.
+- `quantity` / `unit_amount`: solo en el cobro por día agrupado ("5 entrenamientos × ₲ 20.000"); si no, `null`.
+- `is_upcoming`: `true` si falta pagar algo y el período todavía no empezó (cuotas creadas por adelantado).
+
+### En la cuenta
+
+- `due_now`: lo que hay que pagar ahora: pendiente de los cargos que no son próximos, menos el saldo a favor (nunca negativo).
+- `upcoming`: pendiente de las cuotas próximas.
+- `balance` sigue siendo el total (`due_now` + `upcoming`). Cada elemento de `students` suma también `due_now` y `upcoming`.
+
+### `GET reports/balances` (se amplía)
+
+- `pending` ya no incluye las cuotas próximas; van aparte en `upcoming` (en `totals` y en cada familia).

@@ -87,7 +87,9 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Invitación de un tutor cargado: `CreateInvitation::forGuardian()`; al aceptarla, `guardians.user_id` queda vinculado.
 
 ### Académico
-- Programa → Grupo → Horarios; `Enrollment` = alumno + grupo + temporada (`Season::currentOrNull()`, una sola actual).
+- Programa → Grupo → Horarios; `Enrollment` = alumno + grupo + temporada.
+- Temporadas vigentes por fechas (varias a la vez, por disciplina): `Season::active()`, `open()` (vigentes o próximas),
+  `forProgram()` (sin disciplinas = todas), `Season::defaultFor($program)`. No hay "temporada actual".
 - "Mis hijos": `Student::inChargeOf($user)` (tutor vinculado o alumno adulto con `user_id`).
 - Ficha médica: siempre chequear `can('viewMedical', $student)` (`StudentPolicy`); los campos clínicos van cifrados.
 - Alta de jugador: `App\Actions\Students\RegisterStudent` (datos + inscripción + tutores + invitación). La usan
@@ -96,14 +98,20 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Familia: automática e invisible (`Family::syncFor($student)`), sin menú ni campo en el panel.
 - Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season, $program)`.
 - Campos de inscripción (alta, acción "Inscribir", pestaña Inscripciones): `App\Filament\Support\EnrollmentForm`.
-- Inscripciones de temporadas anteriores: finalizadas solas (`Enrollment::isFinished()`); solo generan cuota
-  las de `Enrollment::billable()`. Pase de temporada: `App\Actions\Enrollments\TransferSeason`.
+- Inscripciones de temporadas terminadas: finalizadas solas (`Enrollment::isFinished()`); solo generan cuota
+  las de `Enrollment::billable()`. Pase de temporada: `App\Actions\Enrollments\TransferSeason` (cuotas en cola con
+  `QueueEnrollmentCharges`, avisa al terminar).
+- Nueva temporada: asistente `CreateSeason` (`Seasons\Support\SeasonPlanSteps` y `SeasonPlan`: valores por defecto,
+  copia, resumen, cuotas de ejemplo, tarifas). "Configurar cobro" y "Cambiar monto": `SeasonActions`.
 - Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
 
 ### Finanzas (cargos)
 - `Charge` es inmutable (no se edita ni se borra): se anula con `VoidCharge` (motivo). Estado calculado: `Charge::status()`.
-- Cuota mensual: `App\Actions\Billing\GenerateMonthlyCharges` (lock + `unique_key`), comando `charges:generate`.
+- Cuotas según el plan de la temporada (`Season`: `fee_frequency`, `daily_basis`, `daily_grouping`, `due_days`,
+  `issue_upfront`, `mid_period`): períodos con `SeasonPeriods`; emisión por inscripción con `IssueSeasonCharges`
+  (al crear la inscripción, idempotente por `unique_key` `enr:…:con:…:per:Y-m-d`); `GenerateSeasonCharges` (lock) y
+  comando diario `charges:generate`. Baja o suspensión: `VoidFutureCharges`. `Charge::isUpcoming()` = próxima.
 - Descuentos y becas: `DiscountCalculator`, en el orden de `organizations.billing.discount_order`.
 - Tarifa aplicable: `Tariff::applicable()`. Configuración de cobros: `Organization::billing()`.
 - Becas: `ScholarshipDecision` (permiso `Approve:Scholarship`).

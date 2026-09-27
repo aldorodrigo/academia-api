@@ -47,6 +47,7 @@ class GenerateEnrollmentCharge
             'student_id' => $enrollment->student_id,
             'enrollment_id' => $enrollment->id,
             'group_id' => $enrollment->group_id,
+            'season_id' => $season->id,
             'fee_concept_id' => $concept->id,
             'tariff_id' => $tariff->id,
             'description' => "{$concept->name} {$season->name}",

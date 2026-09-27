@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Students\Pages;
 
 use App\Actions\Students\RegisterStudent;
 use App\Enums\EnrollmentStatus;
+use App\Enums\MidPeriod;
 use App\Exceptions\ImportRowException;
 use App\Filament\Resources\Students\StudentResource;
 use App\Models\Group;
@@ -37,6 +38,7 @@ class CreateStudent extends CreateRecord
                 $data['guardians'] ?? [],
                 auth()->user(),
                 mustBeNew: true,
+                midPeriod: filled($data['mid_period'] ?? null) ? MidPeriod::from($data['mid_period'] instanceof MidPeriod ? $data['mid_period']->value : $data['mid_period']) : null,
             );
         } catch (ImportRowException $e) {
             Notification::make()->danger()->title($e->getMessage())->send();

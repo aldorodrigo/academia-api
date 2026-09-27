@@ -5,6 +5,7 @@ namespace App\Actions\Students;
 use App\Actions\Invitations\CreateInvitation;
 use App\Enums\EnrollmentStatus;
 use App\Enums\GuardianRelationship;
+use App\Enums\MidPeriod;
 use App\Exceptions\ImportRowException;
 use App\Models\Enrollment;
 use App\Models\Family;
@@ -40,6 +41,7 @@ class RegisterStudent
      * @param  list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string, invite?: bool}>  $guardians
      * @param  EnrollmentStatus|null  $status  null: se mantiene el de una inscripción existente (o Activo si es nueva)
      * @param  bool  $mustBeNew  el formulario "Nuevo jugador" no reutiliza un jugador existente (la importación sí)
+     * @param  MidPeriod|null  $midPeriod  qué se cobra del período en curso (null: lo del plan de la temporada)
      */
     public function handle(
         Organization $organization,
@@ -50,11 +52,12 @@ class RegisterStudent
         array $guardians = [],
         ?User $invitedBy = null,
         bool $mustBeNew = false,
+        ?MidPeriod $midPeriod = null,
     ): Student {
         $this->invited = 0;
 
-        return $this->current->run($organization, function () use ($data, $group, $season, $status, $guardians, $invitedBy, $mustBeNew) {
-            [$student, $toInvite] = DB::transaction(function () use ($data, $group, $season, $status, $guardians, $mustBeNew) {
+        return $this->current->run($organization, function () use ($data, $group, $season, $status, $guardians, $invitedBy, $mustBeNew, $midPeriod) {
+            [$student, $toInvite] = DB::transaction(function () use ($data, $group, $season, $status, $guardians, $mustBeNew, $midPeriod) {
                 $student = $this->student($data, $mustBeNew);
                 $toInvite = $this->guardians($student, $guardians);
 
@@ -63,7 +66,7 @@ class RegisterStudent
                 }
 
                 Family::syncFor($student);
-                $this->enroll($student, $group, $season, $status);
+                $this->enroll($student, $group, $season, $status, $midPeriod);
 
                 return [$student, $toInvite];
             });
@@ -168,7 +171,7 @@ class RegisterStudent
             ->first();
     }
 
-    private function enroll(Student $student, Group $group, Season $season, ?EnrollmentStatus $status): void
+    private function enroll(Student $student, Group $group, Season $season, ?EnrollmentStatus $status, ?MidPeriod $midPeriod): void
     {
         $enrollment = Enrollment::query()->firstOrNew([
             'student_id' => $student->id,
@@ -179,6 +182,7 @@ class RegisterStudent
         if (! $enrollment->exists || $status !== null) {
             $enrollment->status = $status ?? EnrollmentStatus::Active;
             $enrollment->enrolled_on ??= now()->toDateString();
+            $enrollment->mid_period ??= $midPeriod;
             $enrollment->save();
         }
     }

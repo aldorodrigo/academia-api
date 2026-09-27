@@ -2,22 +2,28 @@
 
 namespace App\Actions\Enrollments;
 
+use App\Actions\Billing\QueueEnrollmentCharges;
 use App\Enums\EnrollmentStatus;
 use App\Enums\GroupCriterion;
 use App\Models\Enrollment;
 use App\Models\Group;
 use App\Models\Season;
+use App\Models\User;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Pase de temporada: reinscribe en la temporada de destino a los jugadores de la de origen.
  *
- * Las inscripciones de origen no se tocan: al dejar de ser la temporada actual quedan
- * finalizadas solas (Enrollment::isFinished). Los que no se reinscriben quedan como están.
+ * Las inscripciones de origen no se tocan: al terminar su temporada quedan finalizadas
+ * solas (Enrollment::isFinished). Los que no se reinscriben quedan como están.
+ * Solo pasan las disciplinas de la temporada de destino. Las cuotas de las inscripciones
+ * nuevas se crean en segundo plano y se avisa al terminar.
  */
 class TransferSeason
 {
+    public function __construct(private QueueEnrollmentCharges $queue) {}
+
     /** Estados que pasan a la temporada nueva (no las bajas ni los suspendidos). */
     public const TRANSFERABLE = [EnrollmentStatus::Active, EnrollmentStatus::Scholarship, EnrollmentStatus::Pending];
 
@@ -36,10 +42,13 @@ class TransferSeason
             ->map(fn (Enrollment $e) => "{$e->student_id}-{$e->group->program_id}")
             ->flip();
 
+        $programs = $to->programs()->pluck('programs.id');
+
         return Enrollment::query()
             ->with(['student', 'group.program'])
             ->where('season_id', $from->id)
             ->whereIn('status', self::TRANSFERABLE)
+            ->when($programs->isNotEmpty(), fn ($query) => $query->whereHas('group', fn ($group) => $group->whereIn('program_id', $programs)))
             ->get()
             ->unique(fn (Enrollment $e) => "{$e->student_id}-{$e->group->program_id}")
             ->sortBy(fn (Enrollment $e) => [$e->group->program->name, $e->group->name, $e->student->last_name, $e->student->first_name])
@@ -63,10 +72,10 @@ class TransferSeason
      * @param  list<array{enrollment_id: int|string, group_id: int|string, status: string, include?: bool}>  $rows
      * @return int inscripciones creadas
      */
-    public function handle(Season $from, Season $to, array $rows): int
+    public function handle(Season $from, Season $to, array $rows, ?User $by = null): int
     {
-        return DB::transaction(function () use ($from, $to, $rows) {
-            $created = 0;
+        $created = Enrollment::withoutSeasonCharges(fn () => DB::transaction(function () use ($from, $to, $rows) {
+            $created = [];
 
             foreach ($rows as $row) {
                 if (! ($row['include'] ?? false)) {
@@ -85,11 +94,17 @@ class TransferSeason
                     ['status' => EnrollmentStatus::from($row['status']), 'enrolled_on' => $to->starts_on],
                 );
 
-                $created += $enrollment->wasRecentlyCreated ? 1 : 0;
+                if ($enrollment->wasRecentlyCreated) {
+                    $created[] = $enrollment->id;
+                }
             }
 
             return $created;
-        });
+        }));
+
+        $this->queue->handle($created, $by ?? auth()->user());
+
+        return count($created);
     }
 
     /**

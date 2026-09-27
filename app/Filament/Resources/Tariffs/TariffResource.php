@@ -57,7 +57,7 @@ class TariffResource extends Resource
             Select::make('season_id')
                 ->label('Temporada')
                 ->relationship('season', 'name')
-                ->default(fn () => Season::currentOrNull()?->id)
+                ->default(fn () => Season::defaultFor()?->id)
                 ->live()
                 ->afterStateUpdated(fn ($state, $set) => $set('valid_from', Season::query()->find($state)?->starts_on?->toDateString()))
                 ->required(),
@@ -69,7 +69,7 @@ class TariffResource extends Resource
             TextInput::make('amount')->label('Monto')->prefix('₲')->numeric()->minValue(1)->required(),
             DatePicker::make('valid_from')
                 ->label('Vigente desde')
-                ->default(fn () => Season::currentOrNull()?->starts_on?->toDateString())
+                ->default(fn () => Season::defaultFor()?->starts_on?->toDateString())
                 ->helperText('Rige para los cargos desde esa fecha. Los ya emitidos no cambian.')
                 ->required(),
         ]);
@@ -88,8 +88,8 @@ class TariffResource extends Resource
             ])
             ->defaultSort('valid_from', 'desc')
             ->filters([
-                SelectFilter::make('season_id')->label('Temporada')->relationship('season', 'name')
-                    ->default(fn () => Season::currentOrNull()?->id),
+                SelectFilter::make('season_id')->label('Temporada')->relationship('season', 'name')->multiple()
+                    ->default(fn () => Season::query()->open()->pluck('id')->all()),
                 SelectFilter::make('fee_concept_id')->label('Concepto')->relationship('feeConcept', 'name'),
             ])
             ->recordActions([DeleteAction::make()]);

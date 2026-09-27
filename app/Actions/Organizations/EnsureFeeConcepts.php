@@ -15,7 +15,7 @@ class EnsureFeeConcepts
     public function handle(Organization $organization): void
     {
         $concepts = [
-            FeeConcept::MONTHLY_FEE => ['Cuota mensual', FeeConceptKind::Monthly],
+            FeeConcept::MONTHLY_FEE => ['Cuota', FeeConceptKind::Monthly],
             FeeConcept::ENROLLMENT_FEE => ['Inscripción', FeeConceptKind::OneTime],
         ];
 

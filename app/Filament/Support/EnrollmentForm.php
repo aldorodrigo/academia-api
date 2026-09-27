@@ -3,6 +3,7 @@
 namespace App\Filament\Support;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\MidPeriod;
 use App\Models\Enrollment;
 use App\Models\Group;
 use App\Models\Program;
@@ -39,7 +40,10 @@ class EnrollmentForm
                 ->dehydrated(false)
                 ->live()
                 ->afterStateHydrated(fn (Select $component, $record) => $component->state($record instanceof Enrollment ? $record->group?->program_id : null))
-                ->afterStateUpdated(fn (Get $get, Set $set) => $set('group_id', self::suggestedGroupId($get, $student))),
+                ->afterStateUpdated(function (Get $get, Set $set) use ($student) {
+                    self::syncSeason($get, $set);
+                    $set('group_id', self::suggestedGroupId($get, $student));
+                }),
             Select::make('group_id')
                 ->label(Terms::label('group', 'Categoría'))
                 ->options(fn (Get $get) => self::groups($get('program_id'))
@@ -48,16 +52,29 @@ class EnrollmentForm
                 ->required()
                 ->searchable()
                 ->live()
+                ->afterStateUpdated(fn (Get $get, Set $set) => self::syncSeason($get, $set))
                 ->rules(fn (Get $get, $record) => [self::notDuplicated($student, $get('season_id'), $record instanceof Enrollment ? $record : null)])
                 ->helperText(fn (Get $get, $record) => self::otherEnrollmentsNote($student, $get('season_id'), $get('group_id'), $record instanceof Enrollment ? $record : null)
                     ?? 'Se sugiere según la fecha de nacimiento.'),
+            // Vigentes o próximas de la disciplina; si hay una sola, se elige sola y no se muestra.
             Select::make('season_id')
                 ->label('Temporada')
-                ->options(fn () => Season::query()->orderByDesc('starts_on')->pluck('name', 'id'))
-                ->default(fn () => Season::currentOrNull()?->id)
+                ->options(fn (Get $get, $record) => self::seasons($get, $record instanceof Enrollment ? $record : null)->pluck('name', 'id'))
+                ->default(fn (Get $get) => Season::defaultFor(self::programId($get))?->id)
+                ->visible(fn (Get $get, $record) => self::seasons($get, $record instanceof Enrollment ? $record : null)->count() > 1)
+                ->dehydratedWhenHidden()
                 ->required()
                 ->live()
-                ->afterStateUpdated(fn (Get $get, Set $set) => $set('group_id', self::suggestedGroupId($get, $student))),
+                ->afterStateUpdated(fn (Get $get, Set $set) => $set('group_id', self::suggestedGroupId($get, $student)))
+                ->validationMessages(['required' => 'No hay una temporada vigente o próxima para esa disciplina: creala en Temporadas.']),
+            // Solo si el período ya empezó (con el efecto en vivo).
+            Select::make('mid_period')
+                ->label('Del período en curso se cobra')
+                ->options(MidPeriod::class)
+                ->default(fn (Get $get) => Season::query()->find($get('season_id'))?->mid_period?->value)
+                ->visible(fn (Get $get, $record) => ! $record instanceof Enrollment && MidPeriodPreview::applies($get))
+                ->live()
+                ->helperText(fn (Get $get) => MidPeriodPreview::text($get)),
             Select::make('status')
                 ->label('Estado')
                 // Al inscribir: activo, becado o pendiente; al editar, todos.
@@ -75,12 +92,59 @@ class EnrollmentForm
     }
 
     /**
+     * Disciplina elegida: la del campo, la de la categoría o la única que hay.
+     */
+    public static function programId(Get $get): ?int
+    {
+        if (filled($get('program_id'))) {
+            return (int) $get('program_id');
+        }
+
+        if (filled($get('group_id'))) {
+            return Group::query()->whereKey($get('group_id'))->value('program_id');
+        }
+
+        $programs = Program::query()->pluck('id');
+
+        return $programs->count() === 1 ? $programs->first() : null;
+    }
+
+    /**
+     * Temporadas vigentes o próximas de la disciplina (y la de la inscripción que se edita).
+     *
+     * @return Collection<int, Season>
+     */
+    public static function seasons(Get $get, ?Enrollment $editing = null): Collection
+    {
+        $programId = self::programId($get);
+
+        return Season::query()
+            ->where(fn ($query) => $query
+                ->where(fn ($open) => $open->open()->when($programId, fn ($q) => $q->forProgram($programId)))
+                ->when($editing, fn ($q) => $q->orWhereKey($editing->season_id)))
+            ->orderByDesc('starts_on')
+            ->get();
+    }
+
+    /**
+     * Si la temporada elegida no es de la disciplina, se cambia por la que corresponde.
+     */
+    private static function syncSeason(Get $get, Set $set): void
+    {
+        if (! self::seasons($get)->contains('id', (int) $get('season_id'))) {
+            $set('season_id', Season::defaultFor(self::programId($get))?->id);
+        }
+
+        $set('mid_period', Season::query()->find($get('season_id'))?->mid_period?->value);
+    }
+
+    /**
      * Categoría que corresponde por edad en la temporada elegida (y la disciplina, si hay varias).
      */
     public static function suggestedGroupId(Get $get, ?Student $student): ?int
     {
         $birthDate = $student?->birth_date ?? (filled($get('birth_date')) ? Carbon::parse($get('birth_date')) : null);
-        $season = Season::query()->find($get('season_id')) ?? Season::currentOrNull();
+        $season = Season::query()->find($get('season_id')) ?? Season::defaultFor(filled($get('program_id')) ? (int) $get('program_id') : null);
         $program = filled($get('program_id')) ? Program::query()->find($get('program_id')) : null;
 
         return $birthDate && $season ? Group::suggestFor($birthDate, $season, $program)?->id : null;

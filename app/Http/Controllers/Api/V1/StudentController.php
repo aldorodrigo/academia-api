@@ -17,7 +17,7 @@ class StudentController extends Controller
     public function index(Request $request): JsonResponse
     {
         $students = $this->inChargeOf($request)
-            ->with(['currentEnrollments.group.program', 'currentEnrollments.season', 'media'])
+            ->with(['currentEnrollments.group.program', 'currentEnrollments.season.programs', 'media'])
             ->orderBy('birth_date')
             ->get();
 
@@ -36,7 +36,7 @@ class StudentController extends Controller
                 'currentEnrollments.group.program',
                 'currentEnrollments.group.schedules.venue',
                 'currentEnrollments.group.instructors',
-                'currentEnrollments.season',
+                'currentEnrollments.season.programs',
                 'guardians',
                 'medicalRecord',
                 'media',

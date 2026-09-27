@@ -6,6 +6,7 @@ use App\Actions\Billing\ScholarshipDecision;
 use App\Enums\ScholarshipStatus;
 use App\Filament\Resources\Scholarships\Pages\ManageScholarships;
 use App\Filament\Support\Terms;
+use App\Models\Charge;
 use App\Models\Scholarship;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -78,12 +79,33 @@ class ScholarshipResource extends Resource
             ->color($color)
             ->visible(fn (Scholarship $record) => $record->status === $from && auth()->user()->can('approve', $record))
             ->requiresConfirmation()
+            ->modalDescription(fn (Scholarship $record) => $name === 'approve' ? self::issuedChargesWarning($record) : null)
             ->schema([Textarea::make('note')->label('Nota')->required($name !== 'approve')])
             ->action(function (Scholarship $record, array $data) use ($name, $label): void {
                 app(ScholarshipDecision::class)->{$name}($record, auth()->user(), $data['note'] ?? null);
 
                 Notification::make()->success()->title("Beca: {$label}.")->send();
             });
+    }
+
+    /**
+     * Las cuotas ya emitidas no cambian con la beca (por ejemplo, las creadas por adelantado).
+     */
+    public static function issuedChargesWarning(Scholarship $scholarship): ?string
+    {
+        $issued = Charge::query()
+            ->where('enrollment_id', $scholarship->enrollment_id)
+            ->whereNull('voided_at')
+            ->whereNotNull('period_start')
+            ->whereDate('period_end', '>=', $scholarship->valid_from->toDateString())
+            ->with(['allocations.payment', 'organization'])
+            ->get()
+            ->filter(fn (Charge $charge) => $charge->pendingAmount() > 0)
+            ->count();
+
+        return $issued === 0 ? null
+            : "Hay {$issued} cuotas ya emitidas desde el {$scholarship->valid_from->format('d/m/Y')}: la beca no se aplica a esas. "
+                .'Si corresponde, anulalas en Cuotas con "Volver a emitirla" y se rehacen con la beca.';
     }
 
     public static function getPages(): array

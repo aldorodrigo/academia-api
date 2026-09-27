@@ -33,9 +33,9 @@ class ManageScholarships extends ManageRecords
                 ->schema([
                     Select::make('enrollment_id')
                         ->label(Terms::label('student', 'Jugador'))
-                        ->options(fn () => Enrollment::query()->current()->with(['student', 'group'])->get()
+                        ->options(fn () => Enrollment::query()->current()->with(['student', 'group', 'season'])->get()
                             ->sortBy(fn (Enrollment $e) => $e->student->last_name)
-                            ->mapWithKeys(fn (Enrollment $e) => [$e->id => "{$e->student->last_name}, {$e->student->first_name} · {$e->group->name}"]))
+                            ->mapWithKeys(fn (Enrollment $e) => [$e->id => "{$e->student->last_name}, {$e->student->first_name} · {$e->group->name} · {$e->season->name}"]))
                         ->searchable()
                         ->required(),
                     TextInput::make('percent')->label('Porcentaje')->suffix('%')->numeric()->minValue(1)->maxValue(100)->default(50)

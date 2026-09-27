@@ -98,14 +98,18 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
 Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) → Horarios
 ```
 
-- **Temporada:** período (ej. 2026). Una sola temporada `actual` por organización.
+- **Temporada:** período de una o varias disciplinas (ej. "2026" de fútbol, "Colonia de verano" de
+  fútbol y pádel), con duración anual, semestral, mensual o quincenal. Está **vigente según sus fechas**:
+  puede haber varias a la vez y un jugador puede estar en la anual y en una colonia. Sin disciplinas, vale para todas.
 - **Inscripción** = alumno + grupo + temporada. Un alumno puede tener varias (ej. fútbol y pádel).
+  Solo se inscribe en temporadas vigentes o próximas de la disciplina de la categoría.
 - Estados de inscripción: `pendiente`, `activo`, `becado`, `suspendido`, `baja`.
-- Una inscripción de una temporada que ya no es la actual está **finalizada** (sin estado propio):
+- Una inscripción de una temporada que ya terminó está **finalizada** (sin estado propio):
   no genera cuotas ni se muestra en la app, y queda como historial. Solo generan cuota las
-  inscripciones `activo` o `becado` de la temporada actual (`Enrollment::billable()`).
+  inscripciones `activo` o `becado` de temporadas vigentes (`Enrollment::billable()`).
 - **Pase de temporada:** se reinscribe en bloque a los jugadores `activo`, `becado` o `pendiente`
-  de la temporada anterior, con la categoría que corresponde por edad; los que no siguen quedan como están.
+  de la temporada anterior (de las disciplinas de la nueva), con la categoría que corresponde por edad;
+  los que no siguen quedan como están. Se ofrece al crear la temporada.
 - Criterio de grupo por programa: año de nacimiento (fútbol) o nivel (pádel, danza).
 - **Familia:** agrupa alumnos y tutores. Un tutor puede tener varios hijos; un hijo varios tutores.
 - Alumno adulto sin tutor: es su propio responsable.
@@ -121,11 +125,26 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 
 ## 5. Tarifas y cuotas *(Sprint 3)*
 
-- **Tarifa** = concepto (inscripción, cuota mensual, torneo…) + grupo + temporada + monto + vigencia.
+- **Tarifa** = concepto (inscripción, cuota, torneo…) + grupo + temporada + monto + vigencia.
+  Los montos se cargan al crear la temporada (general y por categoría); después, "Cambiar monto".
 - Cambiar una tarifa **no altera** cargos ya emitidos; rige desde su fecha de vigencia.
-- **Cuota mensual automática** para inscripciones `activo` o `becado` de la temporada actual (la beca total no genera cuota; la parcial se aplica como ajuste; `baja` no se cobra).
-  - La generación es **idempotente**: lock en Redis + índice único en BD
-    (inscripción + concepto + período). Nunca se cobra dos veces el mismo mes.
+- **Plan de cobro de la temporada** *(Sprint 4c)*: frecuencia de la cuota
+  - mensual (meses calendario), quincenal (1–15 y 16–fin de mes), semanal (lunes a domingo) o
+  - por día: por día de entrenamiento (según el horario de la categoría) o por clase asistida
+    (cuando exista Asistencia; hasta entonces no genera), agrupado en una cuota por día, semana o mes
+    ("octubre: 12 entrenamientos × ₲ 20.000").
+  - Vence N días después de empezar cada período. Una temporada sin plan no genera cuotas.
+- **Cuota automática** para inscripciones `activo` o `becado` de temporadas vigentes (la beca total no genera cuota; la parcial se aplica como ajuste; `baja` no se cobra).
+  - **Al empezar cada período** (por defecto): el generador corre todos los días y emite los períodos ya empezados.
+  - **Todas juntas al inscribir** (opcional, con permiso de cuotas): se crean todas las cuotas de la temporada;
+    las que todavía no empezaron son **próximas** y la familia las ve aparte de lo que tiene que pagar ahora.
+  - Desde el período de la fecha de inscripción. **A mitad de período** se cobra proporcional, completo o desde
+    el próximo (lo elige quien inscribe; el plan trae el valor por defecto).
+  - **Baja o suspensión:** se anulan solas las cuotas futuras sin pagar; si se reactiva, se reemiten.
+  - Becas, descuentos y montos nuevos **no rehacen** cuotas ya emitidas: se anula la cuota con
+    "Volver a emitirla" y se rehace con lo de hoy.
+  - La generación es **idempotente**: lock en Redis + clave única en BD
+    (inscripción + concepto + inicio del período). Nunca se cobra dos veces el mismo período.
 - Todo **cargo** pertenece a un alumno (y a su inscripción) y guarda: monto base,
   ajustes aplicados (descuentos, becas, recargos) y monto final.
 
@@ -153,7 +172,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Pago de más → **saldo a favor** de la familia, que se aplica solo al próximo cargo (el recibo
   original no cambia: muestra lo imputado ese día y el saldo a favor que dejó).
 - **Pronto pago:** si un pago salda la cuota hasta el día configurado de su mes, se descuenta al
-  imputarlo (el cargo no se modifica).
+  imputarlo (el cargo no se modifica). Solo en cuotas mensuales.
 - Anular un pago: los cargos vuelven a pendientes y se registra el contra-movimiento en la cuenta.
 - Recargos por mora: configurados, todavía no se generan.
 - Cada pago genera un **recibo PDF**.

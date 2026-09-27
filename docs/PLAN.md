@@ -59,7 +59,7 @@ Cada organización es un inquilino, con datos, usuarios, finanzas y comunicacion
 
 ### 3.2 Organización e institucional
 - Datos de la organización, sedes y canchas (propias o alquiladas).
-- Temporadas (ej. 2026), con una sola temporada `actual`. Todo se agrupa por temporada.
+- Temporadas (ej. 2026, colonia de verano) de una o varias disciplinas, vigentes según sus fechas (puede haber varias a la vez), con su plan de cobro. Todo se agrupa por temporada.
 - Documentos: estatuto, reglamento interno y otros archivos.
 
 ### 3.3 Estructura académica
@@ -147,7 +147,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 4. **Libro mayor inmutable:** un movimiento no se edita ni se borra; se anula con un contra-movimiento, con motivo y auditoría.
 5. **Saldo = suma de movimientos.** Nunca se edita a mano.
 6. **Tarifas:** un cambio no altera los cargos ya emitidos; rige desde su vigencia. Opcionalmente queda vinculada a la resolución que la aprobó.
-7. **Cuota mensual automática** para inscripciones `activo` (no para `becado` total ni `baja`). Es idempotente: lock en Redis + índice único (inscripción + concepto + período).
+7. **Cuota automática según el plan de la temporada** (mensual, quincenal, semanal o por día) para inscripciones `activo` (no para `becado` total ni `baja`), al empezar cada período o todas al inscribir. La baja anula las futuras sin pagar. Es idempotente: lock en Redis + índice único (inscripción + concepto + período).
 8. **Cargos:** todo cargo pertenece a un alumno y a su inscripción, y guarda el monto base, los ajustes y el monto final. Nunca queda negativo.
 9. **Descuentos:**
    - Tipos: hermanos, beca, convenio, pronto pago u otro; por porcentaje o monto fijo; con conceptos a los que aplica y vigencia.
@@ -207,6 +207,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 | **3. Finanzas** ✅ | Estado de cuenta por hijo y consolidado por familia (cargos con detalle de ajustes) | Tarifario, cuota mensual automática, descuentos, becas, vencimientos y configuración de mora, cargos manuales, endpoints de cuenta corriente |
 | **4a. Cobros** ✅ | Pagos y recibos PDF en el estado de cuenta, saldo a favor | Cuentas (caja, banco, billetera) y libro mayor, pagos con imputación, pronto pago, saldo a favor, anulación, recibo PDF |
 | **4b. Gastos e informes** ✅ | Informes para la comisión (balance, saldos, morosos; PDF/Excel) | Gastos (sueltos y recurrentes), proveedores, transferencias entre cuentas, informes (balance, saldos, morosos; PDF/Excel) |
+| **4c. Temporadas con plan de cobro** | "A pagar ahora" y "Próximas cuotas", temporada en cada cuota, temporadas próximas en la ficha | Temporadas por disciplina vigentes por fechas, asistente de temporada (duración, frecuencia, montos, cuándo se crean), generador diario, mitad de período, baja anula futuras, pase al crear |
 | **5. Avisos** | Avisos con lectura, push (firebase_messaging), registro del dispositivo | Avisos segmentados con lectura, push por lotes vía Horizon, recordatorios de cuotas, documentación OpenAPI |
 | **6. Publicación** | Pulido, builds: web + Android (interno) + iOS (TestFlight) | Ajustes de rendimiento y seguridad; backups verificados |
 | **7. Piloto Jakare** | Correcciones del uso real | Carga de datos reales, capacitación, invitación a padres |
@@ -378,5 +379,15 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
   - Panel: Gastos, Gastos recurrentes, Proveedores, Transferencias e Informes.
 - **Probado de punta a punta** con capturas (panel y app como tesorera y como tutor).
 - Encontrado al probar: los jugadores sin familia quedaban fuera de saldos y morosos; la app no mostraba "Otros movimientos" y el balance no cerraba a la vista.
+
+### Sprint 4c — temporadas con plan de cobro
+- **Pedido del club:** menos pasos para cobrar una temporada; temporadas de disciplinas distintas y colonias al mismo tiempo; cuotas quincenales, semanales o por día.
+- **Contrato:** `season` con fechas y disciplinas en las inscripciones (vigentes o próximas); en cada cargo `season`, `period_start/end`, `quantity × unit_amount`, `is_upcoming`; `due_now` y `upcoming` en la cuenta; `upcoming` en saldos.
+- **App:** "A pagar ahora" separado de "Próximas cuotas" (plegadas), cuota con temporada y "5 × ₲ 20.000", ficha con fechas de la temporada y "Empieza el …".
+- **API y panel:**
+  - Temporada vigente por fechas (sin "actual"), con disciplinas; varias a la vez.
+  - Asistente "Nueva temporada": temporada (copiar otra con % de aumento, disciplinas, duración, fechas y nombre sugeridos) → cuotas (frecuencia, por día: base y agrupación, montos generales y por categoría, vencimiento con ejemplo) → cuándo se crean (al empezar cada período / todas al inscribir) → revisar (resumen en palabras y primeras cuotas). Al crear, "Pasar jugadores".
+  - Permisos: sin "crear tarifas" no se ven los pasos de cobro (la temporada queda "Sin plan de cobro" y se completa con "Configurar cobro"); "todas al inscribir" pide permiso de cuotas.
+  - Generador diario (`charges:generate`), "Generar cuotas" por temporada (hasta hoy / toda), mitad de período en la inscripción con el efecto en vivo, baja o suspensión anula futuras, "Volver a emitirla" al anular, aviso al aprobar una beca con cuotas ya emitidas, pase en segundo plano con aviso.
 
 ### Próximo: Sprint 5 — avisos y push

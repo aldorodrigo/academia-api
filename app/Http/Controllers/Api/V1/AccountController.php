@@ -48,7 +48,7 @@ class AccountController extends Controller
         $charges = Charge::query()
             ->notVoided()
             ->whereIn('student_id', $students->modelKeys())
-            ->with(['student', 'feeConcept', 'group', 'adjustments', 'organization', 'allocations.payment'])
+            ->with(['student', 'feeConcept', 'group', 'season', 'adjustments', 'organization', 'allocations.payment'])
             ->orderByDesc('due_on')
             ->orderByDesc('id')
             ->get();
@@ -63,16 +63,22 @@ class AccountController extends Controller
             ->get();
         $credit = (int) $payments->sum(fn (Payment $payment) => $payment->credit());
 
+        // Próximas: cuotas creadas por adelantado cuyo período no empezó.
         $totals = fn ($charges) => [
             'balance' => (int) $charges->sum(fn (Charge $charge) => $charge->pendingAmount()),
             'overdue' => (int) $charges->filter(fn (Charge $charge) => $charge->status() === ChargeStatus::Overdue)
                 ->sum(fn (Charge $charge) => $charge->pendingAmount()),
+            'due_now' => (int) $charges->reject(fn (Charge $charge) => $charge->isUpcoming())->sum(fn (Charge $charge) => $charge->pendingAmount()),
+            'upcoming' => (int) $charges->filter(fn (Charge $charge) => $charge->isUpcoming())->sum(fn (Charge $charge) => $charge->pendingAmount()),
         ];
         $family = $totals($charges);
+        $dueNow = max(0, $family['due_now'] - $credit);
 
         return [
-            // El saldo a favor se descuenta del total a pagar (nunca negativo).
+            // El saldo a favor se descuenta primero de lo que hay que pagar ahora (nunca negativo).
             'balance' => max(0, $family['balance'] - $credit),
+            'due_now' => $dueNow,
+            'upcoming' => max(0, $family['upcoming'] - max(0, $credit - $family['due_now'])),
             'overdue' => $family['overdue'],
             'credit' => $credit,
             'students' => $students->map(fn (Student $student) => [

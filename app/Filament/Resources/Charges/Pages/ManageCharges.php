@@ -4,7 +4,7 @@ namespace App\Filament\Resources\Charges\Pages;
 
 use App\Actions\Billing\CreateManualCharges;
 use App\Actions\Billing\DueDate;
-use App\Actions\Billing\GenerateMonthlyCharges;
+use App\Actions\Billing\GenerateSeasonCharges;
 use App\Enums\FeeConceptKind;
 use App\Filament\Resources\Charges\ChargeResource;
 use App\Filament\Support\Terms;
@@ -13,6 +13,7 @@ use App\Models\FeeConcept;
 use App\Models\Group;
 use App\Models\Season;
 use App\Models\Student;
+use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -38,7 +39,8 @@ class ManageCharges extends ManageRecords
     }
 
     /**
-     * Cuotas del mes, con vista previa antes de confirmar. Idempotente.
+     * Cuotas de una temporada "hasta hoy" o "toda la temporada", con vista previa antes de
+     * confirmar. Idempotente: las que ya existen no se vuelven a crear.
      */
     private function generateAction(): Action
     {
@@ -46,23 +48,31 @@ class ManageCharges extends ManageRecords
             ->label('Generar cuotas')
             ->icon(Heroicon::OutlinedArrowPath)
             ->authorize('create', Charge::class)
-            ->modalHeading('Generar cuotas del mes')
+            ->modalHeading('Generar cuotas')
+            ->modalDescription('Se generan solas todos los días. Usalo para crearlas ahora o para toda la temporada.')
             ->modalSubmitActionLabel('Generar')
             ->schema([
-                Select::make('period')
-                    ->label('Mes')
-                    ->options(fn () => $this->seasonMonths())
-                    ->default(fn () => Filament::getTenant()->today()->startOfMonth()->toDateString())
+                Select::make('season_id')
+                    ->label('Temporada')
+                    ->options(fn () => Season::query()->open()->whereNotNull('fee_frequency')->orderByDesc('starts_on')->pluck('name', 'id'))
+                    ->default(fn () => Season::query()->active()->whereNotNull('fee_frequency')->orderByDesc('starts_on')->value('id'))
                     ->required()
                     ->live(),
-                Text::make(fn (Get $get) => $this->preview($get('period'))),
+                Radio::make('scope')
+                    ->label('Hasta')
+                    ->options(['today' => 'Los períodos que ya empezaron', 'season' => 'Toda la temporada'])
+                    ->default('today')
+                    ->required()
+                    ->live(),
+                Text::make(fn (Get $get) => $this->preview($get('season_id'), $get('scope'))),
             ])
             ->action(function (array $data): void {
                 try {
-                    $summary = app(GenerateMonthlyCharges::class)->handle(
+                    $summary = app(GenerateSeasonCharges::class)->handle(
                         Filament::getTenant(),
-                        CarbonImmutable::parse($data['period']),
                         createdBy: auth()->id(),
+                        season: Season::query()->findOrFail($data['season_id']),
+                        wholeSeason: $data['scope'] === 'season',
                     );
                 } catch (RuntimeException $e) {
                     Notification::make()->danger()->title($e->getMessage())->send();
@@ -134,38 +144,21 @@ class ManageCharges extends ManageRecords
             });
     }
 
-    /**
-     * @return array<string, string>
-     */
-    private function seasonMonths(): array
+    private function preview(mixed $seasonId, ?string $scope): string
     {
-        $season = Season::currentOrNull();
+        $season = filled($seasonId) ? Season::query()->find($seasonId) : null;
 
         if ($season === null) {
-            return [];
+            return 'Elegí la temporada.';
         }
 
-        $months = [];
-        for ($month = CarbonImmutable::parse($season->starts_on)->startOfMonth(); $month->lte($season->ends_on); $month = $month->addMonth()) {
-            $months[$month->toDateString()] = ucfirst($month->locale('es')->translatedFormat('F Y'));
+        if ($season->chargesByAttendance()) {
+            return 'Esta temporada cobra por clase asistida: las cuotas se crean cuando exista Asistencia.';
         }
 
-        return $months;
-    }
+        $summary = app(GenerateSeasonCharges::class)->handle(Filament::getTenant(), dryRun: true, season: $season, wholeSeason: $scope === 'season');
 
-    private function preview(?string $period): string
-    {
-        if (blank($period)) {
-            return 'Elegí el mes.';
-        }
-
-        $summary = app(GenerateMonthlyCharges::class)->handle(Filament::getTenant(), CarbonImmutable::parse($period), dryRun: true);
-
-        if ($summary['out_of_season']) {
-            return 'Ese mes no está dentro de la temporada actual.';
-        }
-
-        return "Se van a crear {$summary['created']} cuotas. ".$this->summaryText($summary);
+        return "Se van a crear {$summary['created']} cuotas por ".Money::pyg($summary['amount'])->format().'. '.$this->summaryText($summary);
     }
 
     /**
@@ -174,7 +167,7 @@ class ManageCharges extends ManageRecords
     private function summaryText(array $summary): string
     {
         return collect([
-            $summary['existing'] ? "{$summary['existing']} ya estaban generadas." : null,
+            $summary['existing'] ? "{$summary['existing']} ya estaban creadas." : null,
             $summary['full_scholarship'] ? "{$summary['full_scholarship']} con beca total (no se cobran)." : null,
             $summary['without_tariff'] ? 'Sin tarifa: '.implode(', ', $summary['without_tariff']).'.' : null,
         ])->filter()->join(' ');
