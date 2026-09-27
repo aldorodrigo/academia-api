@@ -573,3 +573,106 @@ Los push traen en `data` el tipo y la ruta de la app que abre: `{ "type": "class
 ### `GET organization` (se amplía)
 
 `membership.permissions` suma `"take_attendance"` (técnico con grupos o permiso "Tomar asistencia").
+
+## Sprint 5a+ (contrato)
+
+Clases suspendidas sin cobrar, reprogramación, avisos configurables, aviso al técnico y respuesta desde la
+notificación. Los campos anteriores no cambian. La asistencia sin conexión es solo de la app (sin cambios de API).
+
+### En cada clase (`GET classes`, `GET classes/{id}`, agenda, grupos)
+
+```json
+{
+  "status": "reprogramada",
+  "charge_waived": false,
+  "is_makeup": false,
+  "rescheduled_to": { "id": 95, "date": "2026-10-03", "starts_at": "09:00", "ends_at": "10:30", "venue": { "name": "Cancha 2" } },
+  "rescheduled_from": null
+}
+```
+
+- `status` suma `reprogramada`: la clase se pasó a otro día u horario (`rescheduled_to`). La clase nueva es una
+  **recuperación** (`is_makeup: true`, `rescheduled_from` con la original) y funciona como cualquier otra.
+- `charge_waived`: la clase suspendida no se cobra (solo temporadas por día de entrenamiento).
+- `GET classes/{id}` suma `can_waive_charge`: el grupo tiene una temporada vigente que cobra por día de entrenamiento.
+
+### `POST classes/{id}/suspension` (se amplía)
+
+`{ "reason": "Lluvia", "waive_charge": true }`. Con `waive_charge` (y `can_waive_charge`), la clase no se cobra:
+
+- Si la cuota del período todavía no se emitió, sale con un día menos.
+- Si se emitió y está impaga, se le agrega el ajuste "Clase suspendida 28/09" (monto negativo, tipo `clase_suspendida`).
+- Si ya tiene pagos, el ajuste va a la próxima cuota de la inscripción (cuando se emita). Si no hay más cuotas, queda
+  como saldo a favor de la familia.
+
+`DELETE classes/{id}/suspension` quita esos ajustes de las cuotas que siguen impagas. En temporadas con cuota fija
+(mensual, quincenal, semanal) y por clase asistida, suspender nunca cambia las cuotas.
+
+### `POST classes/{id}/reschedule`
+
+`{ "date": "2026-10-03", "starts_at": "09:00", "ends_at": "10:30", "venue_id": 2, "reason": "Lluvia" }`
+
+Crea la recuperación y deja la original `reprogramada`; avisa por push a los tutores del grupo (a todos) y a los otros
+técnicos. `venue_id` por defecto el de la original; `reason` opcional. Devuelve la original (como `GET classes/{id}`).
+`422` si la original ya empezó o pasó, si la nueva fecha/hora ya pasó, si `ends_at` no es posterior a `starts_at` o
+si se superpone con otra clase del grupo ese día. No cambia las cuotas.
+
+### `DELETE classes/{id}/reschedule`
+
+Cancela la reprogramación (antes de que empiece la recuperación y si no tiene asistencia): borra la recuperación y la
+original vuelve a `suspendida` (si tenía motivo) o `programada`. Avisa a los tutores.
+
+### `GET venues`
+
+`[{ "id": 1, "name": "Cancha 1" }]` — canchas del club (para reprogramar).
+
+### Avisos configurables
+
+#### `GET me/notification-settings`
+
+```json
+{
+  "data": {
+    "instructor": { "enabled": true, "offsets": [120] },
+    "guardian": {
+      "offsets": ["eve", 180],
+      "students": [ { "id": 12, "first_name": "Mateo", "enabled": true } ]
+    },
+    "options": [
+      { "value": "eve", "label": "El día anterior a las 20:00" },
+      { "value": 360, "label": "6 h antes" }, { "value": 180, "label": "3 h antes" },
+      { "value": 120, "label": "2 h antes" }, { "value": 60, "label": "1 h antes" },
+      { "value": 30, "label": "30 min antes" }
+    ],
+    "max": 3
+  }
+}
+```
+
+- `offsets`: minutos antes de la clase, o `"eve"` (el día anterior a las 20:00). Sin elegir, los del club
+  (tutor: `class_reminder_hours`; técnico: 2 h).
+- `instructor` es `null` si el usuario no dirige grupos; `guardian` es `null` si no tiene alumnos a cargo.
+- Un aviso que caería entre las 22:00 y las 7:00 sale a las 20:00 del día anterior; dos avisos en el mismo momento
+  salen una sola vez. Al tutor, los avisos que siguen al primero solo le llegan si todavía no respondió.
+
+#### `PUT me/notification-settings`
+
+`{ "instructor": { "enabled": true, "offsets": [120, 30] }, "guardian": { "offsets": ["eve", 180] } }` (las dos
+partes son opcionales) → como el `GET`. `422` con más de 3 avisos, sin ninguno o con valores fuera de `options`.
+El aviso por hijo sigue en `PUT students/{id}/reminders`.
+
+### Push
+
+- Técnico: "Hoy tenés clase con Sub-10 a las 17:00 (Cancha 1) · 15 van, 2 no van, 4 sin responder" →
+  `{ "type": "class_today", "route": "/clases/81" }`.
+- Reprogramación: `{ "type": "class_rescheduled", "route": "/inicio" }`.
+- Aviso de día de clase al tutor: `{ "type": "class_reminder", "route": "/inicio", "class_id": "81",
+  "student_ids": "12,13", "going_url": "https://…", "not_going_url": "https://…" }` (valores como texto, como exige FCM).
+  En Android llega solo con `data` (la app dibuja la notificación con los botones "Sí, va" y "No va"); en iOS, con la
+  categoría `CLASS_REMINDER`.
+
+### `POST class-responses/{class}/{user}?students=12,13&going=1&expires=…&signature=…`
+
+Link firmado del push (sin token), válido hasta que empieza la clase. Responde por los alumnos indicados →
+`{ "data": { "message": "Listo: avisaste que Mateo no va." } }`. Alterado o vencido → `403`; clase empezada o
+suspendida → `422` con `message`.

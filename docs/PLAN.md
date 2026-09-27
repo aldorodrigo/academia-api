@@ -2,6 +2,7 @@
 
 > Plan único. Reemplaza a `PLAN_JAKARE.md` (funcionalidades) y `PLAN_IMPLEMENTACION.md` (stack y hoja de ruta).
 > Las reglas ya implementadas viven en `business-logic.md`, que es el documento maestro: si difiere de este plan, manda `business-logic.md`.
+> Planes por funcionalidad: `PLAN_ACTIVIDADES.md` (actividades para tus hijos).
 
 - **Nombre:** pendiente. Finalistas: Crecemy, Cantemy, Nidemy, Cluppy, Crecy, Retoño, Acompaño. Mientras tanto se usa el nombre en clave `academia`.
 - **Piloto:** Club Jakare (fútbol infantil, Paraguay). Moneda ₲, zona horaria `America/Asuncion`.
@@ -73,7 +74,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - **Familia:** agrupa alumnos y tutores. Un tutor puede tener varios hijos y un hijo varios tutores.
 - **Inscripción** = alumno + grupo + temporada. Un alumno puede tener varias, y cada una genera sus propios cargos.
   - Estados: `pendiente`, `activo`, `becado`, `suspendido`, `baja`.
-  - MVP: la carga la hace el club, también por importación Excel. *(Fase 2: solicitud online del padre → revisión → aprobación → cargo de inscripción.)*
+  - MVP: la carga la hace el club, también por importación Excel. *(Fase 2: solicitud online del padre desde las actividades publicadas → revisión → aprobación → cargo de inscripción; ver §3.13.)*
 - **Pase automático de grupo** al abrir una nueva temporada, cuando el criterio es el año de nacimiento.
 
 ### 3.4 Entrenamientos y asistencia *(Fase 2)*
@@ -139,6 +140,12 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Búsqueda global.
 - Datos de menores con acceso mínimo por rol.
 
+### 3.13 Actividades para tus hijos *(Fase 2 y Fase 4)*
+Detalle en `PLAN_ACTIVIDADES.md`.
+- Panel en la app del tutor con las actividades que sus hijos pueden hacer (filtradas por edad), cada una de una organización: días, sede, costo y cupo.
+- "Quiero inscribirlo" → solicitud → la organización aprueba en el panel → alumno, inscripción y cuotas con el circuito de siempre.
+- Primero dentro de las organizaciones del tutor (Fase 2); después, catálogo entre organizaciones del SaaS (Fase 4).
+
 ## 4. Reglas de negocio clave
 
 1. **Aislamiento total por organización** (`organization_id`). Nadie ve datos de otra organización.
@@ -191,6 +198,8 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 ### Entidades
 Organization, Membership, Season, Program, Group, Schedule, Session, Attendance, Student, Guardian, Family, MedicalRecord, Enrollment, Account, LedgerEntry, FeeConcept, Tariff, Charge, ChargeAdjustment, DiscountRule, Scholarship, LateFeePolicy, Payment, PaymentAllocation, PaymentProof, Expense, Supplier, Approval, Announcement, AnnouncementRead, DeviceToken, Invitation, BoardPosition (cargo con mandato).
 
+Actividades: Offering, EnrollmentRequest; en el catálogo, hijo a nivel usuario y perfil público de la organización.
+
 Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundraiser, RaffleBook, RaffleNumber, ApparelCampaign, ApparelOrder.
 
 ## 7. Hoja de ruta
@@ -217,7 +226,8 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - ~~Asistencia desde la app del instructor y suspensión de prácticas con aviso~~ (adelantado al Sprint 5).
 - Eventos y torneos con confirmación de los padres.
 - Comprobante de pago subido por el padre + validación del tesorero.
-- Solicitud de inscripción online, calendario, encuestas y preferencias de notificación.
+- Actividades para tus hijos, etapas A y B (`PLAN_ACTIVIDADES.md`): actividades publicadas por la organización y solicitud de inscripción online.
+- Calendario, encuestas y preferencias de notificación.
 
 ### Fase 3 — Recaudación e informes
 - Rifas e indumentaria.
@@ -227,6 +237,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 ### Fase 4 — SaaS comercial
 - Alta autoservicio, planes y suscripciones.
 - Marca por organización y landing.
+- Catálogo de actividades entre organizaciones (etapa C de `PLAN_ACTIVIDADES.md`).
 - Pagos online (Bancard vPOS/QR, Pagopar).
 - SIFEN, WhatsApp, conciliación bancaria y estadísticas.
 
@@ -259,6 +270,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - ⏳ Datos de Jakare: cantidad de jugadores, categorías y técnicos.
 - ⏳ ¿Los técnicos cobran del club? Si es así, se agrega "pagos a técnicos" como gasto recurrente.
 - ⏳ ¿El alquiler de cancha es mensual fijo o por hora/uso?
+- ⏳ Actividades para tus hijos: ver las decisiones de `PLAN_ACTIVIDADES.md` §8.
 
 ## 10. Estado
 
