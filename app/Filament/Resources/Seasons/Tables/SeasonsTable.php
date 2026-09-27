@@ -2,55 +2,38 @@
 
 namespace App\Filament\Resources\Seasons\Tables;
 
-use Filament\Actions\BulkActionGroup;
-use Filament\Actions\DeleteBulkAction;
+use App\Enums\SeasonStatus;
+use App\Filament\Resources\Seasons\Support\SeasonActions;
+use App\Filament\Support\Terms;
+use App\Models\Season;
 use Filament\Actions\EditAction;
-use Filament\Tables\Columns\IconColumn;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
+use Illuminate\Database\Eloquent\Builder;
 
 class SeasonsTable
 {
     public static function configure(Table $table): Table
     {
         return $table
+            ->modifyQueryUsing(fn (Builder $query) => $query->with('programs')->withCount(['charges' => fn (Builder $charges) => $charges->whereNull('voided_at')]))
             ->columns([
-                TextColumn::make('name')
-                    ->label('Nombre')
-                    ->searchable(),
-                TextColumn::make('starts_on')
-                    ->label('Inicio')
-                    ->date()
-                    ->sortable(),
-                TextColumn::make('ends_on')
-                    ->label('Fin')
-                    ->date()
-                    ->sortable(),
-                IconColumn::make('is_current')
-                    ->label('Actual')
-                    ->boolean(),
-                TextColumn::make('created_at')
-                    ->label('Creada')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-                TextColumn::make('updated_at')
-                    ->label('Actualizada')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
+                TextColumn::make('name')->label('Nombre')->searchable(),
+                TextColumn::make('programs.name')->label(Terms::plural('program', 'Disciplinas'))->badge()->placeholder('Todas'),
+                TextColumn::make('kind')->label('Duración'),
+                TextColumn::make('starts_on')->label('Fechas')->sortable()
+                    ->formatStateUsing(fn (Season $record) => $record->starts_on->format('d/m/Y').' – '.$record->ends_on->format('d/m/Y')),
+                TextColumn::make('status')->label('Estado')->badge()
+                    ->state(fn (Season $record): SeasonStatus => $record->status()),
+                TextColumn::make('fee_frequency')->label('Cuota')->badge()
+                    ->placeholder('Sin plan de cobro')
+                    ->color('gray'),
+                TextColumn::make('charges_count')->label('Cuotas emitidas')->numeric(),
             ])
             ->defaultSort('starts_on', 'desc')
-            ->filters([
-                //
-            ])
             ->recordActions([
+                SeasonActions::configurePlan(),
                 EditAction::make(),
-            ])
-            ->toolbarActions([
-                BulkActionGroup::make([
-                    DeleteBulkAction::make(),
-                ]),
             ]);
     }
 }

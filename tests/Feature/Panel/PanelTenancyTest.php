@@ -48,6 +48,7 @@ it('crear una temporada desde el panel la asigna a la organización activa', fun
             'name' => '2027',
             'starts_on' => '2027-01-01',
             'ends_on' => '2027-12-31',
+            'fee_amount' => 150000,
         ])
         ->call('create')
         ->assertHasNoFormErrors();

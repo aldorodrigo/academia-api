@@ -43,7 +43,9 @@ class MidPeriodPreview
             return 'Todavía no hay monto cargado para esta categoría en la temporada.';
         }
 
-        return match (MidPeriod::tryFrom((string) $get('mid_period')) ?? $season->mid_period) {
+        $mode = $get('mid_period');
+
+        return match (($mode instanceof MidPeriod ? $mode : MidPeriod::tryFrom((string) $mode)) ?? $season->mid_period) {
             MidPeriod::Next => "No se cobra el período en curso: se empieza a cobrar desde el {$next}.",
             MidPeriod::Full => 'Se cobrará el período completo: '.$format($daily ? $period->quantity * $tariff->amount : $tariff->amount).'.',
             MidPeriod::Prorated => $daily

@@ -6,7 +6,8 @@ use App\Enums\ChargeStatus;
 use App\Models\Charge;
 
 /**
- * Saldos por familia: lo pendiente, lo vencido y el saldo a favor.
+ * Saldos por familia: lo pendiente, lo vencido y el saldo a favor. Las cuotas creadas por
+ * adelantado cuyo período no empezó van aparte (próximas), no como pendiente.
  */
 class FamilyBalancesReport extends Report
 {
@@ -26,7 +27,7 @@ class FamilyBalancesReport extends Report
     }
 
     /**
-     * @return list<array{family: string, students: list<string>, pending: int, overdue: int, credit: int}>
+     * @return list<array{family: string, students: list<string>, pending: int, overdue: int, credit: int, upcoming: int}>
      */
     public function families(): array
     {
@@ -40,12 +41,13 @@ class FamilyBalancesReport extends Report
                 return [
                     'family' => $household['name'],
                     'students' => $household['students']->pluck('first_name')->all(),
-                    'pending' => (int) $charges->sum(fn (Charge $c) => $c->pendingAmount()),
+                    'pending' => (int) $charges->reject(fn (Charge $c) => $c->isUpcoming())->sum(fn (Charge $c) => $c->pendingAmount()),
                     'overdue' => (int) $charges->filter(fn (Charge $c) => $c->status() === ChargeStatus::Overdue)->sum(fn (Charge $c) => $c->pendingAmount()),
                     'credit' => (int) ($household['family']?->payments->whereNull('voided_at')->sum(fn ($payment) => $payment->credit()) ?? 0),
+                    'upcoming' => (int) $charges->filter(fn (Charge $c) => $c->isUpcoming())->sum(fn (Charge $c) => $c->pendingAmount()),
                 ];
             })
-            ->filter(fn (array $row) => $row['pending'] > 0 || $row['credit'] > 0)
+            ->filter(fn (array $row) => $row['pending'] > 0 || $row['credit'] > 0 || $row['upcoming'] > 0)
             ->sortByDesc('pending')
             ->values()
             ->all();
@@ -60,6 +62,7 @@ class FamilyBalancesReport extends Report
                 'pending' => array_sum(array_column($families, 'pending')),
                 'overdue' => array_sum(array_column($families, 'overdue')),
                 'credit' => array_sum(array_column($families, 'credit')),
+                'upcoming' => array_sum(array_column($families, 'upcoming')),
             ],
             'families' => $families,
         ];
@@ -74,9 +77,10 @@ class FamilyBalancesReport extends Report
                 ['Pendiente de cobro', $data['totals']['pending']],
                 ['Vencido', $data['totals']['overdue']],
                 ['Saldo a favor', $data['totals']['credit']],
+                ['Próximas cuotas', $data['totals']['upcoming']],
             ]],
-            ['title' => 'Familias', 'headers' => ['Familia', 'Jugadores', 'Pendiente', 'Vencido', 'Saldo a favor'], 'money' => [2, 3, 4],
-                'rows' => array_map(fn (array $f) => [$f['family'], implode(', ', $f['students']), $f['pending'], $f['overdue'], $f['credit']], $data['families'])],
+            ['title' => 'Familias', 'headers' => ['Familia', 'Jugadores', 'Pendiente', 'Vencido', 'Saldo a favor', 'Próximas'], 'money' => [2, 3, 4, 5],
+                'rows' => array_map(fn (array $f) => [$f['family'], implode(', ', $f['students']), $f['pending'], $f['overdue'], $f['credit'], $f['upcoming']], $data['families'])],
         ];
     }
 }

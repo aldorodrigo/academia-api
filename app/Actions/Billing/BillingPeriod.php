@@ -40,7 +40,8 @@ final readonly class BillingPeriod
      */
     public function description(FeeFrequency $frequency, ?DailyBasis $basis = null, bool $wholeMonth = false): string
     {
-        $es = fn (CarbonImmutable $date, string $format) => $date->locale('es')->translatedFormat($format);
+        // "ene." → "ene": más limpio en la descripción de la cuota.
+        $es = fn (CarbonImmutable $date, string $format) => str_replace('.', '', $date->locale('es')->translatedFormat($format));
         $range = $this->start->month === $this->end->month
             ? $this->start->day.'–'.$es($this->end, 'j M')
             : $es($this->start, 'j M').' – '.$es($this->end, 'j M');
