@@ -117,7 +117,7 @@ class IssueSeasonCharges
                         'period_start' => $period->start->toDateString(),
                         'period_end' => $period->end->toDateString(),
                         'issued_on' => $today->toDateString(),
-                        'due_on' => $period->dueOn->toDateString(),
+                        'due_on' => $charge['due_on'],
                         'unique_key' => $key,
                         'created_by' => $createdBy ?? auth()->id(),
                     ], $discounts['adjustments']);
@@ -142,7 +142,7 @@ class IssueSeasonCharges
      * Monto y descripción de la cuota del período; null si no se cobra (desde el próximo
      * período, o sin días de entrenamiento), 'without_tariff' si no hay tarifa.
      *
-     * @return array{tariff_id: int, base_amount: int, quantity: ?int, unit_amount: ?int, description: string}|'without_tariff'|null
+     * @return array{due_on: string, tariff_id: int, base_amount: int, quantity: ?int, unit_amount: ?int, description: string}|'without_tariff'|null
      */
     private function chargeFor(Enrollment $enrollment, BillingPeriod $period, CarbonImmutable $enrolledOn, FeeConcept $concept): array|string|null
     {
@@ -182,7 +182,11 @@ class IssueSeasonCharges
         $shown = new BillingPeriod($period->start, $period->end, $period->dueOn, $quantity);
         $wholeMonth = $daily && ($season->daily_grouping ?? DailyGrouping::Month) === DailyGrouping::Month;
 
+        // Quien se inscribe con el período empezado tiene los mismos días para pagar desde que se inscribe.
+        $dueOn = $period->contains($enrolledOn) ? $period->dueOn->max($enrolledOn->addDays($season->due_days)) : $period->dueOn;
+
         return [
+            'due_on' => $dueOn->toDateString(),
             'tariff_id' => $tariff->id,
             'base_amount' => $base,
             'quantity' => $daily ? $quantity : null,

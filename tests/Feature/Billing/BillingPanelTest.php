@@ -32,7 +32,7 @@ beforeEach(function () {
 
     $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30']);
     Tariff::factory()->create(['fee_concept_id' => FeeConcept::monthlyFee($this->jakare)->id, 'season_id' => $this->season->id, 'valid_from' => '2026-02-01']);
-    $this->enrollment = Enrollment::factory()->create(['student_id' => Student::factory()->for($this->jakare)->create()->id, 'season_id' => $this->season->id]);
+    $this->enrollment = Enrollment::factory()->create(['student_id' => Student::factory()->for($this->jakare)->create()->id, 'season_id' => $this->season->id, 'enrolled_on' => '2026-09-01']);
 });
 
 it('las páginas de finanzas cargan', function (string $path) {

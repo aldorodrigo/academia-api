@@ -109,7 +109,7 @@ class SeasonPlanSteps
                 ->color('success')
                 ->visible(fn (Get $get) => filled($get('copy_from'))),
             CheckboxList::make('program_ids')
-                ->label(Terms::plural('program', 'Disciplinas'))
+                ->label(ucfirst(Terms::plural('program', 'Disciplina')))
                 ->options(fn () => Program::query()->orderBy('name')->pluck('name', 'id'))
                 ->columns(3)
                 ->visible(fn () => Program::query()->count() > 1)

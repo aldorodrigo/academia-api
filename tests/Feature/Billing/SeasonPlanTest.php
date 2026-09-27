@@ -150,6 +150,11 @@ describe('emisión', function () {
         enroll($season, attributes: ['enrolled_on' => '2027-01-22', 'mid_period' => $mode]);
 
         expect(Charge::query()->orderBy('period_start')->get()->map(fn (Charge $c) => [$c->description, $c->base_amount])->all())->toBe($expected);
+
+        // La del período en curso vence a los días del plan desde la inscripción, no antes.
+        if ($mode !== 'proximo') {
+            expect(Charge::query()->orderBy('period_start')->first()->due_on->toDateString())->toBe('2027-01-31');
+        }
     })->with([
         'proporcional' => ['proporcional', [['Cuota enero 2027 (proporcional)', 100000], ['Cuota febrero 2027', 310000]]],
         'completo' => ['completo', [['Cuota enero 2027', 310000], ['Cuota febrero 2027', 310000]]],

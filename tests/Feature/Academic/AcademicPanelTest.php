@@ -155,7 +155,7 @@ it('las páginas del módulo académico cargan', function (string $path) {
         ->assertOk();
 })->with([
     'grupos', 'grupos/create', 'grupos/{group}/edit', 'alumnos', 'alumnos/create',
-    'alumnos/{student}/edit', 'tutores', 'inscripciones', 'seasons',
+    'alumnos/{student}/edit', 'tutores', 'inscripciones', 'temporadas',
 ]);
 
 it('los relation managers del alumno muestran inscripciones y tutores', function () {

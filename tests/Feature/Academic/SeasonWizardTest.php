@@ -75,7 +75,7 @@ it('crea la temporada con sus montos y el resumen coincide con lo que se emite',
         ->toBe([[null, 100000], [null, 150000], [$this->sub17->id, 180000]]);
 
     $state = ['name' => '2027', 'starts_on' => '2027-01-01', 'ends_on' => '2027-12-31', 'fee_frequency' => 'mensual', 'due_days' => 9, 'issue_upfront' => '1', 'fee_amount' => 150000, 'program_ids' => [$this->futbol->id]];
-    expect(SeasonPlan::summary($state))->toBe('2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota Mensual de ₲ 150.000, que vence 9 días después de empezar cada período. Las 12 cuotas de cada jugador se crean todas al inscribirlo.')
+    expect(SeasonPlan::summary($state))->toBe('2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota mensual de ₲ 150.000, que vence 9 días después de empezar cada período. Las 12 cuotas de cada jugador se crean todas al inscribirlo.')
         ->and(SeasonPlan::examples($state)->first())->toBe(['period' => 'enero 2027', 'due_on' => '10/01/2027', 'amount' => '₲ 150.000']);
 
     // Lo que después se emite coincide con el ejemplo.

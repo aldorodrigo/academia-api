@@ -27,14 +27,14 @@ class SeasonPlan
 {
     /**
      * Estado inicial del asistente: temporada anual desde el próximo 1 de enero (o desde
-     * el mes que viene si falta mucho), cuota mensual al empezar cada mes.
+     * el mes que viene en el primer semestre), cuota mensual al empezar cada mes.
      *
      * @return array<string, mixed>
      */
     public static function defaults(Organization $organization): array
     {
         $today = $organization->today();
-        $startsOn = $today->month >= 10 ? $today->addYear()->startOfYear() : $today->startOfMonth()->addMonth();
+        $startsOn = $today->month >= 7 ? $today->addYear()->startOfYear() : $today->startOfMonth()->addMonth();
         $programs = Program::query()->pluck('id');
 
         return [
@@ -184,7 +184,7 @@ class SeasonPlan
             'period' => self::periodLabel($period, $season),
             'due_on' => $period->dueOn->format('d/m/Y'),
             'amount' => Money::pyg($daily ? $period->quantity * $amount : $amount)->format()
-                .($daily ? " ({$period->quantity} días × ".Money::pyg($amount)->format().')' : ''),
+                .($daily ? ' ('.($period->quantity === 1 ? '1 día' : "{$period->quantity} días").' × '.Money::pyg($amount)->format().')' : ''),
         ]);
     }
 
@@ -249,7 +249,7 @@ class SeasonPlan
         $text .= match ($frequency) {
             FeeFrequency::Daily => " Se cobra {$amount} por ".($season->daily_basis === DailyBasis::Attendance ? 'clase asistida' : 'día de entrenamiento')
                 .', '.mb_strtolower($season->daily_grouping?->getLabel() ?? 'una cuota por mes'),
-            default => " Cuota {$frequency->getLabel()} de {$amount}",
+            default => ' Cuota '.mb_strtolower($frequency->getLabel())." de {$amount}",
         };
         $text .= $groups->isEmpty() ? '' : ' ('.$groups->join(', ').')';
         $text .= ', que vence '.($season->due_days === 0 ? 'el día que empieza' : "{$season->due_days} días después de empezar").' cada período.';

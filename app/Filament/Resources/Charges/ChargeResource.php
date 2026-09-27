@@ -56,13 +56,16 @@ class ChargeResource extends Resource
                     ->sortable(),
                 TextColumn::make('description')->label('Concepto')->searchable()
                     ->description(fn (Charge $record) => $record->adjustments->pluck('label')->join(' · ') ?: null),
-                TextColumn::make('group.name')->label(Terms::label('group', 'Categoría'))->toggleable(),
+                TextColumn::make('group.name')->label(Terms::label('group', 'Categoría'))->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('season.name')->label('Temporada')->toggleable(),
                 TextColumn::make('period_start')->label('Período')->toggleable()
                     ->formatStateUsing(fn (Charge $record) => $record->period_start->format('d/m').' – '.$record->period_end?->format('d/m/Y')),
                 TextColumn::make('due_on')->label('Vence')->date('d/m/Y')->sortable(),
+                // Las cuotas creadas por adelantado que todavía no empezaron se ven como "Próxima".
                 TextColumn::make('status')->label('Estado')->badge()
-                    ->state(fn (Charge $record) => $record->status()),
+                    ->state(fn (Charge $record) => $record->status())
+                    ->formatStateUsing(fn (Charge $record, ChargeStatus $state) => $record->isUpcoming() ? 'Próxima' : $state->label())
+                    ->color(fn (Charge $record, ChargeStatus $state) => $record->isUpcoming() ? 'info' : $state->getColor()),
                 MoneyColumn::make('final_amount')->label('Monto'),
                 MoneyColumn::make('pending')->label('Pendiente')
                     ->state(fn (Charge $record) => $record->isVoided() ? null : $record->pendingAmount()),

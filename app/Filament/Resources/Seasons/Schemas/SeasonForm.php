@@ -30,7 +30,7 @@ class SeasonForm
                 Section::make('Datos')->schema([
                     TextInput::make('name')->label('Nombre')->required()->maxLength(255),
                     CheckboxList::make('programs')
-                        ->label(Terms::plural('program', 'Disciplinas'))
+                        ->label(ucfirst(Terms::plural('program', 'Disciplina')))
                         ->relationship('programs', 'name')
                         ->columns(3)
                         ->visible(fn () => Program::query()->count() > 1)

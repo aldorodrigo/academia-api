@@ -45,7 +45,7 @@ enum SeasonKind: string implements HasLabel
         $month = $startsOn->locale('es')->translatedFormat('F');
 
         return match ($this) {
-            self::Annual => (string) $startsOn->year,
+            self::Annual => $startsOn->month === 1 ? (string) $startsOn->year : $startsOn->year.'/'.($startsOn->year + 1),
             self::Semester => ($startsOn->month <= 6 ? '1.er' : '2.º')." semestre {$startsOn->year}",
             self::Monthly => ucfirst($month)." {$startsOn->year}",
             self::Fortnightly => ($startsOn->day <= 15 ? '1.ª' : '2.ª')." quincena de {$month} {$startsOn->year}",

@@ -44,7 +44,8 @@ class EnrollmentFactory extends Factory
                     ])->id;
             },
             'status' => EnrollmentStatus::Active,
-            'enrolled_on' => now()->toDateString(),
+            // Inscripto desde el inicio de su temporada.
+            'enrolled_on' => fn (array $attributes) => Season::query()->withoutGlobalScopes()->whereKey($attributes['season_id'])->value('starts_on'),
         ];
     }
 

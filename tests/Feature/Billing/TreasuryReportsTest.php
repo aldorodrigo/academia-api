@@ -151,8 +151,8 @@ describe('informes', function () {
 
     it('un jugador sin familia también aparece en saldos y morosos', function () {
         $alone = Student::factory()->for($this->jakare)->create(['first_name' => 'Lucas', 'last_name' => 'Ramírez']);
-        // Se inscribe con la temporada ya cobrando: su cuota de septiembre sale al inscribirlo.
-        Enrollment::factory()->create(['student_id' => $alone->id, 'season_id' => Season::query()->orderBy('starts_on')->first()->id]);
+        // Se inscribe con la temporada ya cobrando: sus cuotas desde agosto salen al inscribirlo.
+        Enrollment::factory()->create(['student_id' => $alone->id, 'season_id' => Season::query()->orderBy('starts_on')->first()->id, 'enrolled_on' => '2026-08-01']);
         issueMonth($this->jakare, '2026-08');
 
         $delinquents = (new DelinquentsReport($this->jakare))->data();

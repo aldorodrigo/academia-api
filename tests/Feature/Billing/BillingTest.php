@@ -44,8 +44,9 @@ beforeEach(function () {
     $family = Family::factory()->for($this->jakare)->create();
     $this->mateo = Student::factory()->for($this->jakare)->create(['first_name' => 'Mateo', 'birth_date' => '2016-03-14', 'family_id' => $family->id]);
     $this->sofia = Student::factory()->for($this->jakare)->create(['first_name' => 'Sofía', 'birth_date' => '2018-07-02', 'family_id' => $family->id]);
-    $this->enrollMateo = Enrollment::factory()->create(['student_id' => $this->mateo->id, 'group_id' => $this->sub10->id, 'season_id' => $this->season->id]);
-    $this->enrollSofia = Enrollment::factory()->create(['student_id' => $this->sofia->id, 'group_id' => $this->sub8->id, 'season_id' => $this->season->id]);
+    // Inscriptos el 1 de septiembre: el generador emite desde ese mes.
+    $this->enrollMateo = Enrollment::factory()->create(['student_id' => $this->mateo->id, 'group_id' => $this->sub10->id, 'season_id' => $this->season->id, 'enrolled_on' => '2026-09-01']);
+    $this->enrollSofia = Enrollment::factory()->create(['student_id' => $this->sofia->id, 'group_id' => $this->sub8->id, 'season_id' => $this->season->id, 'enrolled_on' => '2026-09-01']);
 });
 
 function generate(string $period = '2026-09', bool $dryRun = false): array
