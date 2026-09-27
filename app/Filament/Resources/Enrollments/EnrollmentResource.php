@@ -4,17 +4,15 @@ namespace App\Filament\Resources\Enrollments;
 
 use App\Enums\EnrollmentStatus;
 use App\Filament\Resources\Enrollments\Pages\ManageEnrollments;
-use App\Filament\Support\EnrollmentFields;
+use App\Filament\Resources\Students\StudentResource;
 use App\Filament\Support\Terms;
 use App\Models\Enrollment;
 use App\Models\Season;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
-use Filament\Actions\EditAction;
 use Filament\Forms\Components\Select;
 use Filament\Resources\Resource;
-use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Filters\SelectFilter;
@@ -39,17 +37,12 @@ class EnrollmentResource extends Resource
 
     protected static ?string $pluralModelLabel = 'inscripciones';
 
-    public static function form(Schema $schema): Schema
+    /**
+     * Se inscribe solo desde la ficha del jugador (pestaña Inscripciones).
+     */
+    public static function canCreate(): bool
     {
-        return $schema->columns(2)->components([
-            Select::make('student_id')
-                ->label(Terms::label('student', 'Jugador'))
-                ->relationship('student', 'last_name')
-                ->getOptionLabelFromRecordUsing(fn ($student) => "{$student->last_name}, {$student->first_name}")
-                ->searchable(['first_name', 'last_name', 'document'])
-                ->required(),
-            ...EnrollmentFields::make(),
-        ]);
+        return false;
     }
 
     public static function table(Table $table): Table
@@ -75,7 +68,9 @@ class EnrollmentResource extends Resource
                 SelectFilter::make('group')->label(Terms::label('group', 'Categoría'))->relationship('group', 'name')->preload(),
                 SelectFilter::make('status')->label('Estado')->options(EnrollmentStatus::class),
             ])
-            ->recordActions([self::changeStatus(), EditAction::make()])
+            // Editar o borrar una inscripción se hace en la ficha del jugador.
+            ->recordUrl(fn (Enrollment $record) => StudentResource::getUrl('edit', ['record' => $record->student_id]))
+            ->recordActions([self::changeStatus()])
             ->toolbarActions([
                 BulkAction::make('changeStatus')
                     ->label('Cambiar estado')

@@ -1,7 +1,10 @@
 <?php
 
+use App\Enums\EnrollmentStatus;
 use App\Enums\OrganizationRole;
 use App\Filament\Imports\StudentImporter;
+use App\Filament\Resources\Enrollments\EnrollmentResource;
+use App\Filament\Resources\Enrollments\Pages\ManageEnrollments;
 use App\Filament\Resources\Groups\Pages\CreateGroup;
 use App\Filament\Resources\Students\Pages\EditStudent;
 use App\Filament\Resources\Students\Pages\ListStudents;
@@ -171,4 +174,42 @@ it('los relation managers del alumno muestran inscripciones y tutores', function
 
     Mail::assertQueued(InvitationMail::class, fn ($mail) => $mail->hasTo('ana@test.com'));
     expect($guardian->invitations()->sole()->guardian_id)->toBe($guardian->id);
+});
+
+it('se inscribe solo desde la ficha del jugador y no permite duplicados', function () {
+    inPanel($this->admin, $this->jakare);
+    $student = Student::factory()->for($this->jakare)->create();
+    $group = Group::factory()->for($this->program)->create(['name' => 'Sub-12', 'organization_id' => $this->jakare->id]);
+    $manager = fn () => Livewire::test(EnrollmentsRelationManager::class, ['ownerRecord' => $student, 'pageClass' => EditStudent::class]);
+
+    $manager()
+        ->callTableAction('create', data: ['group_id' => $group->id])
+        ->assertHasNoTableActionErrors();
+
+    $enrollment = Enrollment::query()->sole();
+    expect($enrollment->student_id)->toBe($student->id)
+        ->and($enrollment->season_id)->toBe(Season::currentOrNull()->id)
+        ->and($enrollment->status)->toBe(EnrollmentStatus::Active);
+
+    $manager()
+        ->callTableAction('create', data: ['group_id' => $group->id])
+        ->assertHasTableActionErrors(['group_id' => 'unique']);
+
+    expect(Enrollment::query()->count())->toBe(1);
+});
+
+it('la lista de inscripciones no tiene alta y lleva a la ficha del jugador', function () {
+    inPanel($this->admin, $this->jakare);
+    $enrollment = Enrollment::factory()->create(['student_id' => Student::factory()->for($this->jakare)->create()->id]);
+
+    expect(EnrollmentResource::canCreate())->toBeFalse();
+
+    Livewire::test(ManageEnrollments::class)
+        ->assertActionDoesNotExist('create')
+        ->assertCanSeeTableRecords([$enrollment])
+        ->callTableAction('changeStatus', $enrollment, data: ['status' => EnrollmentStatus::Withdrawn->value])
+        ->assertHasNoTableActionErrors();
+
+    expect($enrollment->fresh()->status)->toBe(EnrollmentStatus::Withdrawn)
+        ->and($enrollment->fresh()->ended_on)->not->toBeNull();
 });

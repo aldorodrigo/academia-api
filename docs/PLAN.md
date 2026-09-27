@@ -311,7 +311,7 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
   - `StudentPolicy::viewMedical`: permiso `ViewMedical:Student`, tutor del alumno, alumno adulto e instructor de su grupo.
   - Endpoints con API Resources (`app/Http/Resources/Api/V1`); `404` para alumnos ajenos.
   - Panel "Académico": sedes, programas, grupos (horarios e instructores), alumnos (ficha médica, inscripciones, tutores),
-    inscripciones (cambio de estado individual y masivo); "Personas": tutores (invitar / invitar seleccionados) y familias.
+    inscripciones (lista con cambio de estado individual y masivo; se inscribe solo desde la ficha del jugador); "Personas": tutores (invitar / invitar seleccionados) y familias.
   - Importación Excel/CSV de alumnos + hasta dos tutores (`ImportStudentRow`, reimportable sin duplicar, invitación opcional).
   - Invitaciones con `guardian_id`: al aceptar, el tutor queda vinculado y la app muestra sus hijos.
   - Seeder de desarrollo: `tutor@academia.test` y `tecnico@academia.test` (`password`).
