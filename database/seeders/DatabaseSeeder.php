@@ -7,6 +7,7 @@ use App\Enums\MembershipStatus;
 use App\Enums\OrganizationType;
 use App\Models\Organization;
 use App\Models\User;
+use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Database\Seeder;
 
 class DatabaseSeeder extends Seeder
@@ -38,5 +39,7 @@ class DatabaseSeeder extends Seeder
             ['name' => '2026'],
             ['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true],
         );
+
+        app(CurrentOrganization::class)->run($jakare, fn () => $this->call(AcademicSeeder::class));
     }
 }

@@ -4,6 +4,7 @@ use App\Http\Controllers\Api\V1\AuthTokenController;
 use App\Http\Controllers\Api\V1\CurrentOrganizationController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\StudentController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.v1.')->group(function () {
@@ -22,6 +23,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
         Route::middleware('organization')->group(function () {
             Route::get('organization', CurrentOrganizationController::class)->name('organization.show');
+
+            Route::get('students', [StudentController::class, 'index'])->name('students.index');
+            Route::get('students/{student}', [StudentController::class, 'show'])->whereNumber('student')->name('students.show');
         });
     });
 });

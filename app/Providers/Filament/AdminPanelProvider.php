@@ -43,6 +43,9 @@ class AdminPanelProvider extends PanelProvider
             ->tenantMiddleware([
                 SetCurrentOrganizationFromPanel::class,
             ], isPersistent: true)
+            // Avisos de importaciones terminadas (corren en cola).
+            ->databaseNotifications()
+            ->navigationGroups(['Académico', 'Personas'])
             ->discoverResources(in: app_path('Filament/Resources'), for: 'App\Filament\Resources')
             ->discoverPages(in: app_path('Filament/Pages'), for: 'App\Filament\Pages')
             ->pages([

@@ -3,6 +3,7 @@
 namespace App\Actions\Invitations;
 
 use App\Enums\MembershipStatus;
+use App\Models\Guardian;
 use App\Models\Invitation;
 use App\Models\Role;
 use App\Models\RoleAssignment;
@@ -69,10 +70,37 @@ class AcceptInvitation
                 );
             }
 
+            $this->linkGuardian($invitation, $user);
+
             $invitation->update(['accepted_at' => now(), 'accepted_user_id' => $user->id]);
 
             return [$user, $user->createToken($data['device_name'])->plainTextToken];
         });
+    }
+
+    /**
+     * Invitación enviada a un tutor cargado: el tutor queda vinculado a la cuenta
+     * (si no lo estaba ya a otra) y la app le muestra sus hijos.
+     */
+    private function linkGuardian(Invitation $invitation, User $user): void
+    {
+        $guardian = $invitation->guardian_id === null ? null
+            : Guardian::query()->withoutGlobalScopes()->find($invitation->guardian_id);
+
+        if ($guardian === null || ($guardian->user_id !== null && $guardian->user_id !== $user->id)) {
+            return;
+        }
+
+        // Un usuario es un solo tutor por organización.
+        $alreadyLinked = Guardian::query()->withoutGlobalScopes()
+            ->where('organization_id', $guardian->organization_id)
+            ->where('user_id', $user->id)
+            ->whereKeyNot($guardian->id)
+            ->exists();
+
+        if (! $alreadyLinked) {
+            $guardian->update(['user_id' => $user->id]);
+        }
     }
 
     private function alreadyHas(User $user, Role $role): bool

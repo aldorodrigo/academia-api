@@ -156,6 +156,62 @@ class Organization extends Model
     }
 
     /**
+     * @return HasMany<Venue, $this>
+     */
+    public function venues(): HasMany
+    {
+        return $this->hasMany(Venue::class);
+    }
+
+    /**
+     * @return HasMany<Program, $this>
+     */
+    public function programs(): HasMany
+    {
+        return $this->hasMany(Program::class);
+    }
+
+    /**
+     * @return HasMany<Group, $this>
+     */
+    public function groups(): HasMany
+    {
+        return $this->hasMany(Group::class);
+    }
+
+    /**
+     * @return HasMany<Family, $this>
+     */
+    public function families(): HasMany
+    {
+        return $this->hasMany(Family::class);
+    }
+
+    /**
+     * @return HasMany<Student, $this>
+     */
+    public function students(): HasMany
+    {
+        return $this->hasMany(Student::class);
+    }
+
+    /**
+     * @return HasMany<Guardian, $this>
+     */
+    public function guardians(): HasMany
+    {
+        return $this->hasMany(Guardian::class);
+    }
+
+    /**
+     * @return HasMany<Enrollment, $this>
+     */
+    public function enrollments(): HasMany
+    {
+        return $this->hasMany(Enrollment::class);
+    }
+
+    /**
      * Hoy en la zona horaria de la organización (los mandatos vencen por fecha local).
      */
     public function today(): CarbonImmutable

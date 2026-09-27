@@ -76,3 +76,95 @@ Agrega `membership` con los roles del usuario en la organización activa:
 ### Links de invitación
 
 El link que se envía por email o se muestra como QR es `{APP_URL_WEB}/invitacion/{token}`. En el celular abre la app (deep link, cuando haya dominio) y en la web abre la app web. Además, la app permite pegar el link o el código a mano.
+
+## Sprint 2 (implementado)
+
+Todos requieren token + organización. Solo se incluyen las inscripciones de la temporada actual.
+Estados de inscripción: `pendiente`, `activo`, `becado`, `suspendido`, `baja` (con `status_label` para mostrar).
+
+### `GET students`
+
+Alumnos **a cargo del usuario** en la organización activa: los hijos vinculados a él como tutor y él mismo si es alumno adulto (`is_self: true`).
+
+```json
+{
+  "data": [
+    {
+      "id": 12,
+      "first_name": "Mateo",
+      "last_name": "Benítez",
+      "full_name": "Mateo Benítez",
+      "birth_date": "2016-03-14",
+      "photo_url": null,
+      "is_self": false,
+      "enrollments": [
+        {
+          "id": 40,
+          "status": "activo",
+          "status_label": "Activo",
+          "season": { "id": 1, "name": "2026" },
+          "group": { "id": 3, "name": "Sub-10", "program": { "id": 1, "name": "Fútbol" } }
+        }
+      ]
+    }
+  ]
+}
+```
+
+### `GET students/{id}`
+
+Ficha del alumno. Responde `404` si no existe **o no está a cargo del usuario** (no revela si existe).
+
+```json
+{
+  "data": {
+    "id": 12,
+    "first_name": "Mateo",
+    "last_name": "Benítez",
+    "full_name": "Mateo Benítez",
+    "birth_date": "2016-03-14",
+    "photo_url": null,
+    "is_self": false,
+    "document": "6123456",
+    "shirt_size": "12",
+    "position": "Arquero",
+    "guardians": [
+      { "name": "Ana Benítez", "relationship": "Madre", "is_me": true }
+    ],
+    "enrollments": [
+      {
+        "id": 40,
+        "status": "activo",
+        "status_label": "Activo",
+        "season": { "id": 1, "name": "2026" },
+        "group": {
+          "id": 3,
+          "name": "Sub-10",
+          "program": { "id": 1, "name": "Fútbol" },
+          "schedules": [
+            { "weekday": 1, "starts_at": "17:00", "ends_at": "18:30", "venue": { "name": "Cancha 1" } }
+          ],
+          "instructors": [ { "name": "Carlos Gómez" } ]
+        }
+      }
+    ],
+    "medical": {
+      "blood_type": "O+",
+      "allergies": "Penicilina",
+      "conditions": null,
+      "medications": null,
+      "emergency_contact": { "name": "Ana Benítez", "phone": "0981 123 456" },
+      "fit_until": "2027-03-01"
+    },
+    "permissions": { "view_medical": true }
+  }
+}
+```
+
+- `weekday`: ISO (1 = lunes … 7 = domingo). `venue` puede ser `null`.
+- `medical` es `null` si el usuario no puede ver la ficha médica, o si el alumno todavía no tiene ficha (`permissions.view_medical` distingue los dos casos). La ven: el tutor del alumno, el alumno adulto, el instructor de un grupo del alumno en la temporada actual y los roles con el permiso `ViewMedical:Student`.
+- Los horarios van dentro del grupo; no hay endpoint aparte.
+
+### Invitaciones de tutores
+
+Una invitación creada desde un tutor (panel o importación) queda vinculada a él. Al aceptarla, el tutor se asocia a la cuenta y desde ese momento `GET students` devuelve sus hijos.

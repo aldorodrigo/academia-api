@@ -299,4 +299,38 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
 - Organizaciones suspendidas: bloqueo en app, API, panel e invitaciones; el super admin sigue entrando.
 - Módulos: los habilita la plataforma; el admin de la organización solo los ve.
 
-### Próximo: Sprint 2 — académico ("Mis hijos" primero en la app)
+### Sprint 2 — académico
+- **Contrato:** `GET students` y `GET students/{id}` en `docs/API_V1.md` (primero), después la app y la API.
+- **App** (aldorodrigo/academia-app, rama `sprint-2-mis-hijos`): "Mis hijos" en el inicio (edad, grupo, estado),
+  ficha `/hijos/:id` con datos, inscripción (grupo, horarios, técnicos), tutores y ficha médica si la API la manda
+  (aviso de apto vencido); "Mis inscripciones" para el alumno adulto.
+- **API y panel:**
+  - Modelos: `Venue`, `Program` (criterio por año de nacimiento o nivel), `Group` (edades o nivel, cupo, instructores),
+    `Schedule`, `Family`, `Student` (alumno adulto con `user_id`), `Guardian`, `guardian_student` con parentesco,
+    `MedicalRecord` (datos clínicos cifrados), `Enrollment` con estados; una sola temporada actual por organización.
+  - `StudentPolicy::viewMedical`: permiso `ViewMedical:Student`, tutor del alumno, alumno adulto e instructor de su grupo.
+  - Endpoints con API Resources (`app/Http/Resources/Api/V1`); `404` para alumnos ajenos.
+  - Panel simplificado:
+    - **Académico:** Categorías, Jugadores, Inscripciones, Temporadas.
+    - **Personas:** Miembros, Invitaciones, Tutores.
+    - Disciplinas y sedes se crean desde el formulario de Categoría; con una sola disciplina no se pregunta.
+    - Familia automática e invisible (`Family::syncFor`): los hermanos que comparten tutor quedan juntos.
+  - **Alta de jugador en un paso** (`RegisterStudent`):
+    - datos, categoría sugerida por fecha de nacimiento (`Group::suggestFor`), temporada y estado;
+    - tutores, reutilizando los ya cargados por correo, con invitación a la app;
+    - un menor necesita al menos un tutor.
+
+    Si el chico ya existe (por documento, o por nombre + fecha de nacimiento), el formulario lo avisa y lleva a su ficha.
+  - **Reinscripción:**
+    - acción "Inscribir" en la ficha (también con `?action=enroll`), con disciplina si hay varias, categoría sugerida y aviso si ya está en otra disciplina;
+    - **pase de temporada** en bloque (Inscripciones → Pase de temporada, `TransferSeason`);
+    - las inscripciones de temporadas anteriores quedan "Finalizada" solas.
+  - Importación Excel/CSV de alumnos + hasta dos tutores: `ImportStudentRow` usa `RegisterStudent`, se puede reimportar sin duplicar, la categoría es opcional (se sugiere por edad) y la invitación es opcional.
+  - Invitaciones con `guardian_id`: al aceptar, el tutor queda vinculado y la app muestra sus hijos.
+  - Seeder de desarrollo: `tutor@academia.test` y `tecnico@academia.test` (`password`).
+- **Probado de punta a punta:** tutor sembrado → login en la app web en un navegador real → inicio con sus dos hijos →
+  ficha con grupo, horarios, técnico, tutores y ficha médica.
+- Pendiente: foto del alumno en el panel (medialibrary está, falta el plugin de Filament); permisos finos por rol en Shield; vista del instructor
+  en la app (Fase 2).
+
+### Próximo: Sprint 3 — finanzas (estado de cuenta por hijo y por familia, primero en la app)

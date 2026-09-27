@@ -20,8 +20,10 @@ use Spatie\Activitylog\Support\LogOptions;
  * reenviar) y viaja por email/QR. Un solo uso; vence a los VALID_DAYS días.
  *
  * roles: [{role: 'tesorero', starts_on: '2026-01-01'|null, ends_on: '2027-12-31'|null}]
+ *
+ * guardian_id: invitación enviada a un tutor cargado; al aceptarla se vincula a la cuenta.
  */
-#[Fillable(['organization_id', 'email', 'roles', 'token_hash', 'invited_by', 'expires_at', 'accepted_at', 'accepted_user_id', 'revoked_at'])]
+#[Fillable(['organization_id', 'email', 'roles', 'guardian_id', 'token_hash', 'invited_by', 'expires_at', 'accepted_at', 'accepted_user_id', 'revoked_at'])]
 #[Hidden(['token_hash'])]
 class Invitation extends Model
 {
@@ -103,6 +105,14 @@ class Invitation extends Model
         return collect($this->roles)
             ->map(fn (array $role) => OrganizationRole::labelFor($role['role'], $this->organization))
             ->all();
+    }
+
+    /**
+     * @return BelongsTo<Guardian, $this>
+     */
+    public function guardian(): BelongsTo
+    {
+        return $this->belongsTo(Guardian::class);
     }
 
     /**

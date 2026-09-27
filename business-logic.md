@@ -101,6 +101,11 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - **Temporada:** período (ej. 2026). Una sola temporada `actual` por organización.
 - **Inscripción** = alumno + grupo + temporada. Un alumno puede tener varias (ej. fútbol y pádel).
 - Estados de inscripción: `pendiente`, `activo`, `becado`, `suspendido`, `baja`.
+- Una inscripción de una temporada que ya no es la actual está **finalizada** (sin estado propio):
+  no genera cuotas ni se muestra en la app, y queda como historial. Solo generan cuota las
+  inscripciones `activo` de la temporada actual (`Enrollment::billable()`).
+- **Pase de temporada:** se reinscribe en bloque a los jugadores `activo`, `becado` o `pendiente`
+  de la temporada anterior, con la categoría que corresponde por edad; los que no siguen quedan como están.
 - Criterio de grupo por programa: año de nacimiento (fútbol) o nivel (pádel, danza).
 - **Familia:** agrupa alumnos y tutores. Un tutor puede tener varios hijos; un hijo varios tutores.
 - Alumno adulto sin tutor: es su propio responsable.

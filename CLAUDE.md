@@ -84,6 +84,22 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Invitaciones: `CreateInvitation` / `AcceptInvitation` (`app/Actions/Invitations`). El token solo
   existe en claro al crear o reenviar; se guarda hasheado.
 - Contrato de la API para la app: `docs/API_V1.md`. Plan del proyecto: `docs/PLAN.md`.
+- Invitación de un tutor cargado: `CreateInvitation::forGuardian()`; al aceptarla, `guardians.user_id` queda vinculado.
+
+### Académico
+- Programa → Grupo → Horarios; `Enrollment` = alumno + grupo + temporada (`Season::currentOrNull()`, una sola actual).
+- "Mis hijos": `Student::inChargeOf($user)` (tutor vinculado o alumno adulto con `user_id`).
+- Ficha médica: siempre chequear `can('viewMedical', $student)` (`StudentPolicy`); los campos clínicos van cifrados.
+- Alta de jugador: `App\Actions\Students\RegisterStudent` (datos + inscripción + tutores + invitación). La usan
+  el formulario "Nuevo jugador" y la importación (`ImportStudentRow` adapta la fila; el importer corre en cola y
+  recibe `organization_id` en `options`).
+- Familia: automática e invisible (`Family::syncFor($student)`), sin menú ni campo en el panel.
+- Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season, $program)`.
+- Campos de inscripción (alta, acción "Inscribir", pestaña Inscripciones): `App\Filament\Support\EnrollmentForm`.
+- Inscripciones de temporadas anteriores: finalizadas solas (`Enrollment::isFinished()`); solo generan cuota
+  las de `Enrollment::billable()`. Pase de temporada: `App\Actions\Enrollments\TransferSeason`.
+- Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
+- Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
 
 ### Dinero
 - Montos en **enteros** (guaraníes, sin decimales). Nunca `float` para dinero.

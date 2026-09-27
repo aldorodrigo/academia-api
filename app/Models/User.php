@@ -103,12 +103,30 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     }
 
     /**
+     * Tiene el rol vigente en la organización (respeta mandatos).
+     */
+    public function hasCurrentRole(Organization $organization, OrganizationRole $role): bool
+    {
+        return $this->currentRoleAssignments($organization)
+            ->contains(fn (RoleAssignment $assignment) => $assignment->role->name === $role->value);
+    }
+
+    /**
      * Administrador de la organización (rol admin vigente).
      */
     public function isOrganizationAdmin(Organization $organization): bool
     {
-        return $this->currentRoleAssignments($organization)
-            ->contains(fn (RoleAssignment $assignment) => $assignment->role->name === OrganizationRole::Admin->value);
+        return $this->hasCurrentRole($organization, OrganizationRole::Admin);
+    }
+
+    /**
+     * Grupos que dirige como instructor.
+     *
+     * @return BelongsToMany<Group, $this>
+     */
+    public function instructedGroups(): BelongsToMany
+    {
+        return $this->belongsToMany(Group::class, 'group_instructor')->withTimestamps();
     }
 
     public function canAccessPanel(Panel $panel): bool

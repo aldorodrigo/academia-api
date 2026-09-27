@@ -4,6 +4,7 @@ namespace App\Actions\Invitations;
 
 use App\Enums\OrganizationRole;
 use App\Mail\InvitationMail;
+use App\Models\Guardian;
 use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\User;
@@ -23,15 +24,17 @@ class CreateInvitation
     public function __construct(private CurrentOrganization $current) {}
 
     /**
+     * Con $guardian, al aceptarla el tutor queda vinculado a la cuenta y ve a sus hijos.
+     *
      * @param  list<array{role: string, starts_on?: ?string, ends_on?: ?string}>  $roles
      * @return array{0: Invitation, 1: string}
      */
-    public function handle(Organization $organization, string $email, array $roles, ?User $invitedBy = null): array
+    public function handle(Organization $organization, string $email, array $roles, ?User $invitedBy = null, ?Guardian $guardian = null): array
     {
         $roles = $this->normalizeRoles($roles);
         $email = mb_strtolower(trim($email));
 
-        return $this->current->run($organization, function (Organization $organization) use ($email, $roles, $invitedBy) {
+        return $this->current->run($organization, function (Organization $organization) use ($email, $roles, $invitedBy, $guardian) {
             // Una sola invitación pendiente por persona: la nueva reemplaza a las anteriores.
             Invitation::query()
                 ->where('email', $email)
@@ -45,6 +48,7 @@ class CreateInvitation
                 'organization_id' => $organization->id,
                 'email' => $email,
                 'roles' => $roles,
+                'guardian_id' => $guardian?->id,
                 'token_hash' => Invitation::hashToken($token),
                 'invited_by' => $invitedBy?->id,
                 'expires_at' => now()->addDays(Invitation::VALID_DAYS),
@@ -61,9 +65,29 @@ class CreateInvitation
      */
     public function resend(Invitation $invitation): string
     {
-        [, $token] = $this->handle($invitation->organization, $invitation->email, $invitation->roles, $invitation->invitedBy);
+        [, $token] = $this->handle($invitation->organization, $invitation->email, $invitation->roles, $invitation->invitedBy, $invitation->guardian);
 
         return $token;
+    }
+
+    /**
+     * Invitación como tutor para un tutor cargado (panel o importación).
+     *
+     * @return array{0: Invitation, 1: string}
+     */
+    public function forGuardian(Guardian $guardian, ?User $invitedBy = null): array
+    {
+        if (blank($guardian->email)) {
+            throw ValidationException::withMessages(['email' => 'El tutor no tiene email.']);
+        }
+
+        return $this->handle(
+            $guardian->organization,
+            $guardian->email,
+            [['role' => OrganizationRole::Guardian->value]],
+            $invitedBy,
+            $guardian,
+        );
     }
 
     /**
