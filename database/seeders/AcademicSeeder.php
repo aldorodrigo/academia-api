@@ -28,12 +28,13 @@ class AcademicSeeder extends Seeder
     public function run(): void
     {
         $organization = app(CurrentOrganization::class)->get();
-        $season = Season::currentOrNull();
+        $season = Season::query()->active()->orderByDesc('starts_on')->first();
 
         $canchas = collect(['Cancha 1', 'Cancha 2'])
             ->map(fn (string $name) => Venue::query()->firstOrCreate(['name' => $name]));
 
         $futbol = Program::query()->firstOrCreate(['name' => 'Fútbol'], ['group_criterion' => GroupCriterion::BirthYear]);
+        $season?->programs()->syncWithoutDetaching([$futbol->id]);
 
         $groups = collect([8, 10, 12, 14])->mapWithKeys(function (int $age, int $i) use ($futbol, $canchas) {
             $group = $futbol->groups()->firstOrCreate(

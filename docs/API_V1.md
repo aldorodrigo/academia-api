@@ -360,7 +360,7 @@ Morosos: familias con cuotas vencidas hace al menos `min_months` meses (por defe
 
 - `contact` puede ser `null` (familia sin tutor con teléfono).
 
-## Sprint 4c (contrato)
+## Sprint 4c (implementado)
 
 Temporadas por disciplina, vigentes por fechas (puede haber varias a la vez: la anual de fútbol y una colonia),
 con plan de cobro propio (mensual, quincenal, semanal o por día). Los campos anteriores no cambian.
