@@ -267,10 +267,17 @@ describe('estado de cuenta', function () {
 
         $response = $this->actingAs($tutor, 'sanctum')->getJson('/api/v1/account', ['X-Organization' => 'jakare'])->assertOk();
 
-        expect($response->json('data'))->toMatchArray(['balance' => 450000, 'due_now' => 150000, 'upcoming' => 300000])
-            ->and($response->json('data.students.0'))->toMatchArray(['due_now' => 150000, 'upcoming' => 300000])
-            ->and(collect($response->json('data.charges'))->where('is_upcoming', true)->count())->toBe(2)
-            ->and($response->json('data.charges.2'))->toMatchArray([
+        // La inscripción a una temporada que todavía no empezó también es próxima.
+        $next = season(['name' => '2028', 'starts_on' => '2028-01-01', 'ends_on' => '2028-12-31']);
+        Tariff::factory()->create(['fee_concept_id' => FeeConcept::enrollmentFee($this->jakare)->id, 'season_id' => $next->id, 'amount' => 100000, 'valid_from' => '2028-01-01']);
+        enroll($next);
+
+        $response = $this->actingAs($tutor, 'sanctum')->getJson('/api/v1/account', ['X-Organization' => 'jakare'])->assertOk();
+
+        expect($response->json('data'))->toMatchArray(['balance' => 550000, 'due_now' => 150000, 'upcoming' => 400000])
+            ->and($response->json('data.students.0'))->toMatchArray(['due_now' => 150000, 'upcoming' => 400000])
+            ->and(collect($response->json('data.charges'))->where('is_upcoming', true)->count())->toBe(3)
+            ->and(collect($response->json('data.charges'))->firstWhere('period_start', '2027-01-01'))->toMatchArray([
                 'season' => ['id' => $season->id, 'name' => '2027'],
                 'period_start' => '2027-01-01',
                 'period_end' => '2027-01-31',

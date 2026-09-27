@@ -166,14 +166,19 @@ class Charge extends Model
     }
 
     /**
-     * Cuota creada por adelantado: falta pagar algo y su período todavía no empezó.
+     * Próxima: falta pagar algo y su período todavía no empezó (cuotas creadas por
+     * adelantado) o, si no tiene período (inscripción), su temporada todavía no empezó.
      */
     public function isUpcoming(): bool
     {
-        return $this->period_start !== null
-            && $this->voided_at === null
-            && $this->period_start->gt($this->organization->today())
-            && $this->pendingAmount() > 0;
+        if ($this->voided_at !== null) {
+            return false;
+        }
+
+        $today = $this->organization->today();
+        $startsOn = $this->period_start ?? $this->season?->starts_on;
+
+        return $startsOn !== null && $startsOn->gt($today) && $this->pendingAmount() > 0;
     }
 
     /**
