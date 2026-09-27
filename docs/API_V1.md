@@ -257,3 +257,103 @@ Pagos en el estado de cuenta. `GET account` y `GET students/{id}/account` **se a
 - `receipt_url`: link firmado y temporal (30 minutos) al recibo en PDF; se abre sin token. Vencido o alterado → `403`.
 - `credit_generated`: lo que el pago dejó como saldo a favor.
 - Un pago anulado viene con `voided: true`, no cuenta para los cargos y su recibo sale con la marca "ANULADO".
+
+## Sprint 4b (contrato)
+
+Informes para quien tiene el permiso "Ver informes" (comisión). Requieren token + organización; sin el permiso responden `403`.
+
+### `GET organization` (se amplía)
+
+`membership.permissions`: lista de permisos del usuario que usa la app. Por ahora: `"view_reports"`.
+
+```json
+"membership": { "roles": [ … ], "permissions": ["view_reports"] }
+```
+
+### Descargas
+
+Cada informe trae `pdf_url` y `xlsx_url`: links firmados y temporales (30 minutos) que se abren sin token (vencidos o alterados → `403`).
+
+### `GET reports/balance?from=2026-09-01&to=2026-09-30`
+
+Ingresos y gastos del período (por defecto, el mes actual en la fecha local).
+
+```json
+{
+  "data": {
+    "from": "2026-09-01",
+    "to": "2026-09-30",
+    "opening_balance": 1200000,
+    "closing_balance": 1850000,
+    "income": {
+      "total": 2100000,
+      "lines": [
+        { "label": "Cuota mensual", "amount": 1800000 },
+        { "label": "Inscripción", "amount": 200000 },
+        { "label": "Saldo a favor", "amount": 100000 }
+      ]
+    },
+    "expenses": {
+      "total": 1450000,
+      "lines": [
+        { "label": "Alquiler de cancha", "amount": 1200000 },
+        { "label": "Árbitros", "amount": 250000 }
+      ]
+    },
+    "accounts": [
+      { "name": "Caja", "balance": 350000 },
+      { "name": "Banco Itaú", "balance": 1500000 }
+    ],
+    "pending_expenses": 1200000,
+    "pdf_url": "https://…",
+    "xlsx_url": "https://…"
+  }
+}
+```
+
+- `opening_balance` / `closing_balance`: suma de todas las cuentas al inicio y al final del período. `accounts[].balance`: saldo al final del período.
+- Ingresos por concepto (según a qué se imputó cada pago; lo no imputado va como "Saldo a favor"). Gastos pagados por categoría. Transferencias entre cuentas no cuentan; anulados tampoco.
+- `pending_expenses`: gastos pendientes de pago que vencen en el período.
+
+### `GET reports/balances`
+
+Saldos por familia (con algo pendiente o saldo a favor), de la que más debe a la que menos.
+
+```json
+{
+  "data": {
+    "totals": { "pending": 3250000, "overdue": 1800000, "credit": 90300 },
+    "families": [
+      { "family": "Familia Benítez", "students": ["Mateo", "Sofía"], "pending": 270000, "overdue": 150000, "credit": 0 }
+    ],
+    "pdf_url": "https://…",
+    "xlsx_url": "https://…"
+  }
+}
+```
+
+### `GET reports/delinquents?min_months=1`
+
+Morosos: familias con cuotas vencidas hace al menos `min_months` meses (por defecto 1), de mayor a menor deuda vencida.
+
+```json
+{
+  "data": {
+    "total": 1800000,
+    "families": [
+      {
+        "family": "Familia Ortiz",
+        "students": ["Diego"],
+        "overdue": 450000,
+        "oldest_due_on": "2026-07-10",
+        "months_overdue": 3,
+        "contact": { "name": "Rosa Ortiz", "phone": "0981 222 333" }
+      }
+    ],
+    "pdf_url": "https://…",
+    "xlsx_url": "https://…"
+  }
+}
+```
+
+- `contact` puede ser `null` (familia sin tutor con teléfono).
