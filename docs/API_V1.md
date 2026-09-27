@@ -219,3 +219,41 @@ Misma forma con un solo alumno en `students`. Responde `404` si el alumno no est
 - `charges`: los de la temporada actual y cualquier cargo impago anterior; sin los anulados. Ordenados por vencimiento, del más nuevo al más viejo.
 - `period` es `null` en los cargos que no son mensuales (inscripción, torneo…). `group` puede ser `null` en cargos manuales.
 - `adjustments[].amount` lleva signo: negativo para descuentos y becas, positivo para recargos (desde el Sprint 4).
+
+## Sprint 4a (contrato)
+
+Pagos en el estado de cuenta. `GET account` y `GET students/{id}/account` **se amplían** (los campos anteriores no cambian).
+
+### En cada cargo
+
+- `paid_amount`: lo cubierto por pagos no anulados (incluye el descuento por pronto pago).
+- `pending_amount`: lo que falta pagar. `status` es `pagado` cuando llega a 0.
+- Si al pagarlo se aplicó pronto pago, aparece en `adjustments`: `{ "type": "pronto_pago", "label": "Pronto pago −10 %", "amount": -15000 }`.
+
+### En la cuenta
+
+- `credit`: saldo a favor de la familia (lo pagado de más que todavía no se aplicó). Se aplica solo al próximo cargo.
+- `balance`: suma de `pending_amount` menos `credit` (nunca negativo). `overdue`: lo vencido pendiente.
+- `payments`: últimos pagos de la familia, del más nuevo al más viejo.
+
+```json
+{
+  "id": 90,
+  "receipt_number": "000123",
+  "received_on": "2026-09-20",
+  "amount": 300000,
+  "method": "transferencia",
+  "method_label": "Transferencia",
+  "voided": false,
+  "receipt_url": "https://api.example.com/recibos/90?expires=…&signature=…",
+  "allocations": [
+    { "charge_id": 501, "description": "Cuota septiembre 2026", "student_first_name": "Sofía", "amount": 60000 }
+  ],
+  "credit_generated": 90000
+}
+```
+
+- `method`: `efectivo`, `transferencia` o `billetera`.
+- `receipt_url`: link firmado y temporal (30 minutos) al recibo en PDF; se abre sin token. Vencido o alterado → `403`.
+- `credit_generated`: lo que el pago dejó como saldo a favor.
+- Un pago anulado viene con `voided: true`, no cuenta para los cargos y su recibo sale con la marca "ANULADO".
