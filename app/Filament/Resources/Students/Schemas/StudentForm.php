@@ -2,19 +2,21 @@
 
 namespace App\Filament\Resources\Students\Schemas;
 
-use App\Enums\EnrollmentStatus;
 use App\Enums\GuardianRelationship;
+use App\Filament\Resources\Students\Pages\EditStudent;
+use App\Filament\Support\EnrollmentForm;
 use App\Filament\Support\Terms;
-use App\Models\Group;
 use App\Models\Guardian;
-use App\Models\Season;
 use App\Models\Student;
+use Closure;
+use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
+use Filament\Schemas\Components\Callout;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
@@ -24,26 +26,52 @@ use Illuminate\Validation\Rules\Unique;
 
 class StudentForm
 {
+    public const ALREADY_LOADED = 'Ya está cargado: inscribilo desde su ficha.';
+
     public static function configure(Schema $schema): Schema
     {
         return $schema->components([
+            // Al crear: si el chico ya está cargado, se lo inscribe desde su ficha (no se duplica).
+            Callout::make(fn (Get $get) => ($existing = self::existing($get))
+                ? "{$existing->full_name} ya está cargado".($existing->currentEnrollments->isEmpty() ? '.' : ' ('.self::enrollmentsSummary($existing).').')
+                : null)
+                ->description('Para inscribirlo en otra disciplina o en la nueva temporada, hacelo desde su ficha.')
+                ->warning()
+                ->visible(fn (Get $get, string $operation) => $operation === 'create' && self::existing($get) !== null)
+                ->actions([
+                    Action::make('enrollExisting')
+                        ->label('Inscribirlo')
+                        ->url(fn ($livewire) => ($existing = self::existingFrom($livewire->data ?? []))
+                            ? EditStudent::getUrl(['record' => $existing, 'action' => 'enroll'])
+                            : null),
+                ])
+                ->columnSpanFull(),
             // La organización la asigna el panel (tenant activo); nunca se elige a mano.
             Section::make('Datos')->columnSpanFull()->columns(3)->schema([
-                TextInput::make('first_name')->label('Nombre')->required()->maxLength(255),
-                TextInput::make('last_name')->label('Apellido')->required()->maxLength(255),
+                TextInput::make('first_name')->label('Nombre')->required()->maxLength(255)
+                    ->live(onBlur: true)
+                    ->rules(fn (Get $get, string $operation) => [function (string $attribute, mixed $value, Closure $fail) use ($get, $operation) {
+                        if ($operation === 'create' && self::existing($get) !== null) {
+                            $fail(self::ALREADY_LOADED);
+                        }
+                    }]),
+                TextInput::make('last_name')->label('Apellido')->required()->maxLength(255)->live(onBlur: true),
                 TextInput::make('document')->label('Documento')->maxLength(30)
+                    ->live(onBlur: true)
                     ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, ?Student $record) => $rule
-                        ->where('organization_id', filament()->getTenant()?->getKey())),
+                        ->where('organization_id', filament()->getTenant()?->getKey()))
+                    ->validationMessages(['unique' => fn (string $operation) => $operation === 'create'
+                        ? self::ALREADY_LOADED
+                        : 'Ya hay otro jugador con este documento.']),
                 DatePicker::make('birth_date')
                     ->label('Fecha de nacimiento')
                     ->required()
                     ->maxDate(now())
                     ->live(onBlur: true)
                     // Al crear, sugiere la categoría que corresponde por edad.
-                    ->afterStateUpdated(function (?string $state, Set $set, string $operation) {
-                        $season = Season::currentOrNull();
-                        if ($operation === 'create' && $state && $season && ($group = Group::suggestFor(Carbon::parse($state), $season))) {
-                            $set('group_id', $group->id);
+                    ->afterStateUpdated(function (Get $get, Set $set, string $operation) {
+                        if ($operation === 'create' && ($groupId = EnrollmentForm::suggestedGroupId($get, null))) {
+                            $set('group_id', $groupId);
                         }
                     }),
                 TextInput::make('shirt_size')->label('Talle')->maxLength(10),
@@ -90,29 +118,8 @@ class StudentForm
     private static function enrollmentAndGuardians(): array
     {
         return [
-            Section::make('Inscripción')->visibleOn('create')->columnSpanFull()->columns(3)->schema([
-                Select::make('group_id')
-                    ->label(Terms::label('group', 'Categoría'))
-                    ->options(fn () => Group::query()->with('program')->where('is_active', true)->orderBy('name')->get()
-                        ->mapWithKeys(fn (Group $group) => [$group->id => "{$group->name} · {$group->program->name}"]))
-                    ->required()
-                    ->searchable()
-                    ->helperText('Se sugiere según la fecha de nacimiento.'),
-                Select::make('season_id')
-                    ->label('Temporada')
-                    ->options(fn () => Season::query()->orderByDesc('starts_on')->pluck('name', 'id'))
-                    ->default(fn () => Season::currentOrNull()?->id)
-                    ->required(),
-                Select::make('status')
-                    ->label('Estado')
-                    ->options([
-                        EnrollmentStatus::Active->value => EnrollmentStatus::Active->label(),
-                        EnrollmentStatus::Scholarship->value => EnrollmentStatus::Scholarship->label(),
-                        EnrollmentStatus::Pending->value => EnrollmentStatus::Pending->label(),
-                    ])
-                    ->default(EnrollmentStatus::Active->value)
-                    ->required(),
-            ]),
+            Section::make('Inscripción')->visibleOn('create')->columnSpanFull()->columns(4)
+                ->schema(EnrollmentForm::fields(details: false)),
             Section::make(ucfirst(Terms::plural('guardian', 'Tutor')))
                 ->description('Con correo se les puede mandar la invitación a la app: al aceptarla ven a sus hijos.')
                 ->visibleOn('create')
@@ -149,6 +156,36 @@ class StudentForm
                         ]),
                 ]),
         ];
+    }
+
+    private static function existing(Get $get): ?Student
+    {
+        return self::existingFrom([
+            'document' => $get('document'),
+            'first_name' => $get('first_name'),
+            'last_name' => $get('last_name'),
+            'birth_date' => $get('birth_date'),
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private static function existingFrom(array $data): ?Student
+    {
+        return Student::findExisting(
+            $data['document'] ?? null,
+            $data['first_name'] ?? null,
+            $data['last_name'] ?? null,
+            $data['birth_date'] ?? null,
+        )?->loadMissing('currentEnrollments.group.program', 'currentEnrollments.season');
+    }
+
+    private static function enrollmentsSummary(Student $student): string
+    {
+        return $student->currentEnrollments
+            ->map(fn ($e) => "{$e->group->name} · {$e->group->program->name} · {$e->season->name}")
+            ->join(', ');
     }
 
     private static function isMinor(?string $birthDate): bool

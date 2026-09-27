@@ -6,6 +6,8 @@ use App\Enums\EnrollmentStatus;
 use App\Models\Concerns\BelongsToOrganization;
 use Database\Factories\EnrollmentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -44,6 +46,46 @@ class Enrollment extends Model
             'enrolled_on' => 'date',
             'ended_on' => 'date',
         ];
+    }
+
+    /**
+     * Inscripciones de la temporada actual.
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function current(Builder $query): void
+    {
+        $query->whereHas('season', fn (Builder $season) => $season->where('is_current', true));
+    }
+
+    /**
+     * Las que generan cuota: temporada actual y estado activo (regla del Sprint 3).
+     *
+     * @param  Builder<self>  $query
+     */
+    #[Scope]
+    protected function billable(Builder $query): void
+    {
+        $query->current()->where('status', EnrollmentStatus::Active);
+    }
+
+    /**
+     * Se cierra sola: de una temporada que ya no es la actual (salvo las dadas de baja).
+     */
+    public function isFinished(): bool
+    {
+        return ! $this->season->is_current && $this->status !== EnrollmentStatus::Withdrawn;
+    }
+
+    public function statusLabel(): string
+    {
+        return $this->isFinished() ? 'Finalizada' : $this->status->label();
+    }
+
+    public function statusColor(): string
+    {
+        return $this->isFinished() ? 'gray' : $this->status->getColor();
     }
 
     /**

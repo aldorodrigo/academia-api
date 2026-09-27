@@ -320,14 +320,17 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
     - tutores, reutilizando los ya cargados por correo, con invitación a la app;
     - un menor necesita al menos un tutor.
 
-    Las inscripciones siguientes se hacen desde la ficha del jugador; la lista de inscripciones sirve para ver y cambiar estados.
+    Si el chico ya existe (por documento, o por nombre + fecha de nacimiento), el formulario lo avisa y lleva a su ficha.
+  - **Reinscripción:**
+    - acción "Inscribir" en la ficha (también con `?action=enroll`), con disciplina si hay varias, categoría sugerida y aviso si ya está en otra disciplina;
+    - **pase de temporada** en bloque (Inscripciones → Pase de temporada, `TransferSeason`);
+    - las inscripciones de temporadas anteriores quedan "Finalizada" solas.
   - Importación Excel/CSV de alumnos + hasta dos tutores: `ImportStudentRow` usa `RegisterStudent`, se puede reimportar sin duplicar, la categoría es opcional (se sugiere por edad) y la invitación es opcional.
   - Invitaciones con `guardian_id`: al aceptar, el tutor queda vinculado y la app muestra sus hijos.
   - Seeder de desarrollo: `tutor@academia.test` y `tecnico@academia.test` (`password`).
 - **Probado de punta a punta:** tutor sembrado → login en la app web en un navegador real → inicio con sus dos hijos →
   ficha con grupo, horarios, técnico, tutores y ficha médica.
-- Pendiente: foto del alumno en el panel (medialibrary está, falta el plugin de Filament); pase automático de grupo al
-  abrir temporada (`Group::birthYearsFor` ya calcula los años); permisos finos por rol en Shield; vista del instructor
+- Pendiente: foto del alumno en el panel (medialibrary está, falta el plugin de Filament); permisos finos por rol en Shield; vista del instructor
   en la app (Fase 2).
 
 ### Próximo: Sprint 3 — finanzas (estado de cuenta por hijo y por familia, primero en la app)

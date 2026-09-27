@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Enrollments;
 
 use App\Enums\EnrollmentStatus;
 use App\Filament\Resources\Enrollments\Pages\ManageEnrollments;
+use App\Filament\Resources\Enrollments\Pages\SeasonTransfer;
 use App\Filament\Resources\Students\StudentResource;
 use App\Filament\Support\Terms;
 use App\Models\Enrollment;
@@ -57,7 +58,9 @@ class EnrollmentResource extends Resource
                 TextColumn::make('group.program.name')->label(Terms::label('program', 'Disciplina')),
                 TextColumn::make('group.name')->label(Terms::label('group', 'Categoría'))->sortable(),
                 TextColumn::make('season.name')->label('Temporada'),
-                TextColumn::make('status')->label('Estado')->badge(),
+                TextColumn::make('status')->label('Estado')->badge()
+                    ->formatStateUsing(fn (Enrollment $record) => $record->statusLabel())
+                    ->color(fn (Enrollment $record) => $record->statusColor()),
                 TextColumn::make('enrolled_on')->label('Desde')->date('d/m/Y')->toggleable(),
             ])
             ->filters([
@@ -77,7 +80,10 @@ class EnrollmentResource extends Resource
                     ->icon(Heroicon::OutlinedArrowPath)
                     ->schema([Select::make('status')->label('Estado')->options(EnrollmentStatus::class)->required()])
                     ->authorizeIndividualRecords('update')
-                    ->action(fn (Collection $records, array $data) => $records->each->update(['status' => $data['status']])),
+                    // Las finalizadas (temporadas anteriores) no cambian.
+                    ->action(fn (Collection $records, array $data) => $records
+                        ->reject(fn (Enrollment $record) => $record->isFinished())
+                        ->each->update(['status' => $data['status']])),
             ]);
     }
 
@@ -89,11 +95,15 @@ class EnrollmentResource extends Resource
             ->fillForm(fn (Enrollment $record) => ['status' => $record->status])
             ->schema([Select::make('status')->label('Estado')->options(EnrollmentStatus::class)->required()])
             ->authorize('update')
+            ->hidden(fn (Enrollment $record) => $record->isFinished())
             ->action(fn (Enrollment $record, array $data) => $record->update(['status' => $data['status']]));
     }
 
     public static function getPages(): array
     {
-        return ['index' => ManageEnrollments::route('/')];
+        return [
+            'index' => ManageEnrollments::route('/'),
+            'transfer' => SeasonTransfer::route('/pase'),
+        ];
     }
 }

@@ -37,7 +37,7 @@ beforeEach(function () {
     $this->admin = memberOf($this->jakare);
     app(RoleAssigner::class)->assign($this->jakare, $this->admin, OrganizationRole::Admin);
 
-    Season::factory()->for($this->jakare)->create(['name' => '2026', 'is_current' => true]);
+    Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true]);
     $this->program = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
 });
 
@@ -195,7 +195,7 @@ it('se inscribe solo desde la ficha del jugador y no permite duplicados', functi
 
     $manager()
         ->callTableAction('create', data: ['group_id' => $group->id])
-        ->assertHasTableActionErrors(['group_id' => 'unique']);
+        ->assertHasTableActionErrors(['group_id']);
 
     expect(Enrollment::query()->count())->toBe(1);
 });

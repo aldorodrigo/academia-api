@@ -2,23 +2,17 @@
 
 namespace App\Filament\Resources\Students\RelationManagers;
 
-use App\Enums\EnrollmentStatus;
+use App\Filament\Support\EnrollmentForm;
 use App\Filament\Support\Terms;
-use App\Models\Group;
-use App\Models\Season;
+use App\Models\Enrollment;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DeleteAction;
 use Filament\Actions\EditAction;
-use Filament\Forms\Components\DatePicker;
-use Filament\Forms\Components\Select;
-use Filament\Forms\Components\Textarea;
 use Filament\Resources\RelationManagers\RelationManager;
-use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Tables\Columns\TextColumn;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Validation\Rules\Unique;
 
 class EnrollmentsRelationManager extends RelationManager
 {
@@ -28,42 +22,9 @@ class EnrollmentsRelationManager extends RelationManager
 
     protected static ?string $modelLabel = 'inscripción';
 
-    /**
-     * Único formulario de inscripción: se inscribe desde la ficha del jugador.
-     */
     public function form(Schema $schema): Schema
     {
-        return $schema->columns(2)->components([
-            Select::make('group_id')
-                ->label(Terms::label('group', 'Categoría'))
-                ->relationship('group', 'name', fn (Builder $query) => $query->with('program')->where('is_active', true))
-                ->getOptionLabelFromRecordUsing(fn (Group $group) => "{$group->name} · {$group->program->name}")
-                ->required()
-                ->preload()
-                ->default(fn () => ($season = Season::currentOrNull()) && $this->getOwnerRecord()->birth_date
-                    ? Group::suggestFor($this->getOwnerRecord()->birth_date, $season)?->id
-                    : null)
-                // Una inscripción por jugador, grupo y temporada.
-                ->unique(
-                    ignoreRecord: true,
-                    modifyRuleUsing: fn (Unique $rule, Get $get) => $rule
-                        ->where('student_id', $this->getOwnerRecord()->getKey())
-                        ->where('season_id', $get('season_id')),
-                )
-                ->validationMessages(['unique' => 'Ya está inscripto en ese grupo esta temporada.']),
-            Select::make('season_id')
-                ->label('Temporada')
-                ->relationship('season', 'name')
-                ->default(fn () => Season::currentOrNull()?->id)
-                ->required(),
-            Select::make('status')
-                ->label('Estado')
-                ->options(EnrollmentStatus::class)
-                ->default(EnrollmentStatus::Active)
-                ->required(),
-            DatePicker::make('enrolled_on')->label('Fecha de inscripción')->default(now()),
-            Textarea::make('notes')->label('Notas')->columnSpanFull(),
-        ]);
+        return $schema->columns(2)->components(EnrollmentForm::fields($this->getOwnerRecord()));
     }
 
     public function table(Table $table): Table
@@ -74,12 +35,18 @@ class EnrollmentsRelationManager extends RelationManager
                 TextColumn::make('season.name')->label('Temporada')->sortable(),
                 TextColumn::make('group.program.name')->label(Terms::label('program', 'Disciplina')),
                 TextColumn::make('group.name')->label(Terms::label('group', 'Categoría')),
-                TextColumn::make('status')->label('Estado')->badge(),
+                TextColumn::make('status')->label('Estado')->badge()
+                    ->formatStateUsing(fn (Enrollment $record) => $record->statusLabel())
+                    ->color(fn (Enrollment $record) => $record->statusColor()),
                 TextColumn::make('enrolled_on')->label('Desde')->date('d/m/Y'),
                 TextColumn::make('ended_on')->label('Baja')->date('d/m/Y')->placeholder('—'),
             ])
             ->defaultSort('season_id', 'desc')
-            ->headerActions([CreateAction::make()])
-            ->recordActions([EditAction::make(), DeleteAction::make()]);
+            ->headerActions([CreateAction::make()->label('Inscribir')])
+            // Las de temporadas anteriores están finalizadas: quedan como historial.
+            ->recordActions([
+                EditAction::make()->hidden(fn (Enrollment $record) => $record->isFinished()),
+                DeleteAction::make()->hidden(fn (Enrollment $record) => $record->isFinished()),
+            ]);
     }
 }

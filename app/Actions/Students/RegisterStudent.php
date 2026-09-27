@@ -39,6 +39,7 @@ class RegisterStudent
      * @param  array{first_name: string, last_name: string, birth_date: CarbonImmutable|string, document?: ?string, shirt_size?: ?string, position?: ?string, notes?: ?string, user_id?: ?int}  $data
      * @param  list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string, invite?: bool}>  $guardians
      * @param  EnrollmentStatus|null  $status  null: se mantiene el de una inscripción existente (o Activo si es nueva)
+     * @param  bool  $mustBeNew  el formulario "Nuevo jugador" no reutiliza un jugador existente (la importación sí)
      */
     public function handle(
         Organization $organization,
@@ -48,12 +49,13 @@ class RegisterStudent
         ?EnrollmentStatus $status,
         array $guardians = [],
         ?User $invitedBy = null,
+        bool $mustBeNew = false,
     ): Student {
         $this->invited = 0;
 
-        return $this->current->run($organization, function () use ($data, $group, $season, $status, $guardians, $invitedBy) {
-            [$student, $toInvite] = DB::transaction(function () use ($data, $group, $season, $status, $guardians) {
-                $student = $this->student($data);
+        return $this->current->run($organization, function () use ($data, $group, $season, $status, $guardians, $invitedBy, $mustBeNew) {
+            [$student, $toInvite] = DB::transaction(function () use ($data, $group, $season, $status, $guardians, $mustBeNew) {
+                $student = $this->student($data, $mustBeNew);
                 $toInvite = $this->guardians($student, $guardians);
 
                 if (! $student->isAdult() && $student->guardians()->doesntExist()) {
@@ -77,19 +79,15 @@ class RegisterStudent
     /**
      * @param  array<string, mixed>  $data
      */
-    private function student(array $data): Student
+    private function student(array $data, bool $mustBeNew): Student
     {
         $birthDate = CarbonImmutable::parse($data['birth_date'])->toDateString();
 
-        $student = filled($data['document'] ?? null)
-            ? Student::query()->where('document', $data['document'])->first()
-            : null;
+        $student = Student::findExisting($data['document'] ?? null, $data['first_name'], $data['last_name'], $birthDate);
 
-        $student ??= Student::query()
-            ->where('first_name', $data['first_name'])
-            ->where('last_name', $data['last_name'])
-            ->whereDate('birth_date', $birthDate)
-            ->first();
+        if ($student !== null && $mustBeNew) {
+            throw new ImportRowException('Ya está cargado: inscribilo desde su ficha.');
+        }
 
         $student ??= new Student;
 

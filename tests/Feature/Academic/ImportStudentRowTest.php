@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Mail;
 beforeEach(function () {
     Mail::fake();
     $this->jakare = Organization::factory()->create(['slug' => 'jakare']);
-    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'is_current' => true]);
+    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true]);
     $program = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $this->group = Group::factory()->for($program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id]);
 });

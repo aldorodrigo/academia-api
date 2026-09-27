@@ -36,6 +36,7 @@ class CreateStudent extends CreateRecord
                 $data['status'] instanceof EnrollmentStatus ? $data['status'] : EnrollmentStatus::from($data['status']),
                 $data['guardians'] ?? [],
                 auth()->user(),
+                mustBeNew: true,
             );
         } catch (ImportRowException $e) {
             Notification::make()->danger()->title($e->getMessage())->send();

@@ -87,16 +87,17 @@ class Group extends Model
 
     /**
      * Categoría que corresponde por año de nacimiento en la temporada (ej. 2016 → Sub-10).
-     * Solo si hay exactamente una; con varias disciplinas se puede acotar por nombre.
+     * Solo si hay exactamente una; con varias disciplinas se puede acotar por disciplina (modelo o nombre).
      */
-    public static function suggestFor(CarbonInterface $birthDate, Season $season, ?string $programName = null): ?self
+    public static function suggestFor(CarbonInterface $birthDate, Season $season, Program|string|null $program = null): ?self
     {
         $matches = static::query()
             ->where('is_active', true)
             ->whereNotNull('max_age')
-            ->whereHas('program', fn (Builder $program) => $program
+            ->whereHas('program', fn (Builder $programs) => $programs
                 ->where('group_criterion', GroupCriterion::BirthYear)
-                ->when($programName, fn (Builder $query) => $query->where('name', $programName)))
+                ->when($program instanceof Program, fn (Builder $query) => $query->whereKey($program->getKey()))
+                ->when(is_string($program), fn (Builder $query) => $query->where('name', $program)))
             ->get()
             ->filter(fn (Group $group) => in_array($birthDate->year, $group->birthYearsFor($season), true));
 

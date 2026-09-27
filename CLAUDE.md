@@ -94,7 +94,11 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   el formulario "Nuevo jugador" y la importación (`ImportStudentRow` adapta la fila; el importer corre en cola y
   recibe `organization_id` en `options`).
 - Familia: automática e invisible (`Family::syncFor($student)`), sin menú ni campo en el panel.
-- Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season)`.
+- Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season, $program)`.
+- Campos de inscripción (alta, acción "Inscribir", pestaña Inscripciones): `App\Filament\Support\EnrollmentForm`.
+- Inscripciones de temporadas anteriores: finalizadas solas (`Enrollment::isFinished()`); solo generan cuota
+  las de `Enrollment::billable()`. Pase de temporada: `App\Actions\Enrollments\TransferSeason`.
+- Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
 
 ### Dinero

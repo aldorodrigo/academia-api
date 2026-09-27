@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Support\Carbon;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
 
@@ -58,6 +59,24 @@ class Student extends Model implements HasMedia
         $query->where(fn (Builder $query) => $query
             ->where('user_id', $user->id)
             ->orWhereHas('guardians', fn (Builder $guardians) => $guardians->where('guardians.user_id', $user->id)));
+    }
+
+    /**
+     * El mismo chico ya cargado: por documento o por nombre + apellido + fecha de nacimiento.
+     */
+    public static function findExisting(?string $document, ?string $firstName, ?string $lastName, mixed $birthDate): ?self
+    {
+        $byDocument = filled($document) ? static::query()->where('document', trim($document))->first() : null;
+
+        if ($byDocument !== null || blank($firstName) || blank($lastName) || blank($birthDate)) {
+            return $byDocument;
+        }
+
+        return static::query()
+            ->where('first_name', trim($firstName))
+            ->where('last_name', trim($lastName))
+            ->whereDate('birth_date', Carbon::parse($birthDate)->toDateString())
+            ->first();
     }
 
     /**
