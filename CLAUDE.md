@@ -50,6 +50,7 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Panel: http://localhost/admin — `admin@academia.test` / `password` (super admin, solo dev).
 - Horizon: http://localhost/horizon (solo super admin).
 - Mailpit: http://localhost:8025
+- Con `APP_PORT`/`VITE_PORT` en `.env` (ej. 8080/5174) para convivir con otros proyectos Sail; imagen propia `academia-api/app`.
 
 ## Arquitectura
 
