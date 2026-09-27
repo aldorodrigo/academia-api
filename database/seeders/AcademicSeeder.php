@@ -107,6 +107,8 @@ class AcademicSeeder extends Seeder
             );
             $this->enroll($student, $groups[$age], $season, EnrollmentStatus::Active);
         }
+
+        $this->call(BillingSeeder::class);
     }
 
     private function member(User $user, OrganizationRole $role): void

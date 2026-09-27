@@ -153,7 +153,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
    - Tipos: hermanos, beca, convenio, pronto pago u otro; por porcentaje o monto fijo; con conceptos a los que aplica y vigencia.
    - Hermanos: según la posición del hijo entre las inscripciones activas de la familia.
    - El orden de aplicación es configurable.
-10. **Becas:** parcial o total, con motivo, vigencia y **aprobación** (resolución, o presidente + tesorero).
+10. **Becas:** parcial o total, con motivo, vigencia y **aprobación** de quien tenga el permiso "Aprobar becas".
 11. **Mora:**
     - Configurable por organización y opcionalmente por concepto: vencimiento, gracia, recargo fijo o %, frecuencia y tope.
     - Se puede desactivar, o exonerar un cargo con motivo.
@@ -204,8 +204,8 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 | **0. Fundaciones** ✅ | Base Flutter: login, selector de organización, sesión segura, CI | Laravel 13 + Sail, Filament, Shield, Sanctum, Horizon, tenancy, Pest, CI, Docker de producción |
 | **1. Organizaciones y roles** | Aceptar invitación (link/QR → crear cuenta o entrar), perfiles y roles del usuario (tutor + cargo), vocabulario y módulos de la organización, "Mi cuenta" | Invitaciones (email/link/QR) y sus endpoints, cargos con mandato que vencen solos, feature flags, vocabulario en el panel, roles en `GET organization`, tests de aislamiento |
 | **2. Académico** | "Mis hijos": lista, ficha, grupo, horarios e inscripciones | Temporadas, programas, grupos, horarios, alumnos, tutores, familias, ficha médica, inscripciones con estados, importación Excel, endpoints de "mis hijos" |
-| **3. Finanzas** | Estado de cuenta por hijo y consolidado por familia (cargos con detalle de ajustes) | Cuentas y libro mayor, tarifario, cuota mensual automática, descuentos, becas, mora, endpoints de cuenta corriente |
-| **4. Cobros y gastos** | Pagos y recibos PDF en la cuenta, saldo a favor | Pagos con imputación, recibo PDF, gastos con aprobación, proveedores, transferencias, informes (balance, saldos, morosos; PDF/Excel) |
+| **3. Finanzas** ✅ | Estado de cuenta por hijo y consolidado por familia (cargos con detalle de ajustes) | Tarifario, cuota mensual automática, descuentos, becas, vencimientos y configuración de mora, cargos manuales, endpoints de cuenta corriente |
+| **4. Cobros y gastos** | Pagos y recibos PDF en la cuenta, saldo a favor | Cuentas (caja, banco, billetera) y libro mayor, pagos con imputación, recibo PDF, saldo a favor, recargos por mora y pronto pago, gastos con aprobación, proveedores, transferencias, informes (balance, saldos, morosos; PDF/Excel) |
 | **5. Avisos** | Avisos con lectura, push (firebase_messaging), registro del dispositivo | Avisos segmentados con lectura, push por lotes vía Horizon, recordatorios de cuotas, documentación OpenAPI |
 | **6. Publicación** | Pulido, builds: web + Android (interno) + iOS (TestFlight) | Ajustes de rendimiento y seguridad; backups verificados |
 | **7. Piloto Jakare** | Correcciones del uso real | Carga de datos reales, capacitación, invitación a padres |
@@ -333,4 +333,20 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
 - Pendiente: foto del alumno en el panel (medialibrary está, falta el plugin de Filament); permisos finos por rol en Shield; vista del instructor
   en la app (Fase 2).
 
-### Próximo: Sprint 3 — finanzas (estado de cuenta por hijo y por familia, primero en la app)
+### Sprint 3 — finanzas (cargos)
+- **Contrato:** `GET account` (consolidado de la familia) y `GET students/{id}/account`.
+- **App:** tarjeta "Total a pagar / Vencido" en el inicio, `/estado-de-cuenta` (saldo total y por hijo, Pendientes/Todos,
+  detalle desplegable de cada cargo) y sección "Estado de cuenta" en la ficha del hijo.
+- **API y panel:**
+  - Conceptos (cuota mensual e inscripción del sistema), tarifas por temporada y categoría con vigencia.
+  - Cargos inmutables (se anulan con motivo) con ajustes: beca, hermanos (por posición), convenio y otro, en el orden configurable.
+  - Cuota mensual automática idempotente (lock + índice único), comando `charges:generate` el día 1 y botón "Generar cuotas" con vista previa.
+  - Cargo de inscripción automático al inscribir (si hay tarifa); cargos manuales para jugadores o categorías.
+  - Becas pendientes → aprobadas por quien tiene "Aprobar becas"; la inscripción pasa a `becado`.
+  - Vencimiento (día del mes + gracia) y estado "Vencido"; recargo por mora solo configurado.
+  - Panel "Finanzas" (Cargos, Tarifas, Descuentos, Becas), sección Cobros en Configuración y pestaña Cuenta del jugador.
+- **Probado de punta a punta** en el panel: tarifa → hermanos → beca aprobada → cuotas de septiembre y octubre
+  (Sofía: ₲ 150.000 − beca ₲ 75.000 − hermanos ₲ 15.000 = ₲ 60.000) → volver a generar no duplica.
+- **Se pasó al Sprint 4:** cuentas y libro mayor, recargos por mora y descuento por pronto pago (dependen de los pagos).
+
+### Próximo: Sprint 4 — cobros y gastos (pagos en la cuenta primero en la app)

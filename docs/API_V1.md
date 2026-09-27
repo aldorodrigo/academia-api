@@ -169,7 +169,7 @@ Ficha del alumno. Responde `404` si no existe **o no está a cargo del usuario**
 
 Una invitación creada desde un tutor (panel o importación) queda vinculada a él. Al aceptarla, el tutor se asocia a la cuenta y desde ese momento `GET students` devuelve sus hijos.
 
-## Sprint 3 (contrato)
+## Sprint 3 (implementado)
 
 Estado de cuenta. Requieren token + organización. Montos en guaraníes enteros.
 
