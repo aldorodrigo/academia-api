@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Enums\InvitationStatus;
 use App\Enums\OrganizationRole;
 use App\Models\Concerns\BelongsToOrganization;
+use App\Support\Phone;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
@@ -23,7 +24,7 @@ use Spatie\Activitylog\Support\LogOptions;
  *
  * guardian_id: invitación enviada a un tutor cargado; al aceptarla se vincula a la cuenta.
  */
-#[Fillable(['organization_id', 'email', 'roles', 'guardian_id', 'token_hash', 'invited_by', 'expires_at', 'accepted_at', 'accepted_user_id', 'revoked_at'])]
+#[Fillable(['organization_id', 'email', 'phone', 'name', 'roles', 'group_ids', 'guardian_id', 'token_hash', 'invited_by', 'expires_at', 'accepted_at', 'accepted_user_id', 'revoked_at'])]
 #[Hidden(['token_hash'])]
 class Invitation extends Model
 {
@@ -35,6 +36,7 @@ class Invitation extends Model
     {
         return [
             'roles' => 'array',
+            'group_ids' => 'array',
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',
             'revoked_at' => 'datetime',
@@ -72,6 +74,44 @@ class Invitation extends Model
     public static function urlFor(string $token): string
     {
         return rtrim(config('app.frontend_url'), '/').'/invitacion/'.$token;
+    }
+
+    /**
+     * La cuenta que ya tiene ese correo o celular (las sin verificar no cuentan: se reemplazan).
+     */
+    public function existingUser(): ?User
+    {
+        return User::query()
+            ->where(fn ($query) => $query->where(fn ($q) => $q->whereNotNull('phone_verified_at')->orWhereNotNull('email_verified_at'))
+                ->orWhereHas('memberships'))
+            ->where(fn ($query) => filled($this->phone)
+                ? $query->where('phone', $this->phone)
+                : $query->where('email', $this->email))
+            ->first();
+    }
+
+    /**
+     * Correo o celular al que va, para mostrar.
+     */
+    public function contact(): string
+    {
+        return Phone::display($this->phone) ?? (string) $this->email;
+    }
+
+    /**
+     * Link de WhatsApp al celular invitado, con el texto y el link ya escritos.
+     */
+    public function whatsappUrl(string $token): ?string
+    {
+        if (blank($this->phone)) {
+            return null;
+        }
+
+        $first = Str::before(trim((string) $this->name), ' ');
+        $greeting = $first === '' ? 'Hola' : "Hola {$first}";
+        $text = "{$greeting}, te invito a sumarte a {$this->organization->name}. Creá tu cuenta desde este link: ".self::urlFor($token);
+
+        return 'https://wa.me/'.Phone::digits($this->phone).'?text='.rawurlencode($text);
     }
 
     public function status(): InvitationStatus

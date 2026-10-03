@@ -19,7 +19,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'features', 'billing', 'class_reminder_hours', 'instructor_reminder_hours', 'suspended_at', 'suspension_reason'])]
+#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'features', 'billing', 'class_reminder_hours', 'instructor_reminder_hours', 'suspended_at', 'suspension_reason', 'self_service', 'onboarding_skipped', 'onboarding_dismissed_at', 'onboarding_completed_at'])]
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
@@ -88,6 +88,10 @@ class Organization extends Model
             'class_reminder_hours' => 'integer',
             'instructor_reminder_hours' => 'integer',
             'suspended_at' => 'datetime',
+            'self_service' => 'boolean',
+            'onboarding_skipped' => 'array',
+            'onboarding_dismissed_at' => 'datetime',
+            'onboarding_completed_at' => 'datetime',
         ];
     }
 

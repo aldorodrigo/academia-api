@@ -3,7 +3,6 @@
 namespace App\Http\Requests\Api\V1;
 
 use App\Models\Invitation;
-use App\Models\User;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rules\Password;
 
@@ -28,7 +27,7 @@ class AcceptInvitationRequest extends FormRequest
      */
     public function rules(): array
     {
-        $newAccount = ! User::query()->where('email', $this->invitation->email)->exists();
+        $newAccount = $this->invitation->existingUser() === null;
 
         return [
             'name' => $newAccount ? ['required', 'string', 'max:255'] : ['prohibited'],

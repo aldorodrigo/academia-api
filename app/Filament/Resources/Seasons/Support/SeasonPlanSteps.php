@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Seasons\Support;
 
+use App\Enums\BillingUnit;
 use App\Enums\DailyBasis;
 use App\Enums\DailyGrouping;
 use App\Enums\FeeFrequency;
@@ -176,10 +177,10 @@ class SeasonPlanSteps
                     Radio::make('daily_basis')
                         ->label('¿Qué días se cuentan?')
                         ->options(DailyBasis::class)
-                        ->descriptions([
+                        ->descriptions(fn (Get $get) => [
                             DailyBasis::Training->value => 'Los días con horario de la categoría.',
-                            DailyBasis::Attendance->value => 'Las clases a las que vino, según la asistencia. La cuota se crea al terminar el período.',
-                            DailyBasis::Taught->value => 'Las clases que se dieron: las suspendidas no se cobran y las recuperaciones sí. La cuota se crea al terminar el período.',
+                            DailyBasis::Attendance->value => 'Las clases a las que vino, según la asistencia. La cuota se crea '.self::afterUnit($get).'.',
+                            DailyBasis::Taught->value => 'Las clases que se dieron: las suspendidas no se cobran y las recuperaciones sí. La cuota se crea '.self::afterUnit($get).'.',
                         ])
                         ->disabled(fn (?Season $record) => self::hasCharges($record))
                         ->required(fn (Get $get) => self::value($get, 'fee_frequency') === FeeFrequency::Daily->value)
@@ -226,7 +227,7 @@ class SeasonPlanSteps
             Hidden::make('base_fee_amount'),
             Hidden::make('base_enrollment_fee_amount'),
             Toggle::make('has_group_amounts')
-                ->label('¿Alguna '.Terms::singular('group', 'categoría').' paga distinto?')
+                ->label('¿Hay '.Terms::plural('group', 'categoría').' que pagan distinto?')
                 ->live()
                 ->hiddenOn('edit'),
             Repeater::make('group_amounts')
@@ -248,19 +249,32 @@ class SeasonPlanSteps
                 ])
                 ->addActionLabel('Agregar '.Terms::singular('group', 'categoría'))
                 ->defaultItems(1),
-            TextInput::make('due_days')
-                ->label('Vence a los … días de empezar el período')
-                ->numeric()
-                ->minValue(0)
-                ->maxValue(60)
+            // Se pregunta como se piensa ("¿Qué día del mes vence?"); se guarda en días desde que empieza.
+            Select::make('due_days')
+                ->label(fn (Get $get) => self::unit($get)?->dueQuestion() ?? '¿Cuándo vence?')
+                ->options(fn (Get $get) => self::unit($get)?->dueOptions(filled($get('due_days')) ? (int) $get('due_days') : null) ?? [])
+                ->selectablePlaceholder(false)
                 ->required()
-                ->suffix('días')
-                ->live(onBlur: true)
+                ->live()
                 ->helperText(fn (Get $get) => SeasonPlan::dueExample(self::state($get))),
         ];
     }
 
-    /** La cuota se crea al terminar el período (por clase asistida o dictada). */
+    /**
+     * Mes, quincena, semana o día del plan elegido.
+     */
+    private static function unit(Get $get): ?BillingUnit
+    {
+        return SeasonPlan::unit(self::state($get));
+    }
+
+    /** "al terminar cada mes"; agrupado por día, "unos días después de cada clase". */
+    private static function afterUnit(Get $get): string
+    {
+        return (self::unit($get) ?? BillingUnit::Month)->createdAfter();
+    }
+
+    /** La cuota se crea al terminar el mes, la semana… (por clase asistida o dictada). */
     private static function byAttendance(Get $get): bool
     {
         return self::value($get, 'fee_frequency') === FeeFrequency::Daily->value
@@ -276,28 +290,31 @@ class SeasonPlanSteps
             Radio::make('issue_upfront')
                 ->label('¿Cuándo se crean las cuotas de cada jugador?')
                 ->options(fn (Get $get) => self::byAttendance($get)
-                    ? ['0' => 'Al terminar cada período']
+                    ? ['0' => ucfirst(self::afterUnit($get))]
                     : [
-                        '0' => 'Al empezar cada período (recomendado)',
+                        '0' => ucfirst((self::unit($get) ?? BillingUnit::Month)->createdAtStart()).' (recomendado)',
                         ...(self::canIssueUpfront() ? ['1' => 'Todas juntas al inscribir'] : []),
                     ])
                 ->descriptions(fn (Get $get) => [
                     '0' => self::byAttendance($get)
                         ? (self::value($get, 'daily_basis') === DailyBasis::Taught->value
-                            ? 'Con las clases que se dieron en el período (unos días después de que termina).'
+                            ? 'Con las clases que se dieron '.(self::unit($get) ?? BillingUnit::Month)->within().'.'
                             : 'Con las clases a las que vino según la asistencia (unos días después, para que el técnico pueda corregirla).')
-                        : 'El padre ve solo la cuota del período en curso.',
-                    '1' => 'El padre ve las '.SeasonPlan::periodsCount(self::state($get)).' cuotas: la del período en curso en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
+                        : 'La familia ve solo la cuota '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().'.',
+                    '1' => 'La familia ve las '.SeasonPlan::periodsCount(self::state($get)).' cuotas: la '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().' en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
                 ])
                 ->formatStateUsing(fn ($state) => filter_var($state, FILTER_VALIDATE_BOOLEAN) ? '1' : '0')
                 ->required(),
             Section::make('Opciones avanzadas')
                 ->collapsed()
                 ->compact()
+                // Agrupado por día o por clase asistida no hay "mitad de…".
+                ->visible(fn (Get $get) => (self::unit($get)?->allowsMidway() ?? true) && ! self::byAttendance($get))
                 ->schema([
                     Radio::make('mid_period')
-                        ->label('Si alguien se inscribe a mitad de período, del período en curso se cobra')
-                        ->options(MidPeriod::class)
+                        ->label(fn (Get $get) => 'Si alguien se inscribe '.(self::unit($get) ?? BillingUnit::Month)->midway().', se cobra')
+                        ->options(fn (Get $get) => MidPeriod::optionsFor(self::unit($get)))
+                        ->dehydratedWhenHidden()
                         ->helperText('Es el valor por defecto: se puede cambiar en cada inscripción.')
                         ->required(),
                 ]),
@@ -329,7 +346,7 @@ class SeasonPlanSteps
             ->join('');
 
         return new HtmlString('<p style="font-weight:600;margin-bottom:4px">Primeras cuotas de cada jugador</p>'
-            .'<table style="font-size:0.875rem"><thead><tr><th style="text-align:left;padding-right:12px">Período</th>'
+            .'<table style="font-size:0.875rem"><thead><tr><th style="text-align:left;padding-right:12px">Cuota</th>'
             .'<th style="text-align:left;padding-right:12px">Vence</th><th style="text-align:right">Monto</th></tr></thead>'
             ."<tbody>{$rows}</tbody></table>");
     }

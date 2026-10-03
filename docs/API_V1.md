@@ -12,7 +12,7 @@ Este documento se reemplaza por la especificación OpenAPI en el Sprint 5.
 
 | Método | Ruta | Auth | Descripción |
 |---|---|---|---|
-| POST | `auth/token` | — | `{email, password, device_name}` → `201 {token}` |
+| POST | `auth/token` | — | `{login, password, device_name}` → `201 {token}` (`login`: celular o correo; desde el Sprint 5d) |
 | DELETE | `auth/token` | token | Revoca el token actual → `204` |
 | GET | `me` | token | Usuario y organizaciones activas |
 | GET | `organization` | token + org | Datos, vocabulario y módulos de la organización activa |
@@ -884,3 +884,384 @@ Usan los momentos de `me/notification-settings` (alumno o tutor: `guardian.offse
   cancelación del profesor `lesson_cancelled` (`/reservas`), "Te queda 1 clase del paquete" `pack_low` (`/inicio`) y
   "Tu paquete con Carlos vence el viernes 15/11 y te quedan 2 clases" 7 días y 1 día antes `pack_expiring`
   (`/particulares/7/reservar`).
+
+## Sprint 5d (implementado)
+
+Alta autoservicio y guía "Primeros pasos" del administrador (`PLAN_PRIMEROS_PASOS.md`, etapa 1). El panel usa las
+mismas acciones; todo lo que decide (pasos hechos, plantillas, fechas y montos de la temporada) lo calcula la API.
+
+### Cuenta
+
+La cuenta se identifica con el **celular (WhatsApp)** o, si la persona no tiene WhatsApp, con el **correo**. Se
+ingresa con cualquiera de los dos y la contraseña. El código de 6 dígitos llega por WhatsApp (plantilla de
+autenticación de Meta) o por correo; solo se usa al crear la cuenta y para recuperar la contraseña.
+
+Los teléfonos se guardan y se devuelven en formato internacional (`+595981123456`). La API acepta cualquier forma
+habitual (`0981 123 456`, `981123456`, `+595 981 123456`); tiene que ser un **celular** de un país permitido
+(Paraguay, Argentina, Brasil, Uruguay, Bolivia por defecto). Si no, `422` sobre `phone`/`login`: "Ingresá un número
+de celular válido." o "Ese país no está habilitado. Creá la cuenta con tu correo.".
+
+**Protección contra bots.** Los endpoints que mandan códigos (`auth/register`, `auth/verify/resend`,
+`auth/password/forgot`) reciben `captcha_token` (Cloudflare Turnstile) cuando la plataforma lo tiene configurado;
+sin token válido, `422` sobre `captcha_token` ("Confirmá que no sos un robot."). También aceptan un campo trampa
+`website` que tiene que llegar vacío. Además hay límites por destino (1 por minuto, 3 por hora, 5 por día), por IP y
+por cuenta, y un tope diario de la plataforma: al superarlos, `429 {message: "Esperá un momento antes de pedir otro
+código."}` sin decir cuál se superó. Si WhatsApp está pausado por la plataforma, el código va por correo cuando la
+cuenta lo tiene; si no, `429 {message: "No pudimos mandar el código. Probá de nuevo más tarde."}`.
+
+#### `POST auth/token` (se amplía)
+
+`{ "login": "0981 123 456", "password": "…", "device_name": "app" }` → `201 {token}`. `login` es el celular o el
+correo (con `@`). Se sigue aceptando `email` en lugar de `login`. Error `422` sobre `login`: "Estas credenciales no
+coinciden con nuestros registros." Después de 10 contraseñas incorrectas, la cuenta queda bloqueada 15 minutos
+(`429`, "Demasiados intentos. Probá de nuevo en unos minutos.").
+
+#### `POST auth/register` (público, con throttle)
+
+`{ "name": "Laura Gómez", "phone": "0981 123 456", "email": null, "password": "…", "password_confirmation": "…",
+"device_name": "app", "terms": true, "captcha_token": "…" }` → `201 {token}`.
+
+- Se manda `phone` **o** `email` ("Ingresá tu celular o tu correo."; los dos juntos: "Elegí el celular o el
+  correo.", así nadie ocupa el correo de otro sin confirmarlo). El celular se guarda en formato internacional.
+- Crea el usuario sin organizaciones y le manda el **código de 6 dígitos** (vence a los 15 minutos) por WhatsApp si
+  hay `phone`, si no por correo.
+- `422` si el número o el correo ya tienen una cuenta verificada ("Ya hay una cuenta con ese número. Ingresá con tu
+  contraseña." / "… con ese correo …"). Una cuenta **sin verificar** no ocupa el número ni el correo: el registro
+  nuevo la reemplaza. Las cuentas sin verificar se borran a las 24 horas.
+- `422` si la contraseña tiene menos de 8 caracteres o no coincide, o sin `terms` ("Tenés que aceptar los términos.").
+- Guarda la versión y la fecha de los términos aceptados.
+
+#### `POST auth/verify`
+
+`{ "code": "123456" }` → `204`. Verifica el canal por el que se mandó el código (WhatsApp o correo). `422` sobre
+`code`: "El código no es correcto.", "El código venció. Pedí uno nuevo." o, después de 5 intentos fallidos,
+"Demasiados intentos. Pedí un código nuevo.".
+
+#### `POST auth/verify/resend` (con throttle)
+
+`{ "channel": "whatsapp" | "mail", "captcha_token": "…" }` → `204`. Manda un código nuevo (el anterior deja de valer).
+`channel` es opcional: por defecto WhatsApp si la cuenta tiene celular. `mail` solo si la cuenta tiene correo
+(`422` sobre `channel`: "Tu cuenta no tiene correo."). `429` según los límites de arriba.
+
+#### `POST auth/password/forgot` (público, con throttle)
+
+`{ "login": "0981 123 456", "captcha_token": "…" }` → `204` siempre, haya o no una cuenta ("Si hay una cuenta con ese
+número, te mandamos un código."). El código va por el canal de `login` (WhatsApp si es un número, correo si es un
+correo) y vence a los 15 minutos.
+
+#### `POST auth/password/reset` (público, con throttle)
+
+`{ "login": "0981 123 456", "code": "123456", "password": "…", "password_confirmation": "…", "device_name": "app" }`
+→ `201 {token}`. Cambia la contraseña, marca ese canal como verificado, cierra las otras sesiones (borra los demás
+tokens) y devuelve uno nuevo. `422` sobre `code` con los mismos mensajes que `auth/verify` (también si no hay cuenta:
+"El código no es correcto."), o sobre `password`.
+
+#### `GET me` (se amplía)
+
+Suma `"phone": "+595981123456"` (o `null`), `email` pasa a poder ser `null`, y `"verified": true` (celular o correo
+verificado). Con `false`, la app solo deja ingresar el código (o cerrar sesión). Las cuentas creadas por invitación ya
+están verificadas.
+
+### Alta del club (con sesión, sin `X-Organization`)
+
+#### `GET onboarding/templates`
+
+Lo que la app y el panel ofrecen como sugerencia:
+
+```json
+{
+  "data": {
+    "organization_types": [
+      { "value": "club", "label": "Club", "description": "Club o asociación deportiva",
+        "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Jugador", "instructor": "Técnico", "guardian": "Tutor" } },
+      { "value": "academy", "label": "Academia", "description": "Academia de deporte, danza, música o idiomas",
+        "terminology": { "program": "Disciplina", "group": "Grupo", "student": "Alumno", "instructor": "Profesor", "guardian": "Tutor" } }
+    ],
+    "terminology_options": {
+      "student": ["Jugador", "Alumno", "Alumna", "Atleta"],
+      "instructor": ["Técnico", "Profesor", "Profesora", "Instructor", "Entrenador"],
+      "group": ["Categoría", "Grupo", "Nivel", "Clase"]
+    },
+    "programs": [
+      { "name": "Fútbol", "group_criterion": "birth_year" },
+      { "name": "Danza", "group_criterion": "level" }
+    ],
+    "levels": ["Inicial", "Intermedio", "Avanzado"],
+    "ages": { "from": 5, "to": 16, "span": 2 }
+  }
+}
+```
+
+- Tipos: `club`, `academy`, `school` (Escuela) y `parents_association` (Comisión de padres).
+- `group_criterion`: `birth_year` (por edad: Sub-8, Sub-10…) o `level` (Inicial, Intermedio…).
+
+#### `GET organizations/slug?value=Club%20Jakare`
+
+`{ "slug": "club-jakare", "available": true, "suggestion": null }`. Pasa `value` a minúsculas y guiones; si no está
+libre (o es una palabra reservada), `available: false` y `suggestion` con una alternativa libre (`club-jakare-2`).
+
+#### `POST organizations`
+
+`{ "name": "Club Jakare", "type": "club", "slug": "club-jakare",
+"terminology": { "student": "Jugador", "instructor": "Técnico", "group": "Categoría" } }` →
+`201 { "data": { "slug": "club-jakare", "name": "Club Jakare", "type": "club" } }`.
+
+- Paraguay, ₲ y `America/Asuncion`. Crea los roles, los conceptos de cobro y la Caja, y deja al usuario como `admin`.
+- `terminology` es opcional (por defecto, la del tipo); `program` y `guardian` también se pueden mandar.
+- `403` si la cuenta no está verificada ("Verificá tu cuenta para crear un club."). `422` si el slug no está libre,
+  es reservado o no tiene solo letras minúsculas, números y guiones (3 a 40 caracteres).
+- Después, `GET me` incluye la organización nueva.
+
+### Guía (con `X-Organization`, permiso `configure_organization`)
+
+`GET organization` suma `configure_organization` en `membership.permissions` para el administrador (y el super admin).
+Sin ese permiso, los endpoints de esta sección responden `403`.
+
+#### `GET onboarding`
+
+```json
+{
+  "data": {
+    "steps": [
+      { "key": "programs", "title": "¿Qué enseñan?", "description": "Las disciplinas del club.",
+        "status": "done", "required": true, "skippable": false, "blocked_by": null,
+        "summary": "Fútbol y Básquet", "minutes": 1 },
+      { "key": "groups", "title": "Categorías y horarios", "description": "Las familias eligen la categoría al inscribirse.",
+        "status": "pending", "required": true, "skippable": false, "blocked_by": null, "summary": null, "minutes": 3 },
+      { "key": "season", "title": "Temporada y cuotas", "description": "Cuándo empieza, cuánto dura y cuánto se cobra.",
+        "status": "pending", "required": true, "skippable": false, "blocked_by": null, "summary": null, "minutes": 3 },
+      { "key": "instructors", "title": "Técnicos", "description": "Invitalos para que tomen asistencia desde la app.",
+        "status": "locked", "required": false, "skippable": true, "blocked_by": "groups", "summary": null, "minutes": 2 }
+    ],
+    "done": 1, "total": 4,
+    "next": "groups",
+    "completed": false,
+    "dismissed": false
+  }
+}
+```
+
+- `status`: `done` (existe lo que pide, aunque se haya hecho fuera de la guía), `pending`, `locked` (con `blocked_by`)
+  o `skipped`. `done` y `total` cuentan todos los pasos; un paso omitido cuenta como hecho.
+- Los títulos usan el vocabulario del club. La app dibuja los pasos que conoce por `key`, en este orden.
+- Hechos: `programs` con al menos una disciplina; `groups` con al menos una categoría activa con horario (bloqueado
+  sin disciplinas); `season` con una temporada vigente o próxima (bloqueado sin disciplinas); `instructors` con al
+  menos un técnico (con el rol vigente, invitado o el propio admin; bloqueado sin categorías).
+- `completed`: todos los pasos hechos u omitidos. `next`: el primer paso pendiente (`null` si está completa).
+- `dismissed`: la guía se cerró; no se abre sola, pero sigue la tarjeta del inicio hasta completarla.
+
+#### `PUT onboarding`
+
+`{ "dismissed": true }` → el mismo objeto. `false` la vuelve a abrir.
+
+#### `PUT onboarding/steps/{key}`
+
+`{ "skipped": true }` → el mismo objeto. `422` si el paso no se puede omitir.
+
+### Paso 1: disciplinas
+
+#### `GET setup/programs`
+
+`[{ "id": 1, "name": "Fútbol", "group_criterion": "birth_year", "groups_count": 4 }]`, por nombre.
+
+#### `POST setup/programs`
+
+`{ "programs": [ { "name": "Fútbol", "group_criterion": "birth_year" }, { "name": "Danza", "group_criterion": "level" } ] }`
+→ `201` con la lista completa. Las que ya existen con ese nombre (sin importar mayúsculas) no se duplican.
+
+#### `PUT setup/programs/{id}` · `DELETE setup/programs/{id}`
+
+`{ "name", "group_criterion" }` → la disciplina. Borrar responde `422` si tiene categorías ("Tiene categorías: borralas primero.").
+
+### Paso 2: categorías y horarios
+
+**Categoría**
+
+```json
+{
+  "id": 3, "program": { "id": 1, "name": "Fútbol" },
+  "name": "Sub-10", "min_age": 9, "max_age": 10, "level": null, "capacity": 20, "is_active": true,
+  "schedules": [ { "weekday": 2, "starts_at": "17:00", "ends_at": "18:30", "venue": { "id": 1, "name": "Cancha 1" } } ],
+  "instructors": [ { "id": 7, "name": "Carlos Gómez" } ],
+  "enrollments_count": 0
+}
+```
+
+`weekday`: 1 = lunes … 7 = domingo. Las edades son las que se cumplen en el año de la temporada.
+
+#### `GET setup/groups`
+
+Las categorías, por disciplina y nombre (incluye las inactivas).
+
+#### `POST setup/groups/suggestions`
+
+Genera nombres para revisar antes de crear:
+`{ "program_id": 1, "ages": { "from": 5, "to": 16, "span": 2 } }` →
+`[{ "name": "Sub-6", "min_age": 5, "max_age": 6, "level": null }, …, { "name": "Sub-16", "min_age": 15, "max_age": 16, "level": null }]`.
+Con criterio por nivel: `{ "program_id": 2, "levels": ["Inicial", "Avanzado"] }` → `[{ "name": "Inicial", "level": "Inicial", … }]`.
+Omite los nombres que ya existen en esa disciplina.
+
+#### `POST setup/groups`
+
+```json
+{
+  "program_id": 1,
+  "groups": [
+    { "name": "Sub-10", "min_age": 9, "max_age": 10, "level": null, "capacity": 20,
+      "schedules": [ { "weekday": 2, "starts_at": "17:00", "ends_at": "18:30" } ] }
+  ],
+  "venue": { "id": 1 }
+}
+```
+
+→ `201` con la lista de categorías creadas. `venue` es opcional: `{ "id": 1 }` o `{ "name": "Polideportivo", "address": "…" }`
+(se crea) y va en todos los horarios del pedido. `422` si un nombre se repite en la disciplina, si un horario termina
+antes de empezar o si la edad "hasta" es menor que "desde".
+
+#### `PUT setup/groups/{id}`
+
+El mismo cuerpo de una categoría (`name`, edades o nivel, `capacity`, `is_active`, `schedules` con `venue_id`
+opcional) → la categoría. Los horarios se reemplazan enteros.
+
+#### `DELETE setup/groups/{id}`
+
+`204`. `422` si tiene inscripciones ("Tiene inscripciones: desactivala en vez de borrarla.").
+
+#### `GET venues` (ya existe) · `POST setup/venues`
+
+`{ "name": "Polideportivo", "address": "Av. España 123" }` → `201 { "id": 2, "name": "Polideportivo" }`.
+
+### Paso 3: temporada y cuotas
+
+Los mismos campos y cálculos que el asistente "Nueva temporada" del panel.
+
+**Estado del asistente**
+
+```json
+{
+  "program_ids": [1], "kind": "anual", "starts_on": "2027-01-01", "ends_on": "2027-12-31", "name": "2027",
+  "fee_frequency": "mensual", "daily_basis": "entrenamiento", "daily_grouping": "mes",
+  "fee_amount": 150000, "enrollment_fee_amount": 100000,
+  "group_amounts": [ { "group_id": 3, "amount": 180000 } ],
+  "due_days": 9, "issue_upfront": false, "mid_period": "completo"
+}
+```
+
+- `kind`: `anual`, `semestral`, `mensual` o `quincenal`. `fee_frequency`: `mensual`, `quincenal`, `semanal`, `diaria`
+  o `null` (sin plan de cobro). Con `diaria`: `daily_basis` (`entrenamiento`, `asistencia` o `dictado`) y
+  `daily_grouping` (`dia`, `semana` o `mes`). `mid_period`: `proporcional`, `completo` o `proximo`.
+- `program_ids` hace falta solo si hay más de una disciplina (con una, se asigna sola).
+
+#### `GET setup/seasons`
+
+`[{ "id": 4, "name": "2027", "starts_on": "2027-01-01", "ends_on": "2027-12-31", "status": "proxima", "has_fee_plan": true }]`
+(`status`: `vigente`, `proxima` o `terminada`), por fecha de inicio descendente.
+
+#### `GET setup/seasons/new`
+
+El estado inicial sugerido (temporada anual desde el próximo 1 de enero, o desde el mes que viene en el primer
+semestre; cuota mensual que vence a los días de la configuración de cobros).
+
+#### `POST setup/seasons/preview`
+
+El estado (aunque esté incompleto) →
+
+```json
+{
+  "data": {
+    "dates": { "ends_on": "2027-12-31", "name": "2027" },
+    "plan": { "fee_frequency": "mensual", "due_days": 9,
+              "due_days_by_frequency": { "mensual": 9, "quincenal": 3, "semanal": 3, "diaria": 5 } },
+    "kinds": [ { "value": "anual", "label": "Anual", "example": "1 ene – 31 dic" } ],
+    "summary": "2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota mensual de ₲ 150.000, que vence el día 10 de cada mes. Inscripción ₲ 100.000. Cada cuota se crea al empezar cada mes.",
+    "examples": [ { "period": "enero 2027", "due_on": "10/01/2027", "amount": "₲ 150.000" } ],
+    "due_example": "Por ejemplo, «Cuota enero 2027» vence el 10/01/2027.",
+    "periods_count": 12
+  }
+}
+```
+
+- `dates`: fin y nombre sugeridos para `kind` y `starts_on` (la app los aplica al cambiar la duración o el inicio).
+- `plan`: frecuencia y vencimiento sugeridos para `kind` (la app los aplica al cambiar la duración) y el vencimiento
+  sugerido para cada frecuencia (lo aplica al cambiar la frecuencia).
+- `kinds`: cada duración con su ejemplo desde `starts_on`.
+- `terms` (null sin plan de cobro): las palabras del plan elegido, ya armadas, para no decir "período". La unidad es
+  mes, quincena, semana o día (en "por día", la de la agrupación):
+
+```json
+"terms": {
+  "unit": "semana",
+  "issue_now": "Al empezar cada semana",
+  "issue_now_help": "La familia ve solo la cuota de la semana en curso.",
+  "issue_upfront_help": "La familia ve las 52 cuotas: la de la semana en curso para pagar y el resto como próximas.",
+  "issue_after": "Al terminar cada semana",
+  "basis_after": "La cuota se crea al terminar cada semana.",
+  "midway": "Si alguien se inscribe a mitad de semana, se cobra",
+  "mid_period_options": [ { "value": "completo", "label": "La semana completa" },
+                          { "value": "proporcional", "label": "Lo que falta de la semana (proporcional)" },
+                          { "value": "proximo", "label": "Desde la semana que viene" } ],
+  "due_question": "¿Qué día de la semana vence?",
+  "due_options": [ { "value": 0, "label": "Lunes" }, { "value": 3, "label": "Jueves" } ],
+  "due_text": "el jueves de cada semana"
+}
+```
+
+  `midway` es `null` cuando no hay "mitad de…" (por día agrupado por día). `due_options` traduce `due_days`: mes →
+  "Día 1" a "Día 28"; semana → lunes a domingo; quincena → "A los 3 días (el 4 y el 19)"; día → "El mismo día",
+  "Al día siguiente"…; un valor guardado fuera de esos rangos se agrega como "N días después de empezar…".
+
+#### `POST setup/seasons`
+
+El estado → `201` con la temporada (como en `GET setup/seasons`). `422` como el panel: "Tiene que terminar después
+de empezar.", "Elegí al menos una disciplina.", monto mayor a 0 con plan de cobro, `due_days` de 0 a 60.
+
+### Paso 4: técnicos
+
+#### `GET setup/instructors`
+
+```json
+{
+  "data": {
+    "me": { "teaches": false, "group_ids": [] },
+    "instructors": [
+      { "user_id": 7, "invitation_id": null, "name": "Carlos Gómez", "email": "carlos@example.com",
+        "status": "activo", "groups": [ { "id": 3, "name": "Sub-10" } ] },
+      { "user_id": null, "invitation_id": 12, "name": "Marta Ríos", "email": "marta@example.com",
+        "status": "invitado", "groups": [ { "id": 4, "name": "Sub-12" } ] }
+    ]
+  }
+}
+```
+
+- `status`: `activo` (tiene el rol vigente), `invitado` (invitación pendiente) o `vencida`. No incluye al usuario actual (va en `me`).
+
+#### `POST setup/instructors`
+
+`{ "name": "Marta Ríos", "phone": "0981 555 444", "email": null, "group_ids": [4] }` → `201` con el técnico y
+`"link": "https://app…/invitacion/abc…"` (la única vez que se ve, para compartir por WhatsApp). Uno de `phone` o
+`email` es obligatorio ("Ingresá el celular o el correo."). Con correo, también manda la invitación por email; con
+celular, el técnico trae `"whatsapp_url": "https://wa.me/595981555444?text=…"` para mandársela a ese número. El rol es
+técnico; al aceptarla queda asignado a esas categorías. Si ya es técnico del club (mismo celular o correo), actualiza
+sus categorías sin invitar. `422` si el celular o el correo son los propios ("Para vos, usá «Yo también doy clases».").
+
+En `GET setup/instructors`, cada técnico suma `"phone"` (o `null`) y `email` puede ser `null`.
+
+#### `PUT setup/instructors/me`
+
+`{ "teaches": true, "group_ids": [3, 4] }` → el objeto de `GET setup/instructors`. Asigna (o termina) el rol de técnico
+del usuario actual y sus categorías.
+
+#### `PUT setup/instructors/{user_id}`
+
+`{ "group_ids": [3] }` → el técnico. Cambia sus categorías.
+
+#### `POST setup/invitations/{id}/resend` · `DELETE setup/invitations/{id}`
+
+Reenviar → `{ "link": "…", "whatsapp_url": "…" }` (token nuevo, 14 días más; `whatsapp_url` solo si la invitación es a un celular). Borrar → `204` (revoca la invitación pendiente).
+
+### Invitaciones (se amplía)
+
+`GET invitations/{token}` suma `"name"` (el que cargó el admin, o `null`) para completar "Nombre y apellido", y
+`"phone"`: una invitación va a un correo **o** a un celular (`email` y `phone` pueden ser `null`, nunca los dos).
+`user_exists` busca la cuenta por cualquiera de los dos. Al aceptar una invitación por celular, la cuenta nueva queda
+con ese celular verificado (el link llegó a ese WhatsApp), igual que con el correo.

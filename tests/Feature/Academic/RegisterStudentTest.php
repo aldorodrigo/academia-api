@@ -55,6 +55,15 @@ it('reutiliza el tutor por correo y los hermanos comparten familia', function ()
         ->and(Guardian::query()->sole()->family_id)->toBe($mateo->fresh()->family_id);
 });
 
+it('reconoce al tutor por el celular aunque esté escrito distinto', function () {
+    register([], [['first_name' => 'Ana', 'last_name' => 'Benítez', 'phone' => '0981 123 456']]);
+    register(['first_name' => 'Sofía', 'birth_date' => '2017-07-02'], [['first_name' => 'Ana', 'last_name' => 'B.', 'phone' => '+595 981 123456']]);
+
+    app(CurrentOrganization::class)->set($this->jakare);
+    expect(Guardian::query()->count())->toBe(1)
+        ->and(Guardian::query()->sole()->phone)->toBe('+595981123456');
+});
+
 it('invita solo a quien lo pidió, tiene correo y no usa la app', function () {
     $action = app(RegisterStudent::class);
     $withAccount = Guardian::factory()->for($this->jakare)->create(['email' => 'luis@test.com', 'user_id' => memberOf($this->jakare)->id]);

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Attendance\AttendanceAccess;
 use App\Enums\Feature;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\EnsureCanConfigureOrganization;
 use App\Models\LessonProfile;
 use App\Models\RoleAssignment;
 use App\Support\Tenancy\CurrentOrganization;
@@ -53,6 +54,10 @@ class CurrentOrganizationController extends Controller
                         ->when(
                             $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
                             fn ($permissions) => $permissions->push('teach_lessons'),
+                        )
+                        ->when(
+                            EnsureCanConfigureOrganization::allows($request, $current),
+                            fn ($permissions) => $permissions->push('configure_organization'),
                         )
                         ->values(),
                 ],

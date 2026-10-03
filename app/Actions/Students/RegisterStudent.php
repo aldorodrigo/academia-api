@@ -15,6 +15,7 @@ use App\Models\Organization;
 use App\Models\Season;
 use App\Models\Student;
 use App\Models\User;
+use App\Support\Phone;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -128,7 +129,11 @@ class RegisterStudent
 
             $familyId = $student->family_id ?? collect($resolved)->pluck('family_id')->filter()->first();
 
+            $phone = Phone::normalize($data['phone'] ?? null);
+
+            // El mismo tutor: por correo, por celular, por documento o por nombre en la familia.
             $guardian = ($email ? Guardian::query()->where('email', $email)->first() : null)
+                ?? ($phone ? Guardian::query()->where('phone', $phone)->first() : null)
                 ?? (filled($data['document'] ?? null) ? Guardian::query()->where('document', $data['document'])->first() : null)
                 ?? $this->sameNameInFamily($student, $data, $familyId)
                 ?? new Guardian;

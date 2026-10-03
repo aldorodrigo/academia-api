@@ -40,6 +40,15 @@ final readonly class BillingPeriod
      */
     public function description(FeeFrequency $frequency, ?DailyBasis $basis = null, bool $wholeMonth = false): string
     {
+        return 'Cuota '.$this->label($frequency, $basis, $wholeMonth);
+    }
+
+    /**
+     * Lo que cubre la cuota, sin "Cuota": "octubre 2026", "1.ª quincena oct 2026", "semana 12–18 oct",
+     * "14/10 (1 entrenamiento)" (los ejemplos del asistente lo muestran igual que la familia).
+     */
+    public function label(FeeFrequency $frequency, ?DailyBasis $basis = null, bool $wholeMonth = false): string
+    {
         // "ene." → "ene": más limpio en la descripción de la cuota.
         $es = fn (CarbonImmutable $date, string $format) => str_replace('.', '', $date->locale('es')->translatedFormat($format));
         $range = $this->start->month === $this->end->month
@@ -55,6 +64,6 @@ final readonly class BillingPeriod
 
         $quantity = $this->quantity !== null && $basis !== null ? ' ('.$basis->quantityLabel($this->quantity).')' : '';
 
-        return "Cuota {$label}{$quantity}";
+        return "{$label}{$quantity}";
     }
 }

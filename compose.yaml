@@ -26,6 +26,22 @@ services:
             - mariadb
             - redis
             - mailpit
+    # Worker de colas (códigos por WhatsApp/correo, push, importaciones). Misma imagen, sin puertos;
+    # supervisord lo reinicia si se cae. Después de cambiar jobs o mails: `sail artisan queue:restart`.
+    queue:
+        image: 'academia-api/app'
+        environment:
+            WWWUSER: '${WWWUSER}'
+            LARAVEL_SAIL: 1
+            SUPERVISOR_PHP_COMMAND: '/usr/bin/php /var/www/html/artisan queue:work --tries=3 --sleep=1'
+        volumes:
+            - '.:/var/www/html'
+        networks:
+            - sail
+        depends_on:
+            - mariadb
+            - redis
+            - mailpit
     mariadb:
         image: 'mariadb:11.8'
         ports:

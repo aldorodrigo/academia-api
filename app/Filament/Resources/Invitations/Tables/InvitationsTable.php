@@ -19,8 +19,9 @@ class InvitationsTable
         return $table
             ->columns([
                 TextColumn::make('email')
-                    ->label('Correo')
-                    ->searchable(),
+                    ->label('Celular o correo')
+                    ->state(fn (Invitation $record) => $record->contact())
+                    ->searchable(['email', 'phone']),
                 TextColumn::make('roles')
                     ->label('Roles')
                     ->state(fn (Invitation $record) => $record->roleLabels())
@@ -54,7 +55,7 @@ class InvitationsTable
                     ->modalDescription('Se genera un link nuevo; el anterior deja de funcionar.')
                     ->action(function (Invitation $record, Component $livewire) {
                         $token = app(CreateInvitation::class)->resend($record);
-                        $livewire->replaceMountedAction('showLink', ['token' => $token]);
+                        $livewire->replaceMountedAction('showLink', ['token' => $token, 'name' => $record->name, 'phone' => $record->phone]);
                     }),
                 Action::make('revoke')
                     ->label('Revocar')

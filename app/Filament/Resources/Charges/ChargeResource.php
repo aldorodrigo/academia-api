@@ -59,7 +59,7 @@ class ChargeResource extends Resource
                     ->description(fn (Charge $record) => $record->adjustments->pluck('label')->join(' · ') ?: null),
                 TextColumn::make('group.name')->label(Terms::label('group', 'Categoría'))->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('season.name')->label('Temporada')->toggleable(),
-                TextColumn::make('period_start')->label('Período')->toggleable()
+                TextColumn::make('period_start')->label('Corresponde a')->toggleable()
                     ->formatStateUsing(fn (Charge $record) => $record->period_start->format('d/m').' – '.$record->period_end?->format('d/m/Y')),
                 TextColumn::make('due_on')->label('Vence')->date('d/m/Y')->sortable(),
                 // Las cuotas creadas por adelantado que todavía no empezaron se ven como "Próxima".

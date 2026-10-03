@@ -2,6 +2,7 @@
 
 namespace App\Filament\Support;
 
+use App\Enums\BillingUnit;
 use App\Enums\EnrollmentStatus;
 use App\Enums\MidPeriod;
 use App\Models\Enrollment;
@@ -67,10 +68,12 @@ class EnrollmentForm
                 ->live()
                 ->afterStateUpdated(fn (Get $get, Set $set) => $set('group_id', self::suggestedGroupId($get, $student)))
                 ->validationMessages(['required' => 'No hay una temporada vigente o próxima para esa disciplina: creala en Temporadas.']),
-            // Solo si el período ya empezó (con el efecto en vivo).
+            // Solo si el mes (quincena, semana) ya empezó, con el efecto en vivo.
             Select::make('mid_period')
-                ->label('Del período en curso se cobra')
-                ->options(MidPeriod::class)
+                ->label(fn (Get $get) => ($unit = self::billingUnit($get)) === null
+                    ? 'De la cuota en curso se cobra'
+                    : 'Se inscribe '.$unit->midway().': se cobra')
+                ->options(fn (Get $get) => MidPeriod::optionsFor(self::billingUnit($get)))
                 ->default(fn (Get $get) => Season::query()->find($get('season_id'))?->mid_period?->value)
                 ->visible(fn (Get $get, $record) => ! $record instanceof Enrollment && MidPeriodPreview::applies($get))
                 ->live()
@@ -201,5 +204,13 @@ class EnrollmentForm
 
         return $others->isEmpty() ? null
             : 'También está en '.$others->map(fn (Enrollment $e) => "{$e->group->name} · {$e->group->program->name}")->join(', ', ' y ').'.';
+    }
+
+    /**
+     * Mes, quincena o semana de la temporada elegida.
+     */
+    private static function billingUnit(Get $get): ?BillingUnit
+    {
+        return filled($get('season_id')) ? Season::query()->find($get('season_id'))?->billingUnit() : null;
     }
 }

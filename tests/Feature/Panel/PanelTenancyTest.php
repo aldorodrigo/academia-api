@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\MembershipStatus;
 use App\Filament\Resources\Seasons\Pages\CreateSeason;
 use App\Models\Organization;
 use App\Models\Season;
@@ -30,8 +31,15 @@ it('un usuario no puede entrar al panel de una organización ajena', function ()
     $this->actingAs($user)->get('/admin/ajena')->assertNotFound();
 });
 
-it('un usuario sin organizaciones no accede al panel', function () {
+it('un usuario sin organizaciones va a registrar su club', function () {
     $user = User::factory()->create();
+
+    $this->actingAs($user)->get('/admin')->assertRedirect('/admin/new');
+});
+
+it('un usuario con la membresía inactiva no accede al panel', function () {
+    $user = User::factory()->create();
+    $this->jakare->memberships()->create(['user_id' => $user->id, 'status' => MembershipStatus::Inactive]);
 
     $this->actingAs($user)->get('/admin')->assertForbidden();
 });

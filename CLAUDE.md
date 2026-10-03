@@ -36,7 +36,7 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 ```bash
 ./vendor/bin/sail up -d                  # app, mariadb, redis, mailpit
 ./vendor/bin/sail artisan migrate --seed # super admin + organización Jakare
-./vendor/bin/sail artisan horizon        # procesar colas
+./vendor/bin/sail artisan horizon        # colas con panel (el servicio `queue` ya las procesa)
 ./vendor/bin/sail composer test          # Pest
 ./vendor/bin/sail composer lint          # Pint
 ./vendor/bin/sail artisan queue:restart  # después de composer require o de cambiar jobs/mails
@@ -49,7 +49,12 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 
 - Panel: http://localhost/admin — `admin@academia.test` / `password` (super admin, solo dev).
 - Horizon: http://localhost/horizon (solo super admin).
-- Mailpit: http://localhost:8025
+- Mailpit: http://localhost:8025 — con `WHATSAPP_DEV_DRIVER=mail` también llegan ahí los códigos "de WhatsApp"
+  (correo a `{número}@whatsapp.test`, ej. `595981123456@whatsapp.test`).
+- Colas: el servicio `queue` del `compose.yaml` (contenedor `academia-api-queue-1`) corre `queue:work` siempre;
+  después de cambiar jobs o mails, `sail artisan queue:restart`.
+- Turnstile en local: claves de prueba de Cloudflare `TURNSTILE_SITE_KEY=1x00000000000000000000AA` y
+  `TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA` (siempre aprueban); sin claves no se pide captcha.
 - Con `APP_PORT`/`VITE_PORT` en `.env` (ej. 8080/5174) para convivir con otros proyectos Sail; imagen propia `academia-api/app`.
 
 ## Arquitectura
@@ -72,6 +77,24 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 ### Paneles
 - **`/admin/{slug}`** (`AdminPanelProvider`): panel de cada organización (tenancy). Recursos en
   `app/Filament/Resources`, páginas en `app/Filament/Pages`.
+- **Cuenta con celular o correo** (Sprint 5d): `users.phone` (E.164, único) o `users.email`; se entra con cualquiera
+  (`User::findByLogin`, `App\Filament\Pages\Auth\Login`). Teléfonos con `App\Support\Phone` (libphonenumber, PY por
+  defecto; `mobile()`, `normalize()`, `display()`). `isVerified()` = celular o correo verificado (`hasVerifiedEmail()`
+  lo devuelve para Filament).
+- **Códigos** (crear cuenta y "Olvidé mi contraseña"): `SendVerificationCode` / `VerifyCode` / `ResetPasswordWithCode`,
+  por WhatsApp (`App\Support\WhatsApp\WhatsAppSender`: Cloud API de Meta con `WHATSAPP_TOKEN`, si no al log; job
+  `SendWhatsAppCode`) o por correo. **Todo envío pasa por `App\Support\Verification\CodeGuard`** (Turnstile, campo
+  trampa, países permitidos, límites por destino/IP/cuenta, tope diario y corte automático; pausa en
+  `platform_settings`). No mandes códigos por fuera de esas acciones.
+- **Alta autoservicio** (Sprint 5d): `/admin/register` (`RegisterAccount`, celular o correo) → código
+  (`VerifyAccount`, `->emailVerification()`) → `/admin/new` "Tu club" (`RegisterOrganization`,
+  `->tenantRegistration()`). Un usuario sin ninguna membresía puede entrar al panel solo para eso. "Olvidé mi
+  contraseña" del panel: `RequestPasswordReset` (código, no link). Invitar: `ContactField` (celular o correo).
+- **Guía "Primeros pasos"** (`App\Filament\Pages\Onboarding`, `/admin/{slug}/primeros-pasos`): checklist de
+  `App\Support\Onboarding\Checklist` (el mismo que `GET onboarding` de la app) con un panel lateral por paso;
+  el `Dashboard` propio redirige ahí mientras esté incompleta y sin cerrar. Las acciones de cada paso
+  (`CreatePrograms`, `SaveGroups`, `Seasons\CreateSeason`, `ManageInstructors`) las usan también los
+  endpoints `setup/*` de la API: no dupliques lógica en el panel ni en los controladores.
 - **`/plataforma`** (`PlatformPanelProvider`): solo super admins, sin tenancy. Organizaciones
   (alta con primer admin, suspender/reactivar, entrar al panel) y usuarios (super admins).
   Recursos en `app/Filament/Platform/Resources`. Sin organización activa los scopes no filtran.

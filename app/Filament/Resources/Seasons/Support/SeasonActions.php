@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Seasons\Support;
 
 use App\Enums\FeeFrequency;
+use App\Enums\MidPeriod;
 use App\Filament\Support\Terms;
 use App\Models\FeeConcept;
 use App\Models\Group;
@@ -57,7 +58,7 @@ class SeasonActions
                     'daily_grouping' => $data['fee_frequency'] === FeeFrequency::Daily->value ? ($data['daily_grouping'] ?? null) : null,
                     'due_days' => (int) $data['due_days'],
                     'issue_upfront' => SeasonPlanSteps::canIssueUpfront() && filter_var($data['issue_upfront'] ?? false, FILTER_VALIDATE_BOOLEAN),
-                    'mid_period' => $data['mid_period'],
+                    'mid_period' => $data['mid_period'] ?? MidPeriod::Full->value,
                 ]);
                 SeasonPlan::saveTariffs($record, $data);
 

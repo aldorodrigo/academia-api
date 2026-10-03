@@ -60,7 +60,7 @@ class ManageCharges extends ManageRecords
                     ->live(),
                 Radio::make('scope')
                     ->label('Hasta')
-                    ->options(['today' => 'Los períodos que ya empezaron', 'season' => 'Toda la temporada'])
+                    ->options(['today' => 'Hasta hoy (las cuotas que ya empezaron)', 'season' => 'Toda la temporada'])
                     ->default('today')
                     ->required()
                     ->live(),

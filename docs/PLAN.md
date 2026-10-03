@@ -2,7 +2,7 @@
 
 > Plan único. Reemplaza a `PLAN_JAKARE.md` (funcionalidades) y `PLAN_IMPLEMENTACION.md` (stack y hoja de ruta).
 > Las reglas ya implementadas viven en `business-logic.md`, que es el documento maestro: si difiere de este plan, manda `business-logic.md`.
-> Planes por funcionalidad: `PLAN_ACTIVIDADES.md` (actividades para tus hijos).
+> Planes por funcionalidad: `PLAN_ACTIVIDADES.md` (actividades para tus hijos), `PLAN_PRIMEROS_PASOS.md` (alta autoservicio y guía del administrador).
 
 - **Nombre:** pendiente. Finalistas: Crecemy, Cantemy, Nidemy, Cluppy, Crecy, Retoño, Acompaño. Mientras tanto se usa el nombre en clave `academia`.
 - **Piloto:** Club Jakare (fútbol infantil, Paraguay). Moneda ₲, zona horaria `America/Asuncion`.
@@ -54,8 +54,11 @@ Cada organización es un inquilino, con datos, usuarios, finanzas y comunicacion
 
 ### 3.1 Plataforma SaaS
 - Alta de organización: nombre, tipo, logo, colores, moneda, país, zona horaria, vocabulario y módulos.
-- Invitación de usuarios por email, link o código QR. No hay registro abierto.
-- Onboarding con un asistente inicial: crear grupos, cuentas y cuota base.
+- Invitación de usuarios por email, link o código QR (para roles: comisión, técnicos, tutores de alumnos cargados por el club).
+- Alta autoservicio: el administrador crea su cuenta (con código por email) y su club; registro abierto también para
+  las familias que llegan por el link de inscripción *(sprints 5d y 5e)*.
+- Guía "Primeros pasos" que se abre sola, en el panel y en la app: disciplinas, categorías y horarios, temporada y
+  cuotas, profesores, link de inscripción. Detalle en `PLAN_PRIMEROS_PASOS.md`.
 - Planes de suscripción por cantidad de alumnos o por módulos *(Fase 4)*.
 
 ### 3.2 Organización e institucional
@@ -218,6 +221,9 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 | **4b. Gastos e informes** ✅ | Informes para la comisión (balance, saldos, morosos; PDF/Excel) | Gastos (sueltos y recurrentes), proveedores, transferencias entre cuentas, informes (balance, saldos, morosos; PDF/Excel) |
 | **4c. Temporadas con plan de cobro** | "A pagar ahora" y "Próximas cuotas", temporada en cada cuota, temporadas próximas en la ficha | Temporadas por disciplina vigentes por fechas, asistente de temporada (duración, frecuencia, montos, cuándo se crean), generador diario, mitad de período, baja anula futuras, pase al crear |
 | **5. Avisos y asistencia** | Asistencia del técnico, "¿Lo llevás?" y aviso de días de clase para el tutor, push (firebase_messaging), registro del dispositivo; después avisos con lectura | Clases y asistencia, suspensión con push, aviso de días de clase, cobro por clase asistida, push por lotes vía Horizon; después avisos segmentados con lectura, recordatorios de cuotas, documentación OpenAPI |
+| **5d. Alta autoservicio y primeros pasos** ✅ | Crear cuenta y club, guía "Primeros pasos" (disciplinas, categorías y horarios, temporada, profesores), apertura automática | Registro con código, alta de club, checklist, plantillas, endpoints de configuración, guía en el panel (`PLAN_PRIMEROS_PASOS.md`) |
+| **5e. Inscripciones por link** | Página pública del club, solicitud con creación de cuenta, solicitudes para el admin | Actividades, link público con QR y afiche, solicitudes con aprobación (etapas A y B de `PLAN_ACTIVIDADES.md`) |
+| **5f. Opcionales de la guía** | Alumnos que ya tenés, comisión, cuentas | Progreso de la configuración en `/plataforma` |
 | **6. Publicación** | Pulido, builds: web + Android (interno) + iOS (TestFlight) | Ajustes de rendimiento y seguridad; backups verificados |
 | **7. Piloto Jakare** | Correcciones del uso real | Carga de datos reales, capacitación, invitación a padres |
 
@@ -235,7 +241,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - Presupuesto.
 
 ### Fase 4 — SaaS comercial
-- Alta autoservicio, planes y suscripciones.
+- ~~Alta autoservicio~~ (adelantada al Sprint 5d), planes y suscripciones.
 - Marca por organización y landing.
 - Catálogo de actividades entre organizaciones (etapa C de `PLAN_ACTIVIDADES.md`).
 - Pagos online (Bancard vPOS/QR, Pagopar).
@@ -263,6 +269,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - ✅ Dos repos.
 - ✅ Solo español.
 - ✅ Prioridad de la app en cada sprint, con contrato de API primero.
+- ✅ Alta autoservicio inmediata y guía del administrador en el panel y en la app; el link de inscripción crea una solicitud que el club aprueba y la familia crea su cuenta al inscribirse (03/10/2026).
 
 ### Pendientes
 - ⏳ Nombre del producto.
@@ -271,6 +278,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - ⏳ ¿Los técnicos cobran del club? Si es así, se agrega "pagos a técnicos" como gasto recurrente.
 - ⏳ ¿El alquiler de cancha es mensual fijo o por hora/uso?
 - ⏳ Actividades para tus hijos: ver las decisiones de `PLAN_ACTIVIDADES.md` §8.
+- ⏳ Primeros pasos: términos y política de datos, dominio para el link de inscripción (`PLAN_PRIMEROS_PASOS.md` §9).
 
 ## 10. Estado
 
@@ -479,5 +487,39 @@ adultos y tutores.
 - **Panel**: grupo "Clases particulares" (reservas con cancelar, paquetes con extender, profesores con precios,
   paquetes y disponibilidad), solo con el módulo activo.
 - Pendiente: anular un pago no desactiva un paquete ya activado; lista de espera; pago online.
+
+### Sprint 5d — alta autoservicio y guía "Primeros pasos" ✅
+Plan aprobado e implementado el 03/10/2026 (`PLAN_PRIMEROS_PASOS.md`, etapa 1; contrato en `API_V1.md` "Sprint 5d").
+**Decisiones del usuario:** guía completa en el panel y en la app; alta autoservicio inmediata con verificación
+(código por WhatsApp o correo); el link de inscripción (5e) crea una solicitud que el club aprueba y la familia crea su cuenta al inscribirse.
+- **Cuenta:** registro abierto (`POST auth/register`, términos con versión) con celular o correo, código de 6 dígitos
+  por WhatsApp o correo (15 min, 5 intentos). Panel: `/admin/register` → código → `/admin/new`.
+- **"Tu club":** nombre, tipo (club, academia, escuela, comisión de padres) y vocabulario sugerido por tipo; slug
+  sugerido y libre (palabras reservadas). El creador queda admin; módulos siguen siendo de la plataforma.
+- **Guía:** checklist calculado desde los datos (disciplinas → categorías con horario → temporada → técnicos,
+  omitible), plantillas compartidas (disciplinas con criterio, categorías por edad alineadas con la más grande o
+  por nivel). App: un paso por pantalla, se abre sola una vez por sesión, tarjeta en el inicio, "¡Todo listo!".
+  Panel: página "Primeros pasos" con paneles laterales; el Escritorio lleva ahí; la temporada usa el asistente de
+  siempre (`?guia=1` vuelve a la guía).
+- **Técnicos:** invitación con nombre y categorías (asignadas al aceptar), "Yo también doy clases", reenviar y
+  borrar; link para WhatsApp (también en el modal de invitación del panel).
+- **Probado de punta a punta** (web :5050 + panel :8080, Playwright): cuenta → código desde Mailpit → club →
+  4 pasos → "¡Todo listo!" → inicio con "Hoy" e "Informes"; y lo mismo en el panel.
+- Encontrado al probar: "¡Listo!" no aparecía si la guía se completaba antes de tocar "Seguir" (se compara con el
+  estado al entrar al paso); concordancia "¿Alguna grupo…?" (ahora "¿Hay grupos que pagan distinto?", también en el
+  panel); la primera temporada de la guía se sugiere para todas las disciplinas; el super admin que entra a dar
+  soporte no cae en la guía.
+- **Cuenta con el celular (WhatsApp)** (pedido del 03/10/2026, dentro del 5d): la cuenta se crea y se verifica con
+  el número de WhatsApp; el correo es el camino alternativo (para quien no tiene WhatsApp). Se entra con el celular o
+  el correo y la contraseña (app y panel); el código solo al crear la cuenta y en "Olvidé mi contraseña" (nuevo, app y
+  panel). La WhatsApp Cloud API de Meta se usa **solo para códigos** (plantilla de autenticación, ~USD 0,0113 c/u en
+  Paraguay; ~USD 2,50 por club al darlo de alta y ~USD 1 por año); los avisos siguen por push. Invitaciones a un
+  correo o a un celular (link `wa.me` al número). Protección contra bots y abuso (`CodeGuard`): Turnstile, campo
+  trampa, países permitidos, límites por número/IP/cuenta, cuentas sin verificar que no ocupan el número, tope diario
+  y corte automático por % verificado con aviso al super admin y widget en el panel de plataforma. Tareas del
+  usuario: Meta Business verificado, número dedicado, plantilla aprobada, token permanente y tarjeta virtual de
+  límite bajo; cuenta de Cloudflare para Turnstile.
+- Pendiente: texto de términos y política de datos; cambiar o agregar celular/correo desde "Mi cuenta"; etapa 2
+  (5e, link de inscripción) y etapa 3 (5f).
 
 ### Después: Sprint 5b — avisos segmentados con lectura

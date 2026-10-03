@@ -16,4 +16,10 @@
             <span x-show="copied" x-cloak>Copiado</span>
         </x-filament::button>
     </div>
+
+    @isset($whatsapp)
+        <x-filament::button tag="a" :href="$whatsapp" target="_blank" color="success" icon="heroicon-o-chat-bubble-left-right">
+            Compartir por WhatsApp
+        </x-filament::button>
+    @endisset
 </div>

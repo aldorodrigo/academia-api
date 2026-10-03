@@ -8,6 +8,10 @@ use App\Support\Push\LogPushSender;
 use App\Support\Push\PushChannel;
 use App\Support\Push\PushSender;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\WhatsApp\CloudApiWhatsAppSender;
+use App\Support\WhatsApp\LogWhatsAppSender;
+use App\Support\WhatsApp\MailWhatsAppSender;
+use App\Support\WhatsApp\WhatsAppSender;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\ServiceProvider;
@@ -26,6 +30,17 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(PushSender::class, fn ($app) => filled(config('firebase.projects.'.config('firebase.default').'.credentials'))
             ? new FcmPushSender($app->make(Messaging::class))
             : new LogPushSender);
+
+        // Códigos por WhatsApp (Cloud API de Meta) si hay token; si no (desarrollo), a Mailpit o al log.
+        $this->app->bind(WhatsAppSender::class, fn () => filled(config('services.whatsapp.token'))
+            ? new CloudApiWhatsAppSender(
+                config('services.whatsapp.token'),
+                (string) config('services.whatsapp.phone_number_id'),
+                config('services.whatsapp.code_template'),
+                config('services.whatsapp.template_language'),
+                config('services.whatsapp.api_version'),
+            )
+            : (config('services.whatsapp.dev_driver') === 'mail' ? new MailWhatsAppSender : new LogWhatsAppSender));
     }
 
     /**

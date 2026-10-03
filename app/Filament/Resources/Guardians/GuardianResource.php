@@ -6,6 +6,7 @@ use App\Filament\Resources\Guardians\Pages\ManageGuardians;
 use App\Filament\Resources\Guardians\Tables\GuardiansTable;
 use App\Filament\Support\Terms;
 use App\Models\Guardian;
+use App\Support\Phone;
 use BackedEnum;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Resource;
@@ -59,9 +60,11 @@ class GuardianResource extends Resource
             TextInput::make('last_name')->label('Apellido')->required()->maxLength(255),
             TextInput::make('document')->label('Documento')->maxLength(30)
                 ->unique(ignoreRecord: true, modifyRuleUsing: $inOrganization),
+            TextInput::make('phone')->label('Celular (WhatsApp)')->tel()->maxLength(30)
+                ->formatStateUsing(fn (?string $state) => Phone::display($state) ?? $state)
+                ->helperText('Con el celular le mandás la invitación a la app por WhatsApp.'),
             TextInput::make('email')->label('Correo')->email()->maxLength(255)
-                ->helperText('Con el correo se le puede mandar la invitación a la app.'),
-            TextInput::make('phone')->label('Teléfono')->tel()->maxLength(30),
+                ->helperText('O con el correo, se la mandamos por email.'),
         ];
     }
 

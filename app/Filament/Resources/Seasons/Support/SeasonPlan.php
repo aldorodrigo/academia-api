@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Seasons\Support;
 
 use App\Actions\Billing\BillingPeriod;
 use App\Actions\Billing\SeasonPeriods;
+use App\Enums\BillingUnit;
 use App\Enums\DailyBasis;
 use App\Enums\DailyGrouping;
 use App\Enums\FeeFrequency;
@@ -181,11 +182,24 @@ class SeasonPlan
         $daily = $season->fee_frequency === FeeFrequency::Daily;
 
         return app(SeasonPeriods::class)->for($season)->take($count)->map(fn (BillingPeriod $period) => [
-            'period' => self::periodLabel($period, $season),
+            // Igual que la cuota que ve la familia: "enero 2027", "1.ª quincena ene 2027", "semana 4–10 ene".
+            'period' => self::periodLabel($period, $season, withQuantity: true),
             'due_on' => $period->dueOn->format('d/m/Y'),
             'amount' => Money::pyg($daily ? $period->quantity * $amount : $amount)->format()
-                .($daily ? ' ('.($period->quantity === 1 ? '1 día' : "{$period->quantity} días").' × '.Money::pyg($amount)->format().')' : ''),
+                .($daily ? " ({$period->quantity} × ".Money::pyg($amount)->format().')' : ''),
         ]);
+    }
+
+    /**
+     * Mes, quincena, semana o día del plan del asistente (null sin plan de cobro).
+     *
+     * @param  array<string, mixed>  $state
+     */
+    public static function unit(array $state): ?BillingUnit
+    {
+        $value = fn (string $key) => ($state[$key] ?? null) instanceof \BackedEnum ? $state[$key]->value : ($state[$key] ?? null);
+
+        return BillingUnit::for(filled($value('fee_frequency')) ? (string) $value('fee_frequency') : null, $value('daily_grouping'));
     }
 
     /**
@@ -208,10 +222,15 @@ class SeasonPlan
     public static function dueExample(array $state): ?string
     {
         $season = self::draft($state);
-        $first = $season?->hasFeePlan() ? app(SeasonPeriods::class)->for($season)->first() : null;
+        $periods = $season?->hasFeePlan() ? app(SeasonPeriods::class)->for($season)->take(2) : collect();
+        // Si la temporada empieza a mitad de semana (o de quincena), la primera cuota está recortada y
+        // vence el primer día: el ejemplo usa la primera completa.
+        $first = $periods->first(fn (BillingPeriod $period) => $period->dueOn->eq($period->start->addDays($season->due_days)))
+            ?? $periods->first();
 
         return $first === null ? null
-            : 'Por ejemplo, la cuota de '.self::periodLabel($first, $season).' vence el '.$first->dueOn->format('d/m/Y').'.';
+            // Tal como la ve la familia: «Cuota semana 4–10 ene».
+            : 'Por ejemplo, «Cuota '.self::periodLabel($first, $season).'» vence el '.$first->dueOn->format('d/m/Y').'.';
     }
 
     /**
@@ -256,17 +275,18 @@ class SeasonPlan
             default => ' Cuota '.mb_strtolower($frequency->getLabel())." de {$amount}",
         };
         $text .= $groups->isEmpty() ? '' : ' ('.$groups->join(', ').')';
-        $text .= ', que vence '.($season->due_days === 0 ? 'el día que empieza' : "{$season->due_days} días después de empezar").' cada período.';
+        $unit = $season->billingUnit();
+        $text .= ', que vence '.$unit->dueText($season->due_days).'.';
 
         if (filled($state['enrollment_fee_amount'] ?? null)) {
             $text .= ' Inscripción '.Money::pyg((int) $state['enrollment_fee_amount'])->format().'.';
         }
 
         $text .= match (true) {
-            $season->chargesByAttendance() => ' Cada cuota se crea cuando termina su período, con las clases a las que vino según la asistencia.',
-            $season->chargesAfterPeriod() => ' Cada cuota se crea cuando termina su período, con las clases que se dieron (las suspendidas no se cobran).',
+            $season->chargesByAttendance() => ' Cada cuota se crea '.$unit->createdAfter().', con las clases a las que vino según la asistencia.',
+            $season->chargesAfterPeriod() => ' Cada cuota se crea '.$unit->createdAfter().', con las clases que se dieron (las suspendidas no se cobran).',
             $season->issue_upfront => ' Las '.self::periodsCount($state).' cuotas de cada jugador se crean todas al inscribirlo.',
-            default => ' Cada cuota se crea al empezar su período.',
+            default => ' Cada cuota se crea '.$unit->createdAtStart().'.',
         };
 
         return $text;
@@ -304,11 +324,14 @@ class SeasonPlan
         }
     }
 
-    private static function periodLabel(BillingPeriod $period, Season $season): string
+    private static function periodLabel(BillingPeriod $period, Season $season, bool $withQuantity = false): string
     {
-        return match ($season->fee_frequency) {
-            FeeFrequency::Monthly => $period->start->locale('es')->translatedFormat('F Y'),
-            default => $period->start->format('d/m').($period->days() > 1 ? ' al '.$period->end->format('d/m') : ''),
-        };
+        $daily = $season->fee_frequency === FeeFrequency::Daily;
+
+        return $period->label(
+            $season->fee_frequency,
+            $daily && $withQuantity ? ($season->daily_basis ?? DailyBasis::Training) : null,
+            $daily && ($season->daily_grouping ?? DailyGrouping::Month) === DailyGrouping::Month,
+        );
     }
 }

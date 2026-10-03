@@ -15,7 +15,15 @@ use App\Http\Controllers\Api\V1\Lessons\LessonProfileController;
 use App\Http\Controllers\Api\V1\Lessons\TeacherController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\NotificationSettingsController;
+use App\Http\Controllers\Api\V1\OnboardingController;
+use App\Http\Controllers\Api\V1\OrganizationController;
+use App\Http\Controllers\Api\V1\PasswordResetController;
+use App\Http\Controllers\Api\V1\RegisterController;
 use App\Http\Controllers\Api\V1\ReportController;
+use App\Http\Controllers\Api\V1\Setup\GroupController as SetupGroupController;
+use App\Http\Controllers\Api\V1\Setup\InstructorController as SetupInstructorController;
+use App\Http\Controllers\Api\V1\Setup\ProgramController as SetupProgramController;
+use App\Http\Controllers\Api\V1\Setup\SeasonController as SetupSeasonController;
 use App\Http\Controllers\Api\V1\StudentAttendanceController;
 use App\Http\Controllers\Api\V1\StudentController;
 use App\Http\Controllers\Api\V1\VenueController;
@@ -25,6 +33,19 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::post('auth/token', [AuthTokenController::class, 'store'])
         ->middleware('throttle:6,1')
         ->name('auth.token.store');
+
+    // Registro abierto: cuenta sin organizaciones, con el celular o el correo.
+    Route::post('auth/register', [RegisterController::class, 'store'])
+        ->middleware('throttle:5,1')
+        ->name('auth.register');
+
+    // "Olvidé mi contraseña" con código por WhatsApp o correo.
+    Route::post('auth/password/forgot', [PasswordResetController::class, 'forgot'])
+        ->middleware('throttle:5,1')
+        ->name('auth.password.forgot');
+    Route::post('auth/password/reset', [PasswordResetController::class, 'reset'])
+        ->middleware('throttle:10,1')
+        ->name('auth.password.reset');
 
     Route::middleware('throttle:10,1')->group(function () {
         Route::get('invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
@@ -40,6 +61,13 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::delete('auth/token', [AuthTokenController::class, 'destroy'])->name('auth.token.destroy');
         Route::get('me', MeController::class)->name('me');
+
+        // Código de la cuenta (WhatsApp o correo) y alta del club (sin organización activa).
+        Route::post('auth/verify', [RegisterController::class, 'verify'])->middleware('throttle:10,1')->name('auth.verify');
+        Route::post('auth/verify/resend', [RegisterController::class, 'resend'])->middleware('throttle:3,1')->name('auth.verify.resend');
+        Route::get('onboarding/templates', [OnboardingController::class, 'templates'])->name('onboarding.templates');
+        Route::get('organizations/slug', [OrganizationController::class, 'slug'])->middleware('throttle:60,1')->name('organizations.slug');
+        Route::post('organizations', [OrganizationController::class, 'store'])->middleware('throttle:5,1')->name('organizations.store');
 
         Route::post('devices', [DeviceController::class, 'store'])->name('devices.store');
         Route::delete('devices/{token}', [DeviceController::class, 'destroy'])->where('token', '.+')->name('devices.destroy');
@@ -96,6 +124,39 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('teacher/students', [TeacherController::class, 'students'])->name('teacher.students');
             Route::post('teacher/students/{student}/packs', [TeacherController::class, 'sellPack'])->whereNumber('student')->name('teacher.students.packs');
             Route::post('teacher/packs/{pack}/extend', [TeacherController::class, 'extend'])->whereNumber('pack')->name('teacher.packs.extend');
+
+            // Guía "Primeros pasos" (administrador).
+            Route::middleware('configure')->group(function () {
+                Route::get('onboarding', [OnboardingController::class, 'show'])->name('onboarding.show');
+                Route::put('onboarding', [OnboardingController::class, 'update'])->name('onboarding.update');
+                Route::put('onboarding/steps/{key}', [OnboardingController::class, 'skip'])->name('onboarding.skip');
+
+                Route::prefix('setup')->name('setup.')->group(function () {
+                    Route::get('programs', [SetupProgramController::class, 'index'])->name('programs.index');
+                    Route::post('programs', [SetupProgramController::class, 'store'])->name('programs.store');
+                    Route::put('programs/{program}', [SetupProgramController::class, 'update'])->whereNumber('program')->name('programs.update');
+                    Route::delete('programs/{program}', [SetupProgramController::class, 'destroy'])->whereNumber('program')->name('programs.destroy');
+
+                    Route::get('groups', [SetupGroupController::class, 'index'])->name('groups.index');
+                    Route::post('groups/suggestions', [SetupGroupController::class, 'suggestions'])->name('groups.suggestions');
+                    Route::post('groups', [SetupGroupController::class, 'store'])->name('groups.store');
+                    Route::put('groups/{group}', [SetupGroupController::class, 'update'])->whereNumber('group')->name('groups.update');
+                    Route::delete('groups/{group}', [SetupGroupController::class, 'destroy'])->whereNumber('group')->name('groups.destroy');
+                    Route::post('venues', [SetupGroupController::class, 'storeVenue'])->name('venues.store');
+
+                    Route::get('seasons', [SetupSeasonController::class, 'index'])->name('seasons.index');
+                    Route::get('seasons/new', [SetupSeasonController::class, 'create'])->name('seasons.create');
+                    Route::post('seasons/preview', [SetupSeasonController::class, 'preview'])->name('seasons.preview');
+                    Route::post('seasons', [SetupSeasonController::class, 'store'])->name('seasons.store');
+
+                    Route::get('instructors', [SetupInstructorController::class, 'index'])->name('instructors.index');
+                    Route::post('instructors', [SetupInstructorController::class, 'store'])->middleware('throttle:30,1')->name('instructors.store');
+                    Route::put('instructors/me', [SetupInstructorController::class, 'me'])->name('instructors.me');
+                    Route::put('instructors/{user}', [SetupInstructorController::class, 'update'])->whereNumber('user')->name('instructors.update');
+                    Route::post('invitations/{invitation}/resend', [SetupInstructorController::class, 'resend'])->whereNumber('invitation')->name('invitations.resend');
+                    Route::delete('invitations/{invitation}', [SetupInstructorController::class, 'revoke'])->whereNumber('invitation')->name('invitations.revoke');
+                });
+            });
         });
     });
 });

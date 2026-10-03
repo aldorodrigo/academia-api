@@ -20,7 +20,46 @@ it('rechaza credenciales inválidas', function () {
         'email' => $user->email,
         'password' => 'incorrecta',
         'device_name' => 'pixel-7',
-    ])->assertUnprocessable()->assertJsonValidationErrors('email');
+    ])->assertUnprocessable()->assertJsonValidationErrors('login');
+});
+
+it('entra con el celular en cualquier formato', function () {
+    $user = User::factory()->create(['email' => null, 'phone' => '+595981123456', 'password' => 'secreto123']);
+
+    foreach (['0981 123 456', '981123456', '+595 981 123-456'] as $login) {
+        $this->postJson('/api/v1/auth/token', [
+            'login' => $login,
+            'password' => 'secreto123',
+            'device_name' => 'app',
+        ])->assertCreated();
+    }
+
+    expect($user->tokens()->count())->toBe(3);
+});
+
+it('entra con el correo como login (sin importar mayúsculas)', function () {
+    User::factory()->create(['email' => 'ana@test.com', 'password' => 'secreto123']);
+
+    $this->postJson('/api/v1/auth/token', ['login' => 'Ana@Test.com', 'password' => 'secreto123', 'device_name' => 'app'])
+        ->assertCreated();
+});
+
+it('bloquea la cuenta 15 minutos después de 10 contraseñas incorrectas', function () {
+    $user = User::factory()->create(['phone' => '+595981123456', 'password' => 'secreto123']);
+    $attempt = fn (string $password) => $this->postJson('/api/v1/auth/token', [
+        'login' => '0981123456', 'password' => $password, 'device_name' => 'app',
+    ]);
+
+    foreach (range(1, 10) as $i) {
+        $this->travel(11)->seconds(); // el throttle de la ruta es 6 por minuto
+        $attempt('incorrecta')->assertUnprocessable();
+    }
+    $this->travel(61)->seconds();
+    $attempt('secreto123')->assertTooManyRequests()
+        ->assertJsonPath('message', 'Demasiados intentos. Probá de nuevo en unos minutos.');
+
+    $this->travel(16)->minutes();
+    $attempt('secreto123')->assertCreated();
 });
 
 it('devuelve el usuario con sus organizaciones activas', function () {
@@ -36,8 +75,8 @@ it('devuelve el usuario con sus organizaciones activas', function () {
 });
 
 it('responde los errores de validación en español', function () {
-    $this->postJson('/api/v1/auth/token', ['email' => 'no-es-un-email'])
+    $this->postJson('/api/v1/auth/token', [])
         ->assertUnprocessable()
         ->assertJsonPath('errors.device_name.0', 'El campo dispositivo es obligatorio.')
-        ->assertJsonPath('errors.email.0', 'El campo correo electrónico no es un correo válido.');
+        ->assertJsonPath('errors.login.0', 'Ingresá tu celular o tu correo.');
 });

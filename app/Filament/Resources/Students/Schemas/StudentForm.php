@@ -147,7 +147,7 @@ class StudentForm
                                 ->options(GuardianRelationship::class)
                                 ->default(GuardianRelationship::Mother->value)
                                 ->required(),
-                            TextInput::make('phone')->label('Teléfono')->tel()->maxLength(30),
+                            TextInput::make('phone')->label('Celular (WhatsApp)')->tel()->maxLength(30),
                             Toggle::make('invite')
                                 ->label('Enviar invitación a la app')
                                 ->default(true)
@@ -206,7 +206,7 @@ class StudentForm
         if ($guardian = self::existingGuardian($email)) {
             $set('first_name', $guardian->first_name);
             $set('last_name', $guardian->last_name);
-            $set('phone', $guardian->phone);
+            $set('phone', $guardian->phone_display);
         }
     }
 

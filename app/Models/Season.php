@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\BillingUnit;
 use App\Enums\DailyBasis;
 use App\Enums\DailyGrouping;
 use App\Enums\FeeFrequency;
@@ -131,6 +132,14 @@ class Season extends Model
     public function hasFeePlan(): bool
     {
         return $this->fee_frequency !== null;
+    }
+
+    /**
+     * Lo que cubre cada cuota (mes, quincena, semana o día); null sin plan de cobro.
+     */
+    public function billingUnit(): ?BillingUnit
+    {
+        return BillingUnit::for($this->fee_frequency, $this->daily_grouping);
     }
 
     /**

@@ -48,11 +48,37 @@ it('reenviar conserva el vínculo con el tutor', function () {
     expect($this->guardian->invitations()->whereNull('revoked_at')->sole()->guardian_id)->toBe($this->guardian->id);
 });
 
-it('no se puede invitar a un tutor sin email', function () {
-    $this->guardian->update(['email' => null]);
+it('no se puede invitar a un tutor sin celular ni correo', function () {
+    $this->guardian->update(['email' => null, 'phone' => null]);
 
     app(CreateInvitation::class)->forGuardian($this->guardian);
 })->throws(ValidationException::class);
+
+it('un tutor con solo celular se invita para mandarle el link por WhatsApp', function () {
+    Mail::fake();
+    $this->guardian->update(['email' => null, 'phone' => '0981 555 444']);
+
+    [$invitation, $token] = app(CreateInvitation::class)->forGuardian($this->guardian);
+
+    expect($invitation->phone)->toBe('+595981555444')
+        ->and($invitation->email)->toBeNull()
+        ->and($invitation->whatsappUrl($token))->toStartWith('https://wa.me/595981555444?text=');
+    Mail::assertNothingQueued();
+
+    // Al aceptarla, la cuenta queda con ese celular verificado y vinculada al tutor.
+    $this->getJson("/api/v1/invitations/{$token}")
+        ->assertJsonPath('data.phone', '+595981555444')
+        ->assertJsonPath('data.email', null)
+        ->assertJsonPath('data.user_exists', false);
+    $this->postJson("/api/v1/invitations/{$token}/accept", [
+        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app',
+    ])->assertCreated();
+
+    $user = User::query()->where('phone', '+595981555444')->sole();
+    expect($user->phone_verified_at)->not->toBeNull()
+        ->and($user->email)->toBeNull()
+        ->and($this->guardian->fresh()->user_id)->toBe($user->id);
+});
 
 it('no pisa un tutor ya vinculado a otra cuenta', function () {
     $other = User::factory()->create();

@@ -20,7 +20,9 @@ class MeController extends Controller
             'data' => [
                 'id' => $user->id,
                 'name' => $user->name,
+                'phone' => $user->phone,
                 'email' => $user->email,
+                'verified' => $user->isVerified(),
                 'organizations' => $user->activeOrganizations()
                     ->orderBy('name')
                     ->get()

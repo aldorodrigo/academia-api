@@ -49,8 +49,8 @@ aislamiento entre organizaciones y deja cargados los datos que el catálogo va a
     o texto manual si no tiene plan.
   - Cupo: capacidad de las categorías − inscripciones activas → "Últimos lugares", "Completo", lista de espera.
   - Ventana de inscripción (desde / hasta) y estado: `borrador`, `publicada`, `cerrada`.
-  - Visibilidad: `familias` (solo quienes ya están en la organización) o `catálogo` (etapa C, si la
-    plataforma le habilita el módulo `catalog`).
+  - Visibilidad: `familias` (solo quienes ya están en la organización), `link` (también quien llega por el link de
+    inscripción del club, `PLAN_PRIMEROS_PASOS.md`) o `catálogo` (etapa C, si la plataforma le habilita el módulo `catalog`).
 - **Solicitud de inscripción** (`EnrollmentRequest`) — usuario tutor + hijo + actividad + categoría sugerida.
   Estados: `pendiente → aprobada | rechazada (con motivo) | en espera | cancelada`.
 - **Perfil público de la organización** (C) — descripción, logo, ciudad/barrio, dirección y ubicación,
@@ -139,15 +139,15 @@ Aunque se construya en Fase 2 y Fase 4, afecta lo que se haga antes:
   una sola organización (ej. el mismo hijo en Jakare y en una academia de danza).
 - **Avisos segmentados (5b):** prever segmentar por edad y por "familias sin inscripción en tal disciplina".
 - **Eventos (Fase 2):** clínicas y torneos abiertos podrían publicarse como actividad; diseñar `Event` con eso en mente.
-- **Registro abierto:** hoy el alta es solo por invitación; el catálogo lo va a necesitar para tutores que llegan sin invitación.
+- **Registro abierto:** decidido el 03/10/2026 para el link de inscripción (`PLAN_PRIMEROS_PASOS.md`); el catálogo lo reutiliza.
 - **Nombres:** `Offering` en el código y "Actividades" en pantalla; conviene llamar "eventos de recaudación" a las
   actividades de §3.8 (cantina, pollada, festival).
 
 ## 8. Decisiones pendientes
 
 - ⏳ ¿Arrancar por A + B (dentro de las organizaciones del tutor) o ir directo al catálogo entre organizaciones?
-- ⏳ Qué hace el botón de la actividad: solicitud con aprobación (propuesta), contacto directo por WhatsApp o clase de prueba.
-- ⏳ Registro abierto para tutores que llegan por el catálogo.
+- ✅ Qué hace el botón de la actividad: solicitud con aprobación (decidido para el link de inscripción, 03/10/2026).
+- ✅ Registro abierto para tutores: sí, al inscribirse por el link del club (`PLAN_PRIMEROS_PASOS.md`, 03/10/2026).
 - ⏳ Modelo comercial del catálogo: incluido en el plan, módulo pago o actividades destacadas.
 - ⏳ Ubicación: ciudad/barrio (simple) o mapa con distancia (pide permiso de ubicación).
 - ⏳ ¿El alumno adulto también ve actividades para sí mismo? (propuesta: sí, "Para vos").

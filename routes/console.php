@@ -23,3 +23,6 @@ Schedule::command('classes:remind')->everyFifteenMinutes()->withoutOverlapping()
 
 // Paquetes de clases particulares: vencen al pasar su fecha y se avisa 7 días y 1 día antes. Idempotente.
 Schedule::command('packs:expire')->dailyAt('08:00')->timezone('America/Asuncion')->withoutOverlapping();
+
+// Cuentas que no ingresaron el código en 24 horas: se borran (no ocupan el número ni el correo).
+Schedule::command('accounts:prune-unverified')->hourly()->withoutOverlapping();

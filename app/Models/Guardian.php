@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToOrganization;
+use App\Support\Phone;
 use Database\Factories\GuardianFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Casts\Attribute;
@@ -25,7 +26,19 @@ class Guardian extends Model
     {
         static::saving(function (Guardian $guardian): void {
             $guardian->email = filled($guardian->email) ? mb_strtolower(trim($guardian->email)) : null;
+            // Formato internacional si es un número válido; si no, tal como se cargó.
+            $guardian->phone = filled($guardian->phone) ? (Phone::normalize($guardian->phone) ?? trim($guardian->phone)) : null;
         });
+    }
+
+    /**
+     * Celular para mostrar ("0981 123 456").
+     *
+     * @return Attribute<?string, never>
+     */
+    protected function phoneDisplay(): Attribute
+    {
+        return Attribute::get(fn () => Phone::display($this->phone) ?? $this->phone);
     }
 
     /**

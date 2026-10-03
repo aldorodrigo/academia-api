@@ -56,7 +56,7 @@ class DelinquentsReport extends Report
                     'overdue' => (int) $overdue->sum(fn (Charge $c) => $c->pendingAmount()),
                     'oldest_due_on' => $overdue->first()->due_on->toDateString(),
                     'months_overdue' => $overdue->map(fn (Charge $c) => $c->due_on->format('Y-m'))->unique()->count(),
-                    'contact' => $contact ? ['name' => $contact->full_name, 'phone' => $contact->phone] : null,
+                    'contact' => $contact ? ['name' => $contact->full_name, 'phone' => $contact->phone_display] : null,
                 ];
             })
             ->filter(fn (?array $row) => $row !== null && $row['months_overdue'] >= $this->minMonths)

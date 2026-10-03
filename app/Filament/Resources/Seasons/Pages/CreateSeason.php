@@ -2,13 +2,14 @@
 
 namespace App\Filament\Resources\Seasons\Pages;
 
+use App\Actions\Seasons\CreateSeason as CreateSeasonAction;
+use App\Filament\Pages\Onboarding;
 use App\Filament\Resources\Enrollments\EnrollmentResource;
 use App\Filament\Resources\Enrollments\Pages\SeasonTransfer;
 use App\Filament\Resources\Seasons\SeasonResource;
 use App\Filament\Resources\Seasons\Support\SeasonPlan;
 use App\Filament\Resources\Seasons\Support\SeasonPlanSteps;
 use App\Models\Enrollment;
-use App\Models\Program;
 use App\Models\Season;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -16,7 +17,6 @@ use Filament\Notifications\Notification;
 use Filament\Resources\Pages\Concerns\HasWizard;
 use Filament\Resources\Pages\CreateRecord;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\DB;
 
 /**
  * Asistente de temporada: 1) temporada, 2) cuotas, 3) cuándo se crean, 4) revisar.
@@ -31,9 +31,14 @@ class CreateSeason extends CreateRecord
 
     protected static ?string $title = 'Nueva temporada';
 
+    /** Se abrió desde "Primeros pasos": al terminar vuelve ahí. */
+    public bool $fromGuide = false;
+
     public function mount(): void
     {
         parent::mount();
+
+        $this->fromGuide = request()->boolean('guia');
 
         $this->form->fill(SeasonPlan::defaults(Filament::getTenant()));
     }
@@ -45,34 +50,11 @@ class CreateSeason extends CreateRecord
 
     protected function handleRecordCreation(array $data): Model
     {
-        $withPlan = SeasonPlanSteps::canPlan();
-
-        return DB::transaction(function () use ($data, $withPlan) {
-            $season = Season::query()->create([
-                'name' => $data['name'],
-                'kind' => $data['kind'],
-                'starts_on' => $data['starts_on'],
-                'ends_on' => $data['ends_on'],
-                ...($withPlan ? [
-                    'fee_frequency' => $data['fee_frequency'],
-                    'daily_basis' => $data['fee_frequency'] === 'diaria' ? ($data['daily_basis'] ?? null) : null,
-                    'daily_grouping' => $data['fee_frequency'] === 'diaria' ? ($data['daily_grouping'] ?? null) : null,
-                    'due_days' => (int) $data['due_days'],
-                    'issue_upfront' => SeasonPlanSteps::canIssueUpfront() && filter_var($data['issue_upfront'] ?? false, FILTER_VALIDATE_BOOLEAN),
-                    'mid_period' => $data['mid_period'],
-                ] : []),
-            ]);
-
-            // Con una sola disciplina, se asigna sola.
-            $programs = $data['program_ids'] ?? [];
-            $season->programs()->sync($programs !== [] ? $programs : Program::query()->pluck('id')->all());
-
-            if ($withPlan) {
-                SeasonPlan::saveTariffs($season, $data);
-            }
-
-            return $season;
-        });
+        return app(CreateSeasonAction::class)->handle(
+            $data,
+            withPlan: SeasonPlanSteps::canPlan(),
+            canIssueUpfront: SeasonPlanSteps::canIssueUpfront(),
+        );
     }
 
     /**
@@ -105,6 +87,6 @@ class CreateSeason extends CreateRecord
 
     protected function getRedirectUrl(): string
     {
-        return static::getResource()::getUrl('index');
+        return $this->fromGuide ? Onboarding::getUrl() : static::getResource()::getUrl('index');
     }
 }

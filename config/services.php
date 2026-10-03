@@ -35,4 +35,28 @@ return [
         ],
     ],
 
+    // WhatsApp Cloud API de Meta: solo códigos de verificación (plantilla de autenticación).
+    // Sin token, los códigos van al log (desarrollo).
+    'whatsapp' => [
+        'token' => env('WHATSAPP_TOKEN'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v23.0'),
+        'code_template' => env('WHATSAPP_CODE_TEMPLATE', 'codigo_verificacion'),
+        'template_language' => env('WHATSAPP_TEMPLATE_LANGUAGE', 'es'),
+        // Sin token (desarrollo): `log` (storage/logs/laravel.log) o `mail` (llegan a Mailpit).
+        'dev_driver' => env('WHATSAPP_DEV_DRIVER', 'log'),
+        // Tope de códigos por día de toda la plataforma: al llegar, se pausa WhatsApp.
+        'daily_limit' => (int) env('WHATSAPP_DAILY_LIMIT', 300),
+        // Precio por código entregado en Paraguay ("Rest of Latin America"), para el panel.
+        'cost_per_code' => (float) env('WHATSAPP_COST_PER_CODE', 0.0113),
+        // Países (ISO) a los que se mandan códigos.
+        'allowed_countries' => explode(',', (string) env('WHATSAPP_ALLOWED_COUNTRIES', 'PY,AR,BR,UY,BO')),
+    ],
+
+    // Cloudflare Turnstile (anti-bots) al pedir códigos. Sin clave secreta no se valida.
+    'turnstile' => [
+        'site_key' => env('TURNSTILE_SITE_KEY'),
+        'secret_key' => env('TURNSTILE_SECRET_KEY'),
+    ],
+
 ];

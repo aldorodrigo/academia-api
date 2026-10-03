@@ -10,6 +10,7 @@ use App\Filament\Resources\Seasons\Pages\ListSeasons;
 use App\Filament\Resources\Seasons\Support\SeasonPlan;
 use App\Filament\Resources\Students\Pages\EditStudent;
 use App\Filament\Resources\Students\RelationManagers\EnrollmentsRelationManager;
+use App\Filament\Support\MidPeriodPreview;
 use App\Models\Charge;
 use App\Models\Enrollment;
 use App\Models\FeeConcept;
@@ -17,11 +18,13 @@ use App\Models\Group;
 use App\Models\Organization;
 use App\Models\Program;
 use App\Models\Role;
+use App\Models\Schedule;
 use App\Models\Season;
 use App\Models\Student;
 use App\Models\Tariff;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
+use Filament\Schemas\Components\Utilities\Get;
 use Livewire\Livewire;
 use Spatie\Permission\Models\Permission;
 
@@ -75,7 +78,7 @@ it('crea la temporada con sus montos y el resumen coincide con lo que se emite',
         ->toBe([[null, 100000], [null, 150000], [$this->sub17->id, 180000]]);
 
     $state = ['name' => '2027', 'starts_on' => '2027-01-01', 'ends_on' => '2027-12-31', 'fee_frequency' => 'mensual', 'due_days' => 9, 'issue_upfront' => '1', 'fee_amount' => 150000, 'program_ids' => [$this->futbol->id]];
-    expect(SeasonPlan::summary($state))->toBe('2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota mensual de ₲ 150.000, que vence 9 días después de empezar cada período. Las 12 cuotas de cada jugador se crean todas al inscribirlo.')
+    expect(SeasonPlan::summary($state))->toBe('2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota mensual de ₲ 150.000, que vence el día 10 de cada mes. Las 12 cuotas de cada jugador se crean todas al inscribirlo.')
         ->and(SeasonPlan::examples($state)->first())->toBe(['period' => 'enero 2027', 'due_on' => '10/01/2027', 'amount' => '₲ 150.000']);
 
     // Lo que después se emite coincide con el ejemplo.
@@ -138,7 +141,7 @@ it('la frecuencia queda bloqueada cuando ya hay cuotas', function () {
         ->assertFormFieldDisabled('fee_frequency');
 });
 
-it('al inscribir a mitad de período pregunta qué se cobra y muestra el efecto', function () {
+it('al inscribir a mitad de mes pregunta qué se cobra y muestra el efecto', function () {
     $season = Season::factory()->for($this->jakare)->create(['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'fee_frequency' => 'mensual', 'mid_period' => 'proporcional']);
     Tariff::factory()->create(['fee_concept_id' => FeeConcept::monthlyFee($this->jakare)->id, 'season_id' => $season->id, 'amount' => 310000, 'valid_from' => '2026-01-01']);
     $student = Student::factory()->for($this->jakare)->create(['birth_date' => '2016-03-14']);
@@ -146,10 +149,37 @@ it('al inscribir a mitad de período pregunta qué se cobra y muestra el efecto'
     Livewire::test(EnrollmentsRelationManager::class, ['ownerRecord' => $student, 'pageClass' => EditStudent::class])
         ->mountTableAction('create')
         ->setTableActionData(['group_id' => $this->sub10->id, 'enrolled_on' => '2026-10-22'])
-        ->assertTableActionDataSet(['season_id' => $season->id, 'mid_period' => MidPeriod::Prorated])
+        ->assertTableActionDataSet(['season_id' => $season->id, 'mid_period' => MidPeriod::Prorated->value])
         ->callMountedTableAction()
         ->assertHasNoTableActionErrors();
 
     // Del 22 al 31 de octubre: 10 de 31 días.
     expect(Charge::query()->sole()->base_amount)->toBe(100000);
+});
+
+it('al inscribir a mitad de quincena o por día lo dice con la unidad', function () {
+    $fortnight = Season::factory()->for($this->jakare)->create(['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'fee_frequency' => 'quincenal', 'due_days' => 3, 'mid_period' => 'completo']);
+    Tariff::factory()->create(['fee_concept_id' => FeeConcept::monthlyFee($this->jakare)->id, 'season_id' => $fortnight->id, 'amount' => 80000, 'valid_from' => '2026-01-01']);
+    $get = function (array $data) {
+        $get = Mockery::mock(Get::class);
+        $get->shouldReceive('__invoke')->andReturnUsing(fn (string $key) => $data[$key] ?? null);
+
+        return $get;
+    };
+    $state = ['season_id' => $fortnight->id, 'group_id' => $this->sub10->id, 'enrolled_on' => '2026-10-20'];
+
+    expect(MidPeriodPreview::text($get([...$state, 'mid_period' => 'completo'])))->toBe('Se cobrará la quincena completa: ₲ 80.000.')
+        ->and(MidPeriodPreview::text($get([...$state, 'mid_period' => 'proximo'])))->toBe('No se cobra esta quincena: se empieza a cobrar desde el 01/11.');
+
+    // Por día de entrenamiento: en entrenamientos, no en días corridos.
+    $daily = Season::factory()->for($this->jakare)->create(['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'fee_frequency' => 'diaria', 'daily_basis' => 'entrenamiento', 'daily_grouping' => 'mes', 'due_days' => 5, 'mid_period' => 'proporcional']);
+    Tariff::factory()->create(['fee_concept_id' => FeeConcept::monthlyFee($this->jakare)->id, 'season_id' => $daily->id, 'amount' => 20000, 'valid_from' => '2026-01-01']);
+    Schedule::query()->create(['group_id' => $this->sub10->id, 'weekday' => 2, 'starts_at' => '17:00', 'ends_at' => '18:00']);
+
+    expect(MidPeriodPreview::text($get(['season_id' => $daily->id, 'group_id' => $this->sub10->id, 'enrolled_on' => '2026-10-20'])))
+        ->toBe('Se cobrará ₲ 40.000 (2 de 4 entrenamientos).');
+
+    // Agrupado por día no hay "mitad de…".
+    $daily->update(['daily_grouping' => 'dia']);
+    expect(MidPeriodPreview::text($get(['season_id' => $daily->id, 'group_id' => $this->sub10->id, 'enrolled_on' => '2026-10-20'])))->toBeNull();
 });

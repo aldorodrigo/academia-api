@@ -3,6 +3,7 @@
 namespace App\Actions\Invitations;
 
 use App\Enums\MembershipStatus;
+use App\Models\Group;
 use App\Models\Guardian;
 use App\Models\Invitation;
 use App\Models\Role;
@@ -33,15 +34,27 @@ class AcceptInvitation
 
             abort_unless($invitation->canBeAccepted(), 404, 'La invitación no es válida o ya venció.');
 
-            $user = User::query()->where('email', $invitation->email)->first();
+            $user = $invitation->existingUser();
 
             if ($user === null) {
+                // Una cuenta sin verificar con ese celular o correo se reemplaza.
+                User::query()->pending()
+                    ->where(fn ($query) => filled($invitation->phone)
+                        ? $query->where('phone', $invitation->phone)
+                        : $query->where('email', $invitation->email))
+                    ->get()
+                    ->each->delete();
+
                 $user = User::query()->create([
                     'name' => $data['name'],
                     'email' => $invitation->email,
+                    'phone' => $invitation->phone,
                     'password' => $data['password'],
                 ]);
-                $user->forceFill(['email_verified_at' => now()])->save();
+                // El link llegó a ese correo o a ese WhatsApp: queda verificado.
+                $user->forceFill(filled($invitation->phone)
+                    ? ['phone_verified_at' => now()]
+                    : ['email_verified_at' => now()])->save();
             } elseif (! Hash::check($data['password'], $user->password)) {
                 throw ValidationException::withMessages(['password' => 'La contraseña no es correcta.']);
             }
@@ -71,6 +84,7 @@ class AcceptInvitation
             }
 
             $this->linkGuardian($invitation, $user);
+            $this->assignGroups($invitation, $user);
 
             $invitation->update(['accepted_at' => now(), 'accepted_user_id' => $user->id]);
 
@@ -101,6 +115,23 @@ class AcceptInvitation
         if (! $alreadyLinked) {
             $guardian->update(['user_id' => $user->id]);
         }
+    }
+
+    /**
+     * Técnico invitado con sus categorías: queda asignado a las que siguen existiendo.
+     */
+    private function assignGroups(Invitation $invitation, User $user): void
+    {
+        if (empty($invitation->group_ids)) {
+            return;
+        }
+
+        $groups = Group::query()->withoutGlobalScopes()
+            ->where('organization_id', $invitation->organization_id)
+            ->whereKey($invitation->group_ids)
+            ->pluck('id');
+
+        $user->instructedGroups()->syncWithoutDetaching($groups->all());
     }
 
     private function alreadyHas(User $user, Role $role): bool

@@ -22,7 +22,7 @@ use Spatie\Permission\Models\Permission;
 
 /**
  * Datos de desarrollo de la organización activa: Fútbol Sub-8…Sub-14 con horarios,
- * algunos jugadores y tutor@academia.test / password con dos hijos.
+ * algunos jugadores y tutor@academia.test (o 0981 000 111) / password con dos hijos.
  */
 class AcademicSeeder extends Seeder
 {
@@ -68,7 +68,8 @@ class AcademicSeeder extends Seeder
 
         $tutor = User::query()->firstOrCreate(
             ['email' => 'tutor@academia.test'],
-            ['name' => 'Ana Benítez', 'password' => 'password'],
+            // También entra con el celular 0981 000 111.
+            ['name' => 'Ana Benítez', 'phone' => '+595981000111', 'password' => 'password'],
         );
         $this->member($tutor, OrganizationRole::Guardian);
 

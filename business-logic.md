@@ -27,9 +27,22 @@ documento difieren, se corrige uno de los dos en el mismo cambio.
   `apparel` (indumentaria), `tournaments`, `evaluations`, `electronic_invoicing` (SIFEN).
   Los **habilita la plataforma** (super admin): son lo que la organización contrata. El admin de la
   organización los ve pero no los cambia; sí edita el vocabulario.
-- **Alta:** la hace un super admin desde `/plataforma` (datos, módulos y el email del **primer
-  administrador**, que recibe una invitación con rol `admin`). Los roles base se crean solos.
-  El slug no se cambia después del alta (es la URL del panel y el header `X-Organization`).
+- **Alta:** de dos formas. Los roles base, los conceptos de cobro y la Caja se crean solos.
+  El slug no se cambia después del alta (es la URL del panel, el header `X-Organization` y el link
+  de inscripción); tiene 3 a 40 caracteres (minúsculas, números y guiones) y hay palabras reservadas
+  que chocan con rutas (`admin`, `api`, `new`, `inscripcion`…: `App\Support\Organizations\Slug`).
+  - **Desde `/plataforma`:** un super admin carga los datos, los módulos y el email del **primer
+    administrador**, que recibe una invitación con rol `admin`.
+  - **Autoservicio** (Sprint 5d, app y panel): cualquier cuenta con el **email verificado** crea su
+    club ("Tu club": nombre, tipo y vocabulario) y queda como `admin`. Paraguay, ₲ y Asunción;
+    sin módulos (los sigue habilitando la plataforma). Queda marcada `self_service` y en el
+    registro de actividad.
+- **Guía "Primeros pasos"** (Sprint 5d, `App\Support\Onboarding\Checklist`, la misma en la app y en
+  el panel, solo para el admin): disciplinas → categorías con horario → temporada vigente o próxima
+  → técnicos (se puede omitir). Cada paso está **hecho si existe lo que pide**, aunque se haya hecho
+  fuera de la guía; uno omitido cuenta como hecho. Se abre sola (app: una vez por sesión; panel:
+  el Escritorio lleva a la guía) mientras esté incompleta y no se haya cerrado; las organizaciones
+  que ya existían quedaron con la guía cerrada. La primera vez que se completa queda la fecha.
 - **Estado:** `activa` o `suspendida` (con motivo). Una organización suspendida:
   - no aparece para sus miembros (ni en la app ni en el panel) y la API responde 403
     "La organización está suspendida.";
@@ -43,6 +56,9 @@ documento difieren, se corrige uno de los dos en el mismo cambio.
   con roles distintos en cada una.
 - Solo entra a una organización con membresía **activa**.
 - Una persona puede tener **varios roles** a la vez (ej. tutor + tesorero); la app muestra todos sus perfiles.
+- La cuenta se identifica con el **celular (WhatsApp)** o con el **correo**; los dos son únicos y se entra
+  con cualquiera de ellos y la contraseña (app y panel). Los teléfonos se guardan en formato
+  internacional (`+595981123456`) y se muestran como `0981 123 456`.
 
 ### Super admin y admin
 - **Super admin** de la plataforma (`users.is_super_admin`): acceso total a todas las organizaciones
@@ -81,16 +97,49 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
   mandatos cuyo fin ya pasó **según la fecha local de cada organización**; también activa los que
   empiezan ese día. Todo queda en el registro de actividad.
 
+### Registro abierto *(Sprint 5d)*
+- Cualquiera puede **crear una cuenta** (nombre, **celular** o, si no tiene WhatsApp, **correo**, contraseña de
+  8+ y aceptación de los términos, con versión y fecha). La cuenta nace **sin organizaciones** y sin verificar.
+- Se verifica con un **código de 6 dígitos** que llega **por WhatsApp** (WhatsApp Cloud API de Meta, plantilla de
+  autenticación; solo para códigos, los avisos siguen por push) o por correo. Vence a los 15 minutos, 5 intentos;
+  pedir otro reemplaza el anterior. Sin verificar, la app y el panel solo piden el código; la API no deja crear
+  un club.
+- Una cuenta **sin verificar no ocupa** el celular ni el correo: un registro nuevo con el mismo dato la reemplaza
+  y `accounts:prune-unverified` (cada hora) borra las de más de 24 horas.
+- **"Olvidé mi contraseña"** (app y panel): código por WhatsApp si se ingresa el celular, por correo si se ingresa el
+  correo. No revela si hay una cuenta. Al cambiarla se cierran las otras sesiones.
+- Con la cuenta verificada y sin organizaciones, la app y el panel llevan a "Tu club".
+- **Protección del envío de códigos** (`CodeGuard`, igual para WhatsApp y correo):
+  - Cloudflare Turnstile en crear cuenta, reenviar y "Olvidé mi contraseña" (si está configurado), campo trampa
+    y, en el panel, un tiempo mínimo de llenado.
+  - Solo celulares válidos de países permitidos (`WHATSAPP_ALLOWED_COUNTRIES`, por defecto PY, AR, BR, UY, BO).
+  - Límites por destino (1 por minuto, 3 por hora, 5 por día), por IP (10 por hora, 30 por día) y por cuenta
+    (5 por día); 3 códigos agotados en el día bloquean ese destino. El login bloquea la cuenta 15 minutos
+    después de 10 contraseñas incorrectas.
+  - Tope diario de WhatsApp (`WHATSAPP_DAILY_LIMIT`, 300) y **corte automático** si en la última hora se mandaron
+    más de 20 códigos y se usó menos del 30 %. En pausa, el código sale por correo a quien lo tiene; se avisa a
+    los super admin y se reanuda desde el panel de plataforma ("Códigos de verificación").
+- Los **roles** (admin de otro club, cargos, técnicos, tutores de alumnos cargados por el club)
+  se siguen dando **por invitación**.
+
 ### Invitaciones
-- Alta de usuarios **solo por invitación**; no hay registro abierto.
-- La invitación tiene email, roles (con mandato para los cargos), quién invitó y vencimiento a los
-  **14 días**. Sirve **una sola vez**.
-- El link `{APP_FRONTEND_URL}/invitacion/{token}` llega por email (con QR) y se muestra en el panel
-  **una sola vez**: el token se guarda solo hasheado (sha256). "Reenviar" genera un token nuevo.
-- Una invitación nueva para el mismo email **revoca** la pendiente anterior. Se puede revocar a mano.
-- Al aceptar: si no existe cuenta con ese email se crea (nombre + contraseña de 8+ caracteres);
+- Alta de roles **por invitación** (el registro abierto da una cuenta sin organización).
+- La invitación va a un **correo o a un celular**, con roles (con mandato para los cargos), quién invitó y
+  vencimiento a los **14 días**. Sirve **una sola vez**.
+- El link `{APP_FRONTEND_URL}/invitacion/{token}` llega por email (con QR) o, si es a un celular, quien invita lo
+  manda por WhatsApp (`wa.me` a ese número, sin costo). Se muestra en el panel **una sola vez**: el token se
+  guarda solo hasheado (sha256). "Reenviar" genera un token nuevo.
+- Una invitación nueva para el mismo correo o celular **revoca** la pendiente anterior. Se puede revocar a mano.
+- Un tutor con solo celular se invita uno por uno (el panel muestra el link para WhatsApp); la importación y la
+  invitación masiva mandan por correo a los que lo tienen.
+- Al aceptar: si no existe cuenta con ese correo o celular se crea (nombre + contraseña de 8+ caracteres) y ese
+  dato queda verificado;
   si existe, se pide su contraseña actual. Se activa la membresía, se asignan los roles (sin
   duplicar los que ya tiene) y se devuelve el token de la app.
+- La invitación de un **técnico** desde la guía guarda su nombre (completa "Nombre y apellido" al
+  aceptar) y sus **categorías**: al aceptar queda asignado a las que sigan existiendo. Si el celular o el
+  correo ya es de un técnico del club, se le asignan las categorías sin invitar. El admin que también da
+  clases ("Yo también doy clases") recibe el rol `instructor` y sus categorías sin invitación.
 
 ## 3. Estructura académica *(Sprint 2)*
 
@@ -134,6 +183,11 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
     (cuando exista Asistencia; hasta entonces no genera), agrupado en una cuota por día, semana o mes
     ("octubre: 12 entrenamientos × ₲ 20.000").
   - Vence N días después de empezar cada período. Una temporada sin plan no genera cuotas.
+  - En pantalla no se dice "período": cada cuota se nombra por lo que cubre (mes, quincena, semana o, en "por día",
+    la agrupación), con su género ("este mes", "esta semana", "la quincena completa"), y el vencimiento se pregunta
+    como se piensa ("¿Qué día del mes vence?", "¿Qué día de la semana?"; se guarda en días desde que empieza).
+    Fuente única: `App\Enums\BillingUnit` (panel, resumen y `terms` de la API). Agrupado por día no hay
+    "a mitad de…".
 - **Cuota automática** para inscripciones `activo` o `becado` de temporadas vigentes (la beca total no genera cuota; la parcial se aplica como ajuste; `baja` no se cobra).
   - **Al empezar cada período** (por defecto): el generador corre todos los días y emite los períodos ya empezados.
   - **Todas juntas al inscribir** (opcional, con permiso de cuotas): se crean todas las cuotas de la temporada;
