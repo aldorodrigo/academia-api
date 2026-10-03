@@ -1,0 +1,29 @@
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+# Editorial Data (su Caddy en modo compose.edge.yaml del servidor)
+editorialdata.org, www.editorialdata.org {
+	reverse_proxy editorial-data-proxy:80
+}
+
+# Tuku: API y panel
+{$TUKU_DOMAIN} {
+	reverse_proxy tuku-proxy:80
+}
+
+# Tuku: landing en tukuha.app; el resto (panel, API, links firmados) vive en api.tukuha.app
+tukuha.app {
+	@landing path / /build/* /brand/* /favicon.ico /robots.txt
+	handle @landing {
+		reverse_proxy tuku-proxy:80
+	}
+	handle {
+		redir https://api.tukuha.app{uri}
+	}
+}
+
+www.tukuha.app {
+	redir https://tukuha.app{uri} permanent
+}

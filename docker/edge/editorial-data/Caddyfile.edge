@@ -1,16 +1,17 @@
 {
-	email {$ACME_EMAIL}
 	admin off
 
-	# Detrás del proxy de entrada (compose.edge.yaml) se conservan la IP del
-	# cliente y el esquema que manda; sin él, nadie de la red privada llega acá.
+	# Detrás del proxy de entrada (/srv/edge): se conserva la IP del cliente y el esquema.
 	servers {
 		trusted_proxies static private_ranges
 		client_ip_headers X-Forwarded-For
 	}
 }
 
-{$APP_DOMAIN} {
+http://editorialdata.org, http://www.editorialdata.org {
+	@www host www.editorialdata.org
+	redir @www https://editorialdata.org{uri} permanent
+
 	root * /var/www/html/public
 	encode zstd gzip
 
@@ -25,7 +26,7 @@
 	}
 	file_server
 
-	@immutable path /build/* /css/filament/* /js/filament/* /fonts/filament/*
+	@immutable path /build/*
 	header @immutable Cache-Control "public, max-age=31536000, immutable"
 
 	header {

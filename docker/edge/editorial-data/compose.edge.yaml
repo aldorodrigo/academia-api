@@ -1,0 +1,17 @@
+# Agregado el 2026-10-03 para compartir el servidor con Tuku: los puertos 80 y 443
+# y el HTTPS los tiene el proxy de entrada (/srv/edge); este Caddy atiende HTTP
+# en la red "edge". Se usa solo por COMPOSE_FILE en .env (no está en el repo).
+services:
+    proxy:
+        ports: !reset []
+        volumes:
+            - ./Caddyfile.edge:/etc/caddy/Caddyfile:ro
+        networks:
+            public: {}
+            edge:
+                aliases:
+                    - editorial-data-proxy
+
+networks:
+    edge:
+        external: true

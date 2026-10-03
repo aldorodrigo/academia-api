@@ -39,7 +39,7 @@ services:
         command:
             - --character-set-server=utf8mb4
             - --collation-server=utf8mb4_uca1400_ai_ci
-            - --innodb-buffer-pool-size=768M
+            - --innodb-buffer-pool-size=${DB_BUFFER_POOL_SIZE:-768M}
             - --max-connections=75
             - --skip-name-resolve
         secrets:
@@ -55,7 +55,7 @@ services:
             timeout: 5s
             retries: 12
             start_period: 30s
-        mem_limit: 1280m
+        mem_limit: ${DB_MEM_LIMIT:-1280m}
         init: true
         security_opt:
             - no-new-privileges:true
@@ -80,7 +80,7 @@ services:
             interval: 10s
             timeout: 5s
             retries: 6
-        mem_limit: 256m
+        mem_limit: ${REDIS_MEM_LIMIT:-256m}
         security_opt:
             - no-new-privileges:true
         restart: unless-stopped
@@ -105,7 +105,7 @@ services:
             timeout: 5s
             retries: 5
             start_period: 30s
-        mem_limit: 1024m
+        mem_limit: ${APP_MEM_LIMIT:-1024m}
 
     horizon:
         <<: *app-common
@@ -118,7 +118,7 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_healthy
-        mem_limit: 768m
+        mem_limit: ${HORIZON_MEM_LIMIT:-768m}
         stop_grace_period: 90s
 
     scheduler:
@@ -132,7 +132,7 @@ services:
                 condition: service_healthy
             redis:
                 condition: service_healthy
-        mem_limit: 384m
+        mem_limit: ${SCHEDULER_MEM_LIMIT:-384m}
 
     proxy:
         image: academia-proxy:${APP_IMAGE_TAG:-latest}

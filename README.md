@@ -53,5 +53,10 @@ openssl rand -base64 32 > secrets/db_root_password
 openssl rand -base64 32 > secrets/redis_password
 docker compose -f compose.production.yaml up -d --build
 docker compose -f compose.production.yaml exec app php artisan migrate --force
-docker compose -f compose.production.yaml exec app php artisan shield:generate --all --panel=admin
+# la imagen es de solo lectura: las policies ya están en el repo, solo se cargan los permisos
+docker compose -f compose.production.yaml exec app php artisan shield:generate --all --panel=admin --option=permissions
 ```
+
+`APP_DOMAIN` y `ACME_EMAIL` son variables de compose: van en `.env` (no en `.env.production`). Los límites de
+memoria, el buffer pool de MariaDB y los procesos de Horizon se ajustan con `DB_BUFFER_POOL_SIZE`, `*_MEM_LIMIT`
+y `HORIZON_MAX_PROCESSES`. Para compartir el servidor con otros sitios, ver [`docker/edge/README.md`](docker/edge/README.md).

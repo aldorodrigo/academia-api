@@ -1,11 +1,12 @@
 <?php
 
+use App\Http\Controllers\LandingController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\ReportDownloadController;
 use Illuminate\Support\Facades\Route;
 
-// Por ahora no hay sitio público: la raíz lleva al panel.
-Route::redirect('/', '/admin');
+// Landing pública de Tuku (tukuha.app).
+Route::get('/', LandingController::class)->name('landing');
 
 // Recibo de pago en PDF: link firmado y temporal (app y panel), sin sesión.
 Route::get('recibos/{payment}', ReceiptController::class)
