@@ -9,6 +9,10 @@ use App\Http\Controllers\Api\V1\CurrentOrganizationController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\GroupController;
 use App\Http\Controllers\Api\V1\InvitationController;
+use App\Http\Controllers\Api\V1\Lessons\BookingController;
+use App\Http\Controllers\Api\V1\Lessons\LessonController;
+use App\Http\Controllers\Api\V1\Lessons\LessonProfileController;
+use App\Http\Controllers\Api\V1\Lessons\TeacherController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Http\Controllers\Api\V1\ReportController;
@@ -73,6 +77,25 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::put('students/{student}/reminders', [StudentAttendanceController::class, 'reminders'])->whereNumber('student')->name('students.reminders');
 
             Route::get('reports/delinquents', [ReportController::class, 'delinquents'])->name('reports.delinquents');
+
+            // Clases particulares (alumno adulto o tutor).
+            Route::get('lessons/teachers', [LessonController::class, 'teachers'])->name('lessons.teachers');
+            Route::get('lessons/teachers/{teacher}/slots', [LessonController::class, 'slots'])->whereNumber('teacher')->name('lessons.slots');
+            Route::post('lessons/packs/{pack}/buy', [LessonController::class, 'buy'])->whereNumber('pack')->name('lessons.packs.buy');
+            Route::get('bookings', [BookingController::class, 'index'])->name('bookings.index');
+            Route::post('bookings', [BookingController::class, 'store'])->middleware('throttle:30,1')->name('bookings.store');
+            Route::delete('bookings/{booking}', [BookingController::class, 'destroy'])->whereNumber('booking')->name('bookings.destroy');
+
+            // Clases particulares (profesor).
+            Route::get('me/lesson-profile', [LessonProfileController::class, 'show'])->name('lesson-profile.show');
+            Route::put('me/lesson-profile', [LessonProfileController::class, 'update'])->name('lesson-profile.update');
+            Route::get('teacher/bookings', [TeacherController::class, 'bookings'])->name('teacher.bookings');
+            Route::put('teacher/bookings/{booking}/attendance', [TeacherController::class, 'attendance'])->whereNumber('booking')->name('teacher.bookings.attendance');
+            Route::delete('teacher/bookings/{booking}', [TeacherController::class, 'cancel'])->whereNumber('booking')->name('teacher.bookings.cancel');
+            Route::post('teacher/payments', [TeacherController::class, 'collect'])->name('teacher.payments');
+            Route::get('teacher/students', [TeacherController::class, 'students'])->name('teacher.students');
+            Route::post('teacher/students/{student}/packs', [TeacherController::class, 'sellPack'])->whereNumber('student')->name('teacher.students.packs');
+            Route::post('teacher/packs/{pack}/extend', [TeacherController::class, 'extend'])->whereNumber('pack')->name('teacher.packs.extend');
         });
     });
 });

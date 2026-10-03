@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\ClassReminderPreference;
+use App\Models\LessonProfile;
 use App\Models\NotificationSetting;
 use App\Models\Student;
 use App\Support\Tenancy\CurrentOrganization;
@@ -70,7 +71,7 @@ class NotificationSettingsController extends Controller
         $enabled = ClassReminderPreference::query()->where('user_id', $user->id)->where('enabled', true)->pluck('student_id')->flip();
 
         return [
-            'instructor' => $user->instructedGroups()->exists() ? [
+            'instructor' => $user->instructedGroups()->exists() || LessonProfile::teaches($user, $organization) ? [
                 'enabled' => (bool) $settings->instructor_enabled,
                 'offsets' => $settings->instructorOffsets($organization),
             ] : null,

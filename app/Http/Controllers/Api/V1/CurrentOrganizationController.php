@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Attendance\AttendanceAccess;
+use App\Enums\Feature;
 use App\Http\Controllers\Controller;
+use App\Models\LessonProfile;
 use App\Models\RoleAssignment;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
@@ -48,6 +50,10 @@ class CurrentOrganizationController extends Controller
                         ->filter(fn (string $permission) => $user->can($permission))
                         ->keys()
                         ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
+                        ->when(
+                            $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
+                            fn ($permissions) => $permissions->push('teach_lessons'),
+                        )
                         ->values(),
                 ],
             ],

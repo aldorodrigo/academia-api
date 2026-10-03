@@ -2,17 +2,25 @@
 
 namespace App\Actions\Attendance;
 
+use App\Actions\Lessons\LessonAccess;
+use App\Enums\BookingStatus;
+use App\Enums\Feature;
 use App\Models\Attendance;
+use App\Models\Booking;
 use App\Models\ClassReminderLog;
 use App\Models\ClassReminderPreference;
 use App\Models\ClassSession;
 use App\Models\Group;
+use App\Models\LessonProfile;
+use App\Models\LessonReminderLog;
 use App\Models\NotificationSetting;
 use App\Models\Organization;
 use App\Models\Student;
 use App\Models\User;
 use App\Notifications\ClassReminder;
 use App\Notifications\InstructorClassReminder;
+use App\Notifications\LessonReminder;
+use App\Notifications\TeacherDayReminder;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -24,7 +32,9 @@ use Illuminate\Support\Facades\Notification;
  * Avisos de días de clase (corre cada 15 minutos):
  *  - al tutor que lo pidió para ese hijo: "Hoy Mateo tiene Fútbol a las 17:00. ¿Lo llevás?"
  *    (uno por usuario y clase aunque tenga varios hijos en ella; si ya respondió, no se le avisa);
- *  - al técnico del grupo (activado por defecto): "Hoy tenés clase con Sub-10 · 15 van…".
+ *  - al técnico del grupo (activado por defecto): "Hoy tenés clase con Sub-10 · 15 van…";
+ *  - clases particulares (módulo `private_lessons`): al alumno o tutor por cada reserva y al
+ *    profesor un resumen del día ("Hoy tenés 3 clases: 16:00 Mateo, …"), contado desde la primera.
  *
  * Cada usuario elige hasta 3 momentos (NotificationSetting; si no, los del club). Un aviso que
  * caería entre las 22:00 y las 7:00 sale a las 20:00 del día anterior; los que caen en el mismo
@@ -73,6 +83,10 @@ class SendClassReminders
                 $sent += $this->remindInstructors($session, $groups->firstWhere('id', $session->group_id), $organization, $now, $today);
             }
 
+            if ($organization->hasFeature(Feature::PrivateLessons)) {
+                $sent += $this->remindBookings($organization, $now, $today);
+            }
+
             return $sent;
         });
     }
@@ -82,11 +96,19 @@ class SendClassReminders
      */
     public static function sendAt(ClassSession $session, int|string $offset): CarbonImmutable
     {
+        return self::sendBefore($session->startsAt(), $offset);
+    }
+
+    /**
+     * Lo mismo para cualquier hora de inicio (clases particulares).
+     */
+    public static function sendBefore(CarbonImmutable $startsAt, int|string $offset): CarbonImmutable
+    {
         if ($offset === NotificationSetting::EVE) {
-            return $session->startsAt()->subDay()->setTime(self::EVENING, 0);
+            return $startsAt->subDay()->setTime(self::EVENING, 0);
         }
 
-        $at = $session->startsAt()->subMinutes((int) $offset);
+        $at = $startsAt->subMinutes((int) $offset);
 
         return match (true) {
             $at->hour < self::QUIET_UNTIL => $at->subDay()->setTime(self::EVENING, 0),
@@ -201,5 +223,84 @@ class SendClassReminders
 
             return $claimed;
         });
+    }
+
+    /**
+     * Reservas de hoy y mañana: aviso al alumno o tutor (sus momentos de tutor) y resumen del día
+     * al profesor (sus momentos de técnico, si los tiene activados).
+     */
+    private function remindBookings(Organization $organization, CarbonImmutable $now, CarbonImmutable $today): int
+    {
+        $bookings = Booking::query()
+            ->where('status', BookingStatus::Confirmed)
+            ->whereBetween('date', [$today->toDateString(), $today->addDay()->toDateString()])
+            ->with(['student.guardians', 'teacher', 'organization'])
+            ->orderBy('date')
+            ->orderBy('starts_at')
+            ->get()
+            ->reject(fn (Booking $booking) => $booking->hasStarted($now));
+
+        $sent = 0;
+
+        foreach ($bookings as $booking) {
+            foreach (LessonAccess::recipients($booking->student) as $user) {
+                $offsets = NotificationSetting::for($user, $organization)->guardianOffsets($organization);
+
+                if ($this->claimLesson($organization, "bkg:{$booking->id}:u:{$user->id}", $booking->startsAt(), $offsets, $now)) {
+                    $user->notify(new LessonReminder($booking, $booking->student->user_id === $user->id));
+                    $sent++;
+                }
+            }
+        }
+
+        $teaching = LessonProfile::query()->enabled()->pluck('user_id')->flip();
+
+        foreach ($bookings->groupBy(fn (Booking $booking) => $booking->user_id.'|'.$booking->date->toDateString()) as $day) {
+            $teacher = $day->first()->teacher;
+
+            if ($teacher === null || ! $teaching->has($teacher->id)) {
+                continue;
+            }
+
+            $settings = NotificationSetting::for($teacher, $organization);
+
+            if (! $settings->instructor_enabled) {
+                continue;
+            }
+
+            $key = 'day:'.$day->first()->date->toDateString().":u:{$teacher->id}";
+
+            if ($this->claimLesson($organization, $key, $day->first()->startsAt(), $settings->instructorOffsets($organization), $now)) {
+                $teacher->notify(new TeacherDayReminder($day->values()));
+                $sent++;
+            }
+        }
+
+        return $sent;
+    }
+
+    /**
+     * Como claim(), con la clave del aviso de clase particular.
+     *
+     * @param  list<int|string>  $offsets
+     */
+    private function claimLesson(Organization $organization, string $key, CarbonImmutable $startsAt, array $offsets, CarbonImmutable $now): bool
+    {
+        $claimed = false;
+
+        foreach ($offsets as $offset) {
+            if ($now->lt(self::sendBefore($startsAt, $offset))) {
+                continue;
+            }
+
+            $created = LessonReminderLog::query()->insertOrIgnore([
+                'organization_id' => $organization->id,
+                'reminder_key' => "{$key}:{$offset}",
+                'sent_at' => $now->utc(),
+            ]);
+            $claimed = $claimed || $created > 0;
+        }
+
+        return $claimed;
     }
 }

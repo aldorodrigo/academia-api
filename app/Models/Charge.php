@@ -109,7 +109,8 @@ class Charge extends Model
         $organization = $this->organization;
         $graceDays = (int) $organization->billing('grace_days');
 
-        return $organization->today()->gt($this->due_on->copy()->addDays($graceDays))
+        // Fechas como texto: `due_on` no tiene zona horaria y hoy es la fecha local de la organización.
+        return $organization->today()->toDateString() > $this->due_on->copy()->addDays($graceDays)->toDateString()
             ? ChargeStatus::Overdue
             : ChargeStatus::Pending;
     }
@@ -225,6 +226,26 @@ class Charge extends Model
     public function tariff(): BelongsTo
     {
         return $this->belongsTo(Tariff::class);
+    }
+
+    /**
+     * Reservas de clases particulares sueltas cobradas con este cargo.
+     *
+     * @return HasMany<Booking, $this>
+     */
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
+    }
+
+    /**
+     * Paquetes de clases que se pagan con este cargo.
+     *
+     * @return HasMany<ClassPack, $this>
+     */
+    public function classPacks(): HasMany
+    {
+        return $this->hasMany(ClassPack::class);
     }
 
     /**

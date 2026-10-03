@@ -20,3 +20,6 @@ Schedule::command('expenses:generate')->monthlyOn(1, '00:40')->timezone('America
 
 // Aviso "¿Lo llevás?" unas horas antes de cada clase, a quienes lo pidieron. Idempotente.
 Schedule::command('classes:remind')->everyFifteenMinutes()->withoutOverlapping();
+
+// Paquetes de clases particulares: vencen al pasar su fecha y se avisa 7 días y 1 día antes. Idempotente.
+Schedule::command('packs:expire')->dailyAt('08:00')->timezone('America/Asuncion')->withoutOverlapping();

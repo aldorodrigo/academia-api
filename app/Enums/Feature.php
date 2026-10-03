@@ -13,6 +13,7 @@ enum Feature: string
     case Tournaments = 'tournaments';
     case Evaluations = 'evaluations';
     case ElectronicInvoicing = 'electronic_invoicing';
+    case PrivateLessons = 'private_lessons';
 
     public function label(): string
     {
@@ -23,6 +24,7 @@ enum Feature: string
             self::Tournaments => 'Torneos',
             self::Evaluations => 'Evaluaciones',
             self::ElectronicInvoicing => 'Factura electrónica (SIFEN)',
+            self::PrivateLessons => 'Clases particulares (reservas y paquetes)',
         };
     }
 }

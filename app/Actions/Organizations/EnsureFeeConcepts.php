@@ -7,7 +7,7 @@ use App\Models\FeeConcept;
 use App\Models\Organization;
 
 /**
- * Crea los conceptos de cobro del sistema (cuota mensual e inscripción) que falten.
+ * Crea los conceptos de cobro del sistema (cuota mensual, inscripción y clase particular) que falten.
  * El nombre se puede cambiar; se identifican por `code`.
  */
 class EnsureFeeConcepts
@@ -17,6 +17,7 @@ class EnsureFeeConcepts
         $concepts = [
             FeeConcept::MONTHLY_FEE => ['Cuota', FeeConceptKind::Monthly],
             FeeConcept::ENROLLMENT_FEE => ['Inscripción', FeeConceptKind::OneTime],
+            FeeConcept::PRIVATE_LESSON => ['Clase particular', FeeConceptKind::OneTime],
         ];
 
         foreach ($concepts as $code => [$name, $kind]) {

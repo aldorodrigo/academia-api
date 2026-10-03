@@ -676,3 +676,202 @@ El aviso por hijo sigue en `PUT students/{id}/reminders`.
 Link firmado del push (sin token), válido hasta que empieza la clase. Responde por los alumnos indicados →
 `{ "data": { "message": "Listo: avisaste que Mateo no va." } }`. Alterado o vencido → `403`; clase empezada o
 suspendida → `422` con `message`.
+
+## Sprint 5c (implementado)
+
+Clases particulares: el profesor publica su disponibilidad, su precio por clase suelta y sus paquetes; el alumno adulto
+o el tutor reserva día y hora. Requieren token + organización con el módulo `private_lessons`. Todas las fechas y horas
+son locales de la organización.
+
+- **Clase suelta:** el cargo "Clase particular 06/10" se emite cuando el profesor marca **Vino** (vence ese día). Si el
+  alumno pagó antes, el pago quedó como saldo a favor y se aplica solo. "No vino" no se cobra.
+- **Paquete:** al comprarlo se emite el cargo "Paquete 4 clases" y el paquete queda `pendiente_pago`; se activa cuando
+  el cargo queda pagado (también con saldo a favor). Cada "Vino" descuenta una clase; "No vino" no descuenta.
+  Vence a los `valid_days` de activarse (`null` = sin vencimiento); las clases sin usar se pierden, salvo que el
+  profesor lo extienda.
+- **Forma de pago de una reserva:** se elige sola al reservar. Si el alumno tiene un paquete activo con el profesor,
+  con clases libres (`available`: las que quedan menos las ya reservadas) y la clase es hasta el vencimiento, usa el
+  paquete; si no, es suelta.
+
+### Objetos
+
+**Reserva**
+
+```json
+{
+  "id": 40,
+  "date": "2026-10-06", "starts_at": "16:00", "ends_at": "17:00",
+  "status": "confirmada",
+  "payment": "paquete",
+  "price": 35000,
+  "class_pack_id": 5,
+  "teacher": { "id": 7, "name": "Carlos Gómez" },
+  "student": { "id": 12, "first_name": "Mateo", "full_name": "Mateo Benítez" },
+  "charge": null,
+  "can_cancel": true
+}
+```
+
+- `status`: `confirmada`, `asistio`, `ausente`, `cancelada_alumno` o `cancelada_profesor`.
+- La vista del profesor (`teacher/*`) suma `pack` (el paquete que usa) y `credit` (saldo a favor de la familia).
+- `payment`: `paquete` o `suelta`. `price`: el de la clase suelta (solo en `suelta`).
+- `charge`: el cargo de la clase suelta, cuando se emitió: `{ "id": 301, "amount": 35000, "pending": 0 }`.
+- `can_cancel`: confirmada y todavía no empezó.
+
+**Paquete comprado**
+
+```json
+{
+  "id": 5, "teacher_id": 7, "student_id": 12,
+  "classes": 4, "used": 1, "reserved": 1, "available": 2,
+  "price": 100000, "valid_days": 60,
+  "status": "activo",
+  "activated_on": "2026-10-03", "expires_on": "2026-12-01",
+  "charge": { "id": 300, "amount": 100000, "pending": 0 }
+}
+```
+
+- `status`: `pendiente_pago`, `activo`, `terminado` (usó todas) o `vencido`.
+- `reserved`: reservas confirmadas que usan el paquete; `available = classes - used - reserved`.
+- `activated_on` y `expires_on` son `null` mientras está pendiente; `expires_on` es `null` sin vencimiento.
+
+### Alumno o tutor
+
+#### `GET lessons/teachers`
+
+```json
+{
+  "data": [
+    {
+      "id": 7, "name": "Carlos Gómez", "photo_url": null,
+      "duration_minutes": 60, "single_price": 35000,
+      "packs": [ { "id": 2, "classes": 4, "price": 100000, "valid_days": 60 } ],
+      "students": [
+        { "student": { "id": 12, "first_name": "Mateo", "full_name": "Mateo Benítez" },
+          "pack": { …paquete comprado… }, "next_booking": { …reserva… } }
+      ]
+    }
+  ]
+}
+```
+
+- Profesores con clases particulares activas. `students`: los alumnos a cargo del usuario (él mismo si es adulto).
+- `pack`: el activo o pendiente; si no hay, el último vencido o terminado de los últimos 30 días (para mostrar "Tu
+  paquete venció"); `null` si nunca compró.
+
+#### `GET lessons/teachers/{id}/slots?from=2026-10-03&to=2026-10-17`
+
+```json
+{ "data": { "duration_minutes": 60, "days": [ { "date": "2026-10-05", "times": ["15:00", "16:00", "18:00"] } ] } }
+```
+
+Horas libres: la disponibilidad del profesor partida por la duración de la clase, sin las reservadas ni las que
+empiezan antes de la anticipación mínima. Solo días con alguna hora libre. Por defecto, de hoy a `days_ahead` días.
+
+#### `POST bookings`
+
+`{ "student_id": 12, "teacher_id": 7, "date": "2026-10-06", "starts_at": "16:00" }` → `201` con la reserva. Avisa
+al profesor. `422` si el alumno no está a cargo, si la hora no está libre (`errors.starts_at`: "Ese horario ya se
+reservó. Elegí otro.") o si ya pasó.
+
+#### `GET bookings`
+
+`{ "data": { "upcoming": [ …reservas… ], "past": [ …reservas (últimos 60 días, de la más nueva a la más vieja)… ] } }`
+de los alumnos a cargo; `?student_id=12` filtra. Las canceladas no aparecen en `upcoming`.
+
+#### `DELETE bookings/{id}`
+
+Cancela (hasta que empieza) → la reserva con `cancelada_alumno`. Avisa al profesor. No tiene costo.
+
+#### `POST lessons/packs/{pack}/buy`
+
+`{ "student_id": 12 }` → `201` con el paquete comprado (`pendiente_pago`, o `activo` si el saldo a favor lo cubrió).
+`422` si ya tiene un paquete pendiente de pago con ese profesor.
+
+### Profesor
+
+`GET organization` suma el permiso `teach_lessons` cuando el profesor tiene las clases particulares activas.
+`me/lesson-profile` lo puede usar cualquier usuario con el perfil instructor (para activarlas).
+
+#### `GET me/lesson-profile`
+
+```json
+{
+  "data": {
+    "enabled": true,
+    "duration_minutes": 60,
+    "single_price": 35000,
+    "min_notice_minutes": 120,
+    "days_ahead": 30,
+    "money_account_id": 1,
+    "money_accounts": [ { "id": 1, "name": "Caja" } ],
+    "packs": [ { "id": 2, "classes": 4, "price": 100000, "valid_days": 60 } ],
+    "availability": [ { "weekday": 1, "starts_at": "15:00", "ends_at": "20:00" } ]
+  }
+}
+```
+
+`weekday`: 1 = lunes … 7 = domingo. Sin perfil, `enabled: false` con valores por defecto.
+
+#### `PUT me/lesson-profile`
+
+El mismo objeto (sin `money_accounts`). Los paquetes sin `id` se crean; los que no vienen dejan de ofrecerse (los ya
+vendidos siguen igual). La disponibilidad se reemplaza entera. `422` si un precio no es mayor a 0, si `duration_minutes`
+no está entre 30 y 180, si `valid_days` no es `null` o de 1 a 365, si una franja termina antes de empezar o se
+superpone con otra del mismo día, o si está activo sin precio o sin disponibilidad.
+
+#### `GET teacher/bookings?from=2026-10-03&to=2026-10-09`
+
+Reservas confirmadas o marcadas del profesor (por defecto, hoy), por fecha y hora. Cada una suma `pack` (el paquete
+que usa) y `credit` (saldo a favor de la familia del alumno).
+
+#### `PUT teacher/bookings/{id}/attendance`
+
+`{ "attended": true }` → la reserva. Desde el día de la clase hasta 3 días después; se puede corregir.
+
+- Vino con paquete: descuenta una clase. Vino suelta: emite el cargo (una sola vez) y aplica el saldo a favor.
+- Corregir a "No vino": devuelve la clase al paquete o anula el cargo de la suelta. Si ese cargo ya tiene pagos,
+  `422` ("Ya está cobrada: anulá el pago desde el panel").
+
+#### `DELETE teacher/bookings/{id}`
+
+`{ "reason": "Estoy enfermo" }` (opcional) → la reserva con `cancelada_profesor`. Avisa al alumno o tutor.
+
+#### `POST teacher/payments`
+
+`{ "student_id": 12, "amount": 35000, "method": "efectivo", "booking_id": 40 }` (`method`: `efectivo` o
+`transferencia`; `booking_id` o `class_pack_id`, opcionales) → `201`:
+
+```json
+{ "data": { "receipt_number": "000123", "amount": 35000, "applied": 35000, "credit": 0,
+            "message": "Cobrado ₲ 35.000.", "booking": { … }, "pack": null } }
+```
+
+Entra en la cuenta del perfil. Se imputa primero al cargo de la reserva o del paquete; si no hay cargo todavía (cobro
+antes de la clase), queda como saldo a favor. Solo para alumnos con reservas o paquetes con el profesor.
+
+#### `GET teacher/students`
+
+`[{ "student": { … }, "pack": { … } | null, "debt": 35000, "credit": 0, "last_booking": "2026-10-06" }]`, por nombre.
+`debt`: lo pendiente de sus cargos de clases particulares.
+
+#### `POST teacher/students/{student}/packs`
+
+`{ "lesson_pack_id": 2 }` → `201` con el paquete comprado (el profesor lo vende y después lo cobra).
+
+#### `POST teacher/packs/{id}/extend`
+
+`{ "expires_on": "2026-12-31" }` → el paquete. Para paquetes activos o vencidos con clases sin usar; si estaba vencido
+vuelve a `activo`. Queda en la auditoría.
+
+### Avisos
+
+Usan los momentos de `me/notification-settings` (alumno o tutor: `guardian.offsets`; profesor: `instructor.offsets`;
+`instructor` deja de ser `null` si el usuario da clases particulares).
+
+- Al profesor: nueva reserva `{ "type": "lesson_booked", "route": "/particulares/agenda" }`, cancelación
+  `lesson_cancelled`, y "Hoy tenés 3 clases: 16:00 Mateo, …" `{ "type": "lesson_today", "route": "/particulares/agenda" }`.
+- Al alumno o tutor: "Mañana tenés clase con Carlos a las 16:00" `{ "type": "lesson_reminder", "route": "/reservas" }`,
+  cancelación del profesor `lesson_cancelled` (`/reservas`), "Te queda 1 clase del paquete" `pack_low` (`/inicio`) y
+  "Tu paquete con Carlos vence el viernes 15/11 y te quedan 2 clases" 7 días y 1 día antes `pack_expiring`
+  (`/particulares/7/reservar`).

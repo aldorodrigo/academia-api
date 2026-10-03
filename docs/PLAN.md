@@ -456,4 +456,26 @@ se envía al volver la señal, link firmado del push). Notas:
    respondió; regla nocturna 22–7 → 20:00 del día anterior. API: `GET/PUT me/notification-settings`,
    `notification_settings` y `class_reminder_logs` (reemplaza `attendances.reminded_at`).
 
+### Sprint 5c — clases particulares: reservas, clase suelta y paquetes ✅
+Plan aprobado e implementado el 2026-10-03 (contrato en `API_V1.md` "Sprint 5c"). Módulo `private_lessons` por
+organización (sirve para un profesor solo o una academia con varios). Decisiones: la reserva se confirma sola dentro
+de la disponibilidad que cargó el profesor; la ausencia no se cobra ni descuenta; los paquetes vencen (15/30/60 días,
+personalizado o sin vencimiento, contado desde que se pagan) y el profesor los puede extender; reservan alumnos
+adultos y tutores.
+- **Reserva** (`bookings`, modelo propio, no `ClassSession`): `slot_key` única evita la doble reserva. Cancelar
+  (alumno o profesor) hasta que empieza, sin costo, con aviso a la otra parte. "Cambiar" = cancelar y reservar.
+- **Clase suelta**: el cargo "Clase particular" se emite al marcar **Vino** (nunca hay que corregir un cargo). El
+  cobro antes de la clase queda como saldo a favor y se aplica solo. Corregir a "No vino" anula el cargo si no tiene
+  pagos; si ya tiene, se anula el pago desde el panel.
+- **Paquete** (`class_packs`, cantidad de clases, no plata): cargo "Paquete 4 clases" pendiente; se activa cuando
+  queda pagado (hook en `RegisterPayment` y `ApplyCredit` → `ActivatePaidPacks`). Al reservar se usa si tiene clases
+  libres y la fecha es hasta el vencimiento; si no, es suelta. `packs:expire` (08:00) vence y avisa 7 y 1 días antes.
+- **Cobro desde la app** (`POST teacher/payments`): entra en la cuenta del perfil del profesor (o la primera activa).
+- **Avisos**: reserva y cancelación al profesor; recordatorio al alumno o tutor con sus momentos de tutor; resumen del
+  día al profesor con sus momentos de técnico (`classes:remind`, `lesson_reminder_logs`); "te queda 1 clase" y
+  "vence pronto".
+- **Panel**: grupo "Clases particulares" (reservas con cancelar, paquetes con extender, profesores con precios,
+  paquetes y disponibilidad), solo con el módulo activo.
+- Pendiente: anular un pago no desactiva un paquete ya activado; lista de espera; pago online.
+
 ### Después: Sprint 5b — avisos segmentados con lectura

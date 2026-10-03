@@ -2,6 +2,7 @@
 
 namespace App\Actions\Billing;
 
+use App\Actions\Lessons\ActivatePaidPacks;
 use App\Enums\PaymentMethod;
 use App\Models\Charge;
 use App\Models\Family;
@@ -24,7 +25,10 @@ use Illuminate\Validation\ValidationException;
  */
 class RegisterPayment
 {
-    public function __construct(private EarlyPaymentDiscount $earlyPayment) {}
+    public function __construct(
+        private EarlyPaymentDiscount $earlyPayment,
+        private ActivatePaidPacks $activatePacks,
+    ) {}
 
     /**
      * @param  array<int, int>|null  $allocations  cargo => monto elegido por el tesorero; null = automático
@@ -45,7 +49,7 @@ class RegisterPayment
             throw ValidationException::withMessages(['amount' => 'El monto tiene que ser mayor a cero.']);
         }
 
-        return DB::transaction(function () use ($family, $account, $amount, $method, $receivedOn, $by, $payer, $allocations, $reference, $notes) {
+        $payment = DB::transaction(function () use ($family, $account, $amount, $method, $receivedOn, $by, $payer, $allocations, $reference, $notes) {
             // Lock de la organización: recibo correlativo sin huecos.
             Organization::query()->whereKey($family->organization_id)->lockForUpdate()->first();
 
@@ -85,6 +89,11 @@ class RegisterPayment
 
             return $payment->load('allocations');
         });
+
+        // Los paquetes de clases que quedaron pagados se activan.
+        $this->activatePacks->forFamily($family);
+
+        return $payment;
     }
 
     /**
