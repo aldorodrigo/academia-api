@@ -247,7 +247,11 @@ class SeasonPlan
             ->map(fn (array $row) => Group::query()->whereKey($row['group_id'])->value('name').': '.Money::pyg((int) $row['amount'])->format());
 
         $text .= match ($frequency) {
-            FeeFrequency::Daily => " Se cobra {$amount} por ".($season->daily_basis === DailyBasis::Attendance ? 'clase asistida' : 'día de entrenamiento')
+            FeeFrequency::Daily => " Se cobra {$amount} por ".(match ($season->daily_basis) {
+                DailyBasis::Attendance => 'clase asistida',
+                DailyBasis::Taught => 'clase dictada',
+                default => 'día de entrenamiento',
+            })
                 .', '.mb_strtolower($season->daily_grouping?->getLabel() ?? 'una cuota por mes'),
             default => ' Cuota '.mb_strtolower($frequency->getLabel())." de {$amount}",
         };
@@ -260,6 +264,7 @@ class SeasonPlan
 
         $text .= match (true) {
             $season->chargesByAttendance() => ' Cada cuota se crea cuando termina su período, con las clases a las que vino según la asistencia.',
+            $season->chargesAfterPeriod() => ' Cada cuota se crea cuando termina su período, con las clases que se dieron (las suspendidas no se cobran).',
             $season->issue_upfront => ' Las '.self::periodsCount($state).' cuotas de cada jugador se crean todas al inscribirlo.',
             default => ' Cada cuota se crea al empezar su período.',
         };

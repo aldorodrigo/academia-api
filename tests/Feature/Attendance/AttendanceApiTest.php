@@ -4,7 +4,6 @@ use App\Actions\Attendance\SendClassReminders;
 use App\Actions\Billing\GenerateSeasonCharges;
 use App\Actions\Billing\RegisterPayment;
 use App\Actions\Billing\WaiveSuspendedClass;
-use App\Enums\AdjustmentType;
 use App\Enums\EnrollmentStatus;
 use App\Enums\GuardianResponse;
 use App\Enums\OrganizationRole;
@@ -95,6 +94,14 @@ function attendanceStudent(string $first, string $last, Group $group, Enrollment
 function attendanceApi(User $user, string $method, string $uri, array $data = [], string $organization = 'jakare')
 {
     return test()->actingAs($user, 'sanctum')->json($method, "/api/v1/{$uri}", $data, ['X-Organization' => $organization]);
+}
+
+/**
+ * La cuota vigente (no anulada) de la primera semana de la colonia.
+ */
+function currentWeek1(): Charge
+{
+    return Charge::query()->whereNull('voided_at')->whereDate('period_start', '2026-09-28')->sole();
 }
 
 function todayClassId(User $user): int
@@ -554,7 +561,7 @@ describe('clase suspendida sin cobrar (por día de entrenamiento)', function () 
         $this->wednesday = fn () => attendanceApi($this->instructor, 'GET', 'classes?date=2026-09-30')->json('data.0.id');
     });
 
-    it('la cuota impaga recibe el ajuste; volver a programar lo quita', function () {
+    it('la cuota impaga se anula y se reemite sin ese día; volver a programar la reemite con él', function () {
         expect($this->week1->final_amount)->toBe(40000);
         $id = ($this->wednesday)();
         attendanceApi($this->instructor, 'GET', "classes/{$id}")->assertJsonPath('data.can_waive_charge', true);
@@ -563,18 +570,21 @@ describe('clase suspendida sin cobrar (por día de entrenamiento)', function () 
             ->assertOk()
             ->assertJsonPath('data.charge_waived', true);
 
-        $charge = $this->week1->fresh('adjustments');
-        expect($charge->final_amount)->toBe(20000)
-            ->and($charge->adjustments->sole()->label)->toBe('Clase suspendida 30/09')
-            ->and($charge->adjustments->sole()->type)->toBe(AdjustmentType::SuspendedClass);
+        // La cuota emitida no se modifica: se anula con motivo y sale otra con un día menos.
+        expect($this->week1->fresh())
+            ->isVoided()->toBeTrue()
+            ->final_amount->toBe(40000)
+            ->void_reason->toBe('Se vuelve a emitir sin la clase suspendida 30/09.');
+        expect(currentWeek1())->quantity->toBe(1)->final_amount->toBe(20000)
+            ->and(currentWeek1()->adjustments()->count())->toBe(0);
 
-        // Idempotente: suspender de nuevo no descuenta dos veces.
+        // Idempotente: suspender de nuevo no reemite otra vez.
         app(WaiveSuspendedClass::class)->apply(ClassSession::query()->find($id));
-        expect($this->week1->fresh()->final_amount)->toBe(20000);
+        expect(Charge::query()->count())->toBe(2);
 
         attendanceApi($this->instructor, 'DELETE', "classes/{$id}/suspension")->assertOk();
-        expect($this->week1->fresh()->final_amount)->toBe(40000)
-            ->and($this->week1->adjustments()->count())->toBe(0);
+        expect(currentWeek1())->quantity->toBe(2)->final_amount->toBe(40000)
+            ->and(Charge::query()->whereNotNull('voided_at')->count())->toBe(2);
     });
 
     it('sin la casilla no descuenta', function () {
@@ -613,13 +623,65 @@ describe('clase suspendida sin cobrar (por día de entrenamiento)', function () 
     it('reprogramar no descuenta y deshace el descuento', function () {
         $id = ($this->wednesday)();
         attendanceApi($this->instructor, 'POST', "classes/{$id}/suspension", ['reason' => 'Lluvia', 'waive_charge' => true]);
-        expect($this->week1->fresh()->final_amount)->toBe(20000);
+        expect(currentWeek1()->final_amount)->toBe(20000);
 
         attendanceApi($this->instructor, 'POST', "classes/{$id}/reschedule", ['date' => '2026-10-03', 'starts_at' => '09:00', 'ends_at' => '10:30'])
             ->assertOk()
             ->assertJsonPath('data.charge_waived', false);
 
-        expect($this->week1->fresh()->final_amount)->toBe(40000);
+        expect(currentWeek1()->final_amount)->toBe(40000);
+    });
+
+    it('si la cuota ya se pagó y la próxima ya está emitida impaga, la próxima se reemite con el descuento', function () {
+        app(GenerateSeasonCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-05'));
+        app(RegisterPayment::class)->handle($this->family, MoneyAccount::query()->first(), 40000, PaymentMethod::Cash, CarbonImmutable::parse('2026-09-28'), allocations: [$this->week1->id => 40000]);
+        $week2 = Charge::query()->whereDate('period_start', '2026-10-05')->sole();
+
+        attendanceApi($this->instructor, 'POST', 'classes/'.($this->wednesday)().'/suspension', ['reason' => 'Lluvia', 'waive_charge' => true])->assertOk();
+
+        expect($this->week1->fresh()->isVoided())->toBeFalse()
+            ->and($week2->fresh()->isVoided())->toBeTrue();
+        $reissued = Charge::query()->whereNull('voided_at')->whereDate('period_start', '2026-10-05')->sole();
+        expect($reissued->final_amount)->toBe(20000)
+            ->and($reissued->adjustments()->sole()->label)->toBe('Clase suspendida 30/09')
+            ->and(ChargeWaiver::query()->sole()->applied_charge_id)->toBe($reissued->id);
+
+        // Volver a programar: el descuento se borra y la próxima vuelve a su monto.
+        attendanceApi($this->instructor, 'DELETE', 'classes/'.($this->wednesday)().'/suspension')->assertOk();
+        expect(Charge::query()->whereNull('voided_at')->whereDate('period_start', '2026-10-05')->sole()->final_amount)->toBe(40000)
+            ->and(ChargeWaiver::query()->count())->toBe(0);
+    });
+
+    it('por clase dictada: la cuota sale al cerrar el período, sin las suspendidas y con las recuperaciones', function () {
+        // Se empieza sin la cuota por día de entrenamiento de la preparación.
+        Charge::query()->update(['voided_at' => now(), 'void_reason' => 'Prueba', 'unique_key' => null]);
+        $this->colonia->update(['daily_basis' => 'dictado']);
+        $wednesday = ($this->wednesday)();
+
+        // Por clase dictada no hay casilla: lo suspendido nunca se cobra.
+        attendanceApi($this->instructor, 'GET', "classes/{$wednesday}")->assertJsonPath('data.can_waive_charge', false);
+        attendanceApi($this->instructor, 'POST', "classes/{$wednesday}/suspension", ['reason' => 'Lluvia'])->assertOk();
+
+        // Durante el período no se emite nada.
+        app(GenerateSeasonCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-01'));
+        expect(Charge::query()->whereNull('voided_at')->count())->toBe(0);
+
+        // Cerrado el período (y los días para corregir): lunes 28 sí, miércoles 30 suspendido.
+        $this->travelTo(CarbonImmutable::parse('2026-10-09 10:00', 'America/Asuncion'));
+        app(GenerateSeasonCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-09'));
+        $charge = Charge::query()->whereNull('voided_at')->sole();
+        expect([$charge->quantity, $charge->final_amount, $charge->description])->toBe([1, 20000, 'Cuota semana 28 sep – 4 oct (1 clase)']);
+    });
+
+    it('por clase dictada, la recuperación cuenta', function () {
+        // Se empieza sin la cuota por día de entrenamiento de la preparación.
+        Charge::query()->update(['voided_at' => now(), 'void_reason' => 'Prueba', 'unique_key' => null]);
+        $this->colonia->update(['daily_basis' => 'dictado']);
+        attendanceApi($this->instructor, 'POST', 'classes/'.($this->wednesday)().'/reschedule', ['date' => '2026-10-03', 'starts_at' => '09:00', 'ends_at' => '10:30'])->assertOk();
+
+        $this->travelTo(CarbonImmutable::parse('2026-10-09 10:00', 'America/Asuncion'));
+        app(GenerateSeasonCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-09'));
+        expect(Charge::query()->whereNull('voided_at')->sole()->quantity)->toBe(2);
     });
 
     it('con cuota fija no se puede no cobrar', function () {

@@ -600,13 +600,22 @@ notificación. Los campos anteriores no cambian. La asistencia sin conexión es 
 
 `{ "reason": "Lluvia", "waive_charge": true }`. Con `waive_charge` (y `can_waive_charge`), la clase no se cobra:
 
-- Si la cuota del período todavía no se emitió, sale con un día menos.
-- Si se emitió y está impaga, se le agrega el ajuste "Clase suspendida 28/09" (monto negativo, tipo `clase_suspendida`).
-- Si ya tiene pagos, el ajuste va a la próxima cuota de la inscripción (cuando se emita). Si no hay más cuotas, queda
-  como saldo a favor de la familia.
+Un cargo emitido nunca se modifica:
 
-`DELETE classes/{id}/suspension` quita esos ajustes de las cuotas que siguen impagas. En temporadas con cuota fija
-(mensual, quincenal, semanal) y por clase asistida, suspender nunca cambia las cuotas.
+- Si la cuota del período todavía no se emitió, sale con un día menos.
+- Si se emitió y está impaga, se anula ("Se vuelve a emitir sin la clase suspendida 28/09.") y sale otra con un día
+  menos.
+- Si ya tiene pagos, queda un descuento pendiente que entra como ajuste "Clase suspendida 28/09" (tipo
+  `clase_suspendida`) en la próxima cuota del alumno: al emitirla o, si ya está emitida e impaga, reemitiéndola.
+
+`DELETE classes/{id}/suspension` (o reprogramar) reemite las cuotas que siguen impagas con ese día y borra los
+descuentos pendientes. En temporadas con cuota fija (mensual, quincenal, semanal), por clase asistida y por clase
+dictada, suspender nunca cambia las cuotas.
+
+**Por clase dictada** (`daily_basis: dictado`, se elige en el panel): como por clase asistida, la cuota se crea al
+terminar el período (y los días para corregir la asistencia), con las clases que se dieron: los días con horario sin
+las suspendidas ni las reprogramadas, más las recuperaciones. Ahí no hay casilla "No cobrar": lo suspendido nunca se
+cobra.
 
 ### `POST classes/{id}/reschedule`
 

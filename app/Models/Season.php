@@ -142,6 +142,15 @@ class Season extends Model
     }
 
     /**
+     * La cuota se crea al terminar el período (por clase asistida o por clase dictada).
+     */
+    public function chargesAfterPeriod(): bool
+    {
+        return $this->fee_frequency === FeeFrequency::Daily
+            && in_array($this->daily_basis, [DailyBasis::Attendance, DailyBasis::Taught], true);
+    }
+
+    /**
      * @return BelongsToMany<Program, $this>
      */
     public function programs(): BelongsToMany

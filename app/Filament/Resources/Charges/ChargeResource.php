@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Charges;
 use App\Actions\Billing\VoidCharge;
 use App\Enums\ChargeStatus;
 use App\Filament\Resources\Charges\Pages\ManageCharges;
+use App\Filament\Support\ChargeHistory;
 use App\Filament\Support\MoneyColumn;
 use App\Filament\Support\Terms;
 use App\Models\Charge;
@@ -94,7 +95,7 @@ class ChargeResource extends Resource
                     ->schema([DatePicker::make('period')->label('Mes')->format('Y-m-01')->displayFormat('m/Y')])
                     ->query(fn (Builder $query, array $data) => $query->when($data['period'] ?? null, fn (Builder $query, string $period) => $query->whereDate('period', $period))),
             ])
-            ->recordActions([self::detailAction(), self::voidAction()]);
+            ->recordActions([self::detailAction(), self::historyAction(), self::voidAction()]);
     }
 
     /**
@@ -141,6 +142,20 @@ class ChargeResource extends Resource
                     ])->all(),
                 ],
                 'total' => Money::pyg($record->pendingAmount())->format(),
+            ])->render()));
+    }
+
+    private static function historyAction(): Action
+    {
+        return Action::make('history')
+            ->label('Historial')
+            ->icon(Heroicon::OutlinedClock)
+            ->modalHeading(fn (Charge $record) => "Historial: {$record->description}")
+            ->modalSubmitAction(false)
+            ->modalCancelActionLabel('Cerrar')
+            ->modalContent(fn (Charge $record) => new HtmlString(view('filament.charges.history', [
+                'entries' => ChargeHistory::for($record),
+                'timezone' => $record->organization->timezone,
             ])->render()));
     }
 

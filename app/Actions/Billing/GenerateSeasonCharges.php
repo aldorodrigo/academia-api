@@ -70,7 +70,7 @@ class GenerateSeasonCharges
                 ->whereDate('starts_on', '<=', $on->toDateString())
                 ->whereDate('ends_on', '>=', IssueSeasonCharges::lastClosedDay($on)->toDateString())
                 ->get()
-                ->filter(fn (Season $season) => $season->chargesByAttendance() || $season->status($on) === SeasonStatus::Active);
+                ->filter(fn (Season $season) => $season->chargesAfterPeriod() || $season->status($on) === SeasonStatus::Active);
         $families = [];
 
         foreach ($seasons as $season) {

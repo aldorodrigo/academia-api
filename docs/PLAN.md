@@ -428,10 +428,12 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
 Plan aprobado e implementado el 2026-09-27 (contrato en `API_V1.md` "Sprint 5a+"). Probado de punta a punta con Sail +
 web (reprogramar como técnico, recuperación en la agenda del tutor, avisos configurables, asistencia sin conexión que
 se envía al volver la señal, link firmado del push). Notas:
-- Única excepción a "un cargo no se modifica": el monto final de una cuota impaga baja por el ajuste
-  `clase_suspendida` (`Charge::withSuspendedClassAdjustment`, queda en la auditoría).
-- El descuento pendiente de una cuota ya pagada se aplica a la próxima cuota del alumno (`charge_waivers`); si no hay
-  más cuotas queda pendiente (no se genera saldo a favor, para no crear movimientos de dinero).
+- Un cargo emitido nunca se modifica (2026-10-03, se quitó la excepción `Charge::withSuspendedClassAdjustment`): la
+  cuota impaga se anula y se reemite sin el día; la ya pagada deja un descuento pendiente (`charge_waivers`) que entra
+  como ajuste al emitir (o reemitir, si está impaga) la próxima cuota del alumno. Si no hay más cuotas queda pendiente
+  (no se genera saldo a favor, para no crear movimientos de dinero). Nuevo cobro **por clase dictada**: la cuota sale
+  al cerrar el período con las clases que se dieron. En el panel, cada cargo tiene "Historial" (emisión, pagos,
+  anulación con motivo y quién, y la cuota que la reemplazó).
 - Los links firmados usan `APP_URL`: en producción tiene que ser la URL pública de la API.
 - Los botones del push en Android/iOS y el APNs quedan por probar en un dispositivo cuando exista el proyecto Firebase.
 

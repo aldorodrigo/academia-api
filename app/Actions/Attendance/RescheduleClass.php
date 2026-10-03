@@ -63,9 +63,7 @@ class RescheduleClass
         }
 
         $makeup = DB::transaction(function () use ($session, $data, $date, $startsAt, $endsAt, $user) {
-            if ($session->charge_waived) {
-                $this->waiver->undo($session);
-            }
+            $waived = $session->charge_waived;
 
             $makeup = ClassSession::query()->create([
                 'organization_id' => $session->organization_id,
@@ -84,6 +82,11 @@ class RescheduleClass
                 'charge_waived' => false,
                 'rescheduled_to_id' => $makeup->id,
             ]);
+
+            // Reprogramar no descuenta: si estaba suspendida sin cobrar, las cuotas vuelven a contar el día.
+            if ($waived) {
+                $this->waiver->undo($session, $user);
+            }
 
             return $makeup;
         });

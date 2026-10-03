@@ -15,11 +15,15 @@ enum DailyBasis: string implements HasLabel
     /** Clases a las que asistió (requiere el módulo de asistencia). */
     case Attendance = 'asistencia';
 
+    /** Clases que se dieron: sin las suspendidas, con las recuperaciones. Se cobra al cerrar el período. */
+    case Taught = 'dictado';
+
     public function getLabel(): string
     {
         return match ($this) {
             self::Training => 'Días de entrenamiento',
             self::Attendance => 'Clases asistidas',
+            self::Taught => 'Clases dictadas',
         };
     }
 
@@ -30,7 +34,7 @@ enum DailyBasis: string implements HasLabel
     {
         return match ($this) {
             self::Training => $quantity === 1 ? '1 entrenamiento' : "{$quantity} entrenamientos",
-            self::Attendance => $quantity === 1 ? '1 clase' : "{$quantity} clases",
+            self::Attendance, self::Taught => $quantity === 1 ? '1 clase' : "{$quantity} clases",
         };
     }
 }

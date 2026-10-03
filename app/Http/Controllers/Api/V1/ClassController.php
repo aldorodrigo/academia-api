@@ -79,7 +79,7 @@ class ClassController extends Controller
     {
         $session = $this->find($request, $class);
         abort_unless($session->isSuspended(), 422, 'La clase no está suspendida.');
-        $suspend->resume($session);
+        $suspend->resume($session, $request->user());
 
         return $this->respond($request, $session->refresh());
     }

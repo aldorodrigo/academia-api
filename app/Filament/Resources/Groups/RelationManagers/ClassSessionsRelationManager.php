@@ -141,7 +141,7 @@ class ClassSessionsRelationManager extends RelationManager
                     ->icon('heroicon-o-arrow-uturn-left')
                     ->visible(fn (ClassSession $record) => $record->isSuspended() && ! $record->isPast())
                     ->requiresConfirmation()
-                    ->action(fn (ClassSession $record, SuspendClass $suspend) => $suspend->resume($record)),
+                    ->action(fn (ClassSession $record, SuspendClass $suspend) => $suspend->resume($record, auth()->user())),
                 Action::make('cancel_reschedule')
                     ->label('Cancelar reprogramación')
                     ->icon('heroicon-o-x-circle')

@@ -85,6 +85,26 @@ class SeasonPeriods
         return $this->countDays($start, $end, $this->trainingWeekdays($group), $this->waivedDates($season, $group, $start, $end));
     }
 
+    /**
+     * Clases que se dieron en un tramo (cobro por clase dictada): los días con horario sin las
+     * clases suspendidas o reprogramadas, más las recuperaciones.
+     */
+    public function taughtBetween(Group $group, CarbonImmutable $start, CarbonImmutable $end): int
+    {
+        $sessions = ClassSession::query()->withoutGlobalScopes()
+            ->where('group_id', $group->id)
+            ->whereDate('date', '>=', $start->toDateString())
+            ->whereDate('date', '<=', $end->toDateString())
+            ->get();
+
+        $off = $sessions->filter(fn (ClassSession $session) => ! $session->is_makeup && $session->isOff())
+            ->map(fn (ClassSession $session) => $session->date->toDateString())
+            ->unique()->values()->all();
+        $makeups = $sessions->filter(fn (ClassSession $session) => $session->is_makeup && ! $session->isOff())->count();
+
+        return $this->countDays($start, $end, $this->trainingWeekdays($group), $off) + $makeups;
+    }
+
     private function unitStart(Season $season, CarbonImmutable $date): CarbonImmutable
     {
         return match ($this->unit($season)) {
@@ -175,10 +195,10 @@ class SeasonPeriods
     }
 
     /**
-     * La cantidad sale de la asistencia: no se puede calcular por adelantado.
+     * La cantidad sale de la asistencia o de las clases dictadas: no se puede calcular por adelantado.
      */
     public static function needsAttendance(Season $season): bool
     {
-        return $season->fee_frequency === FeeFrequency::Daily && $season->daily_basis === DailyBasis::Attendance;
+        return $season->chargesAfterPeriod();
     }
 }

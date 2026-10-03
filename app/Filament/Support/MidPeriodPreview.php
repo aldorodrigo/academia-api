@@ -70,7 +70,7 @@ class MidPeriodPreview
         $season = filled($get('season_id')) ? Season::query()->find($get('season_id')) : null;
         $group = filled($get('group_id')) ? Group::query()->find($get('group_id')) : null;
 
-        if ($season === null || $group === null || ! $season->hasFeePlan() || $season->chargesByAttendance()) {
+        if ($season === null || $group === null || ! $season->hasFeePlan() || $season->chargesAfterPeriod()) {
             return null;
         }
 

@@ -179,6 +179,7 @@ class SeasonPlanSteps
                         ->descriptions([
                             DailyBasis::Training->value => 'Los días con horario de la categoría.',
                             DailyBasis::Attendance->value => 'Las clases a las que vino, según la asistencia. La cuota se crea al terminar el período.',
+                            DailyBasis::Taught->value => 'Las clases que se dieron: las suspendidas no se cobran y las recuperaciones sí. La cuota se crea al terminar el período.',
                         ])
                         ->disabled(fn (?Season $record) => self::hasCharges($record))
                         ->required(fn (Get $get) => self::value($get, 'fee_frequency') === FeeFrequency::Daily->value)
@@ -259,10 +260,11 @@ class SeasonPlanSteps
         ];
     }
 
+    /** La cuota se crea al terminar el período (por clase asistida o dictada). */
     private static function byAttendance(Get $get): bool
     {
         return self::value($get, 'fee_frequency') === FeeFrequency::Daily->value
-            && self::value($get, 'daily_basis') === DailyBasis::Attendance->value;
+            && in_array(self::value($get, 'daily_basis'), [DailyBasis::Attendance->value, DailyBasis::Taught->value], true);
     }
 
     /**
@@ -281,7 +283,9 @@ class SeasonPlanSteps
                     ])
                 ->descriptions(fn (Get $get) => [
                     '0' => self::byAttendance($get)
-                        ? 'Con las clases a las que vino según la asistencia (unos días después, para que el técnico pueda corregirla).'
+                        ? (self::value($get, 'daily_basis') === DailyBasis::Taught->value
+                            ? 'Con las clases que se dieron en el período (unos días después de que termina).'
+                            : 'Con las clases a las que vino según la asistencia (unos días después, para que el técnico pueda corregirla).')
                         : 'El padre ve solo la cuota del período en curso.',
                     '1' => 'El padre ve las '.SeasonPlan::periodsCount(self::state($get)).' cuotas: la del período en curso en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
                 ])

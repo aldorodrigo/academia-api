@@ -35,7 +35,7 @@ class SuspendClass
         ]);
 
         if ($waive) {
-            $this->waiver->apply($session);
+            $this->waiver->apply($session, $user);
         }
 
         $recipients = self::usersInChargeOf($session->students())
@@ -44,13 +44,16 @@ class SuspendClass
         Notification::send($recipients, new ClassSuspended($session));
     }
 
-    public function resume(ClassSession $session): void
+    public function resume(ClassSession $session, ?User $user = null): void
     {
-        if ($session->charge_waived) {
-            $this->waiver->undo($session);
-        }
+        $waived = $session->charge_waived;
 
         $session->update(['status' => ClassStatus::Scheduled, 'suspension_reason' => null, 'suspended_by' => null, 'charge_waived' => false]);
+
+        // Con la clase ya programada, las cuotas reemitidas vuelven a contar ese día.
+        if ($waived) {
+            $this->waiver->undo($session, $user);
+        }
     }
 
     /**

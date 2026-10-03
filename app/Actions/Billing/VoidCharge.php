@@ -3,6 +3,7 @@
 namespace App\Actions\Billing;
 
 use App\Models\Charge;
+use App\Models\ChargeWaiver;
 use App\Models\User;
 use Illuminate\Validation\ValidationException;
 
@@ -17,7 +18,7 @@ class VoidCharge
 {
     public function __construct(private IssueSeasonCharges $issue) {}
 
-    public function handle(Charge $charge, string $reason, User $by, bool $reissue = false): Charge
+    public function handle(Charge $charge, string $reason, ?User $by, bool $reissue = false): Charge
     {
         if ($charge->isVoided()) {
             throw ValidationException::withMessages(['reason' => 'El cargo ya está anulado.']);
@@ -32,12 +33,16 @@ class VoidCharge
         $charge->update([
             'voided_at' => now(),
             'void_reason' => trim($reason),
-            'voided_by' => $by->id,
+            'voided_by' => $by?->id,
             ...($reissue ? ['unique_key' => null] : []),
         ]);
 
+        // Los descuentos de clases suspendidas que había usado esta cuota quedan pendientes otra vez
+        // (entran en la cuota reemitida o en la próxima).
+        ChargeWaiver::query()->where('applied_charge_id', $charge->id)->update(['applied_charge_id' => null]);
+
         if ($reissue) {
-            $this->issue->forEnrollment($charge->enrollment, until: $charge->period_start, from: $charge->period_start, createdBy: $by->id);
+            $this->issue->forEnrollment($charge->enrollment, until: $charge->period_start, from: $charge->period_start, createdBy: $by?->id);
         }
 
         return $charge;
