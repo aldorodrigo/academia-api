@@ -14,6 +14,7 @@ enum ChargeStatus: string implements HasColor, HasLabel
     case Overdue = 'vencido';
     case Paid = 'pagado';
     case Voided = 'anulado';
+    case Waived = 'condonado';
 
     public function label(): string
     {
@@ -22,6 +23,7 @@ enum ChargeStatus: string implements HasColor, HasLabel
             self::Overdue => 'Vencido',
             self::Paid => 'Pagado',
             self::Voided => 'Anulado',
+            self::Waived => 'Condonado',
         };
     }
 
@@ -37,6 +39,7 @@ enum ChargeStatus: string implements HasColor, HasLabel
             self::Overdue => 'danger',
             self::Paid => 'success',
             self::Voided => 'gray',
+            self::Waived => 'info',
         };
     }
 }

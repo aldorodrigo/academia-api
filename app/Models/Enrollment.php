@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Inscripción = alumno + grupo + temporada. Cada una genera sus propios cargos (Sprint 3).
  */
-#[Fillable(['organization_id', 'student_id', 'group_id', 'season_id', 'status', 'enrolled_on', 'ended_on', 'mid_period', 'notes'])]
+#[Fillable(['organization_id', 'student_id', 'group_id', 'season_id', 'status', 'enrolled_on', 'ended_on', 'withdrawal_reason', 'withdrawn_by', 'dropout_reported_at', 'dropout_reported_by', 'dropout_note', 'mid_period', 'notes'])]
 class Enrollment extends Model
 {
     /** @use HasFactory<EnrollmentFactory> */
@@ -69,25 +69,36 @@ class Enrollment extends Model
             }
         });
 
-        // Baja o suspensión: se anulan las cuotas futuras sin pagar. Al reactivarla se reemiten.
+        // Baja o suspensión: se anulan las cuotas futuras sin pagar. Al reactivarla se emiten desde el
+        // período en curso (los meses que estuvo afuera no se cobran) y se reemiten las futuras.
         static::updated(function (Enrollment $enrollment): void {
             if (! $enrollment->wasChanged('status')) {
                 return;
             }
 
-            if (in_array($enrollment->status, [EnrollmentStatus::Withdrawn, EnrollmentStatus::Suspended], true)) {
+            $paused = [EnrollmentStatus::Withdrawn, EnrollmentStatus::Suspended];
+
+            if (in_array($enrollment->status, $paused, true)) {
                 app(VoidFutureCharges::class)->handle($enrollment);
             } elseif ($enrollment->isBillableStatus()) {
-                app(IssueSeasonCharges::class)->forEnrollment($enrollment);
+                $returns = in_array($enrollment->getOriginal('status'), $paused, true);
+
+                app(IssueSeasonCharges::class)->forEnrollment($enrollment, from: $returns ? $enrollment->organization->today() : null);
             }
         });
 
-        // Al pasar a baja queda registrada la fecha; al reactivarla se limpia.
+        // Al pasar a baja queda registrada la fecha (y se cierra el aviso del técnico); al reactivarla
+        // se limpian la fecha, el motivo y quién (queda en el registro de actividad).
         static::saving(function (Enrollment $enrollment): void {
-            if ($enrollment->isDirty('status')) {
-                $enrollment->ended_on = $enrollment->status === EnrollmentStatus::Withdrawn
-                    ? ($enrollment->ended_on ?? now()->toDateString())
-                    : null;
+            if (! $enrollment->isDirty('status')) {
+                return;
+            }
+
+            if ($enrollment->status === EnrollmentStatus::Withdrawn) {
+                $enrollment->ended_on ??= now()->toDateString();
+                $enrollment->forceFill(['dropout_reported_at' => null, 'dropout_reported_by' => null, 'dropout_note' => null]);
+            } else {
+                $enrollment->forceFill(['ended_on' => null, 'withdrawal_reason' => null, 'withdrawn_by' => null]);
             }
         });
     }
@@ -98,6 +109,7 @@ class Enrollment extends Model
             'status' => EnrollmentStatus::class,
             'enrolled_on' => 'date',
             'ended_on' => 'date',
+            'dropout_reported_at' => 'datetime',
             'mid_period' => MidPeriod::class,
         ];
     }
@@ -158,6 +170,35 @@ class Enrollment extends Model
     public function statusColor(): string
     {
         return $this->isFinished() ? 'gray' : $this->status->getColor();
+    }
+
+    public function isWithdrawn(): bool
+    {
+        return $this->status === EnrollmentStatus::Withdrawn;
+    }
+
+    /**
+     * El técnico avisó que dejó de venir y todavía no se decidió.
+     */
+    public function hasDropoutReport(): bool
+    {
+        return $this->dropout_reported_at !== null;
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function withdrawnBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'withdrawn_by');
+    }
+
+    /**
+     * @return BelongsTo<User, $this>
+     */
+    public function dropoutReportedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'dropout_reported_by');
     }
 
     /**

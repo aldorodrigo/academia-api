@@ -228,7 +228,14 @@ it('la lista de inscripciones no tiene alta y lleva a la ficha del jugador', fun
     Livewire::test(ManageEnrollments::class)
         ->assertActionDoesNotExist('create')
         ->assertCanSeeTableRecords([$enrollment])
-        ->callTableAction('changeStatus', $enrollment, data: ['status' => EnrollmentStatus::Withdrawn->value])
+        ->callTableAction('changeStatus', $enrollment, data: ['status' => EnrollmentStatus::Suspended->value])
+        ->assertHasNoTableActionErrors();
+
+    expect($enrollment->fresh()->status)->toBe(EnrollmentStatus::Suspended);
+
+    // La baja va con fecha y motivo (WithdrawalsTest).
+    Livewire::test(ManageEnrollments::class)
+        ->callTableAction('withdraw', $enrollment, data: ['ended_on' => now()->toDateString(), 'withdrawal_reason' => 'Se mudó'])
         ->assertHasNoTableActionErrors();
 
     expect($enrollment->fresh()->status)->toBe(EnrollmentStatus::Withdrawn)

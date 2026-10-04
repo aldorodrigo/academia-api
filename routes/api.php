@@ -105,6 +105,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::put('me/notification-settings', [NotificationSettingsController::class, 'update'])->name('notification-settings.update');
             Route::get('groups', [GroupController::class, 'index'])->name('groups.index');
             Route::get('groups/{group}', [GroupController::class, 'show'])->whereNumber('group')->name('groups.show');
+            // "Dejó de venir": el técnico avisa; la baja la decide el club en el panel.
+            Route::post('groups/{group}/students/{student}/dropout', [GroupController::class, 'reportDropout'])
+                ->whereNumber(['group', 'student'])->name('groups.dropout');
+            Route::delete('groups/{group}/students/{student}/dropout', [GroupController::class, 'cancelDropout'])
+                ->whereNumber(['group', 'student'])->name('groups.dropout.cancel');
 
             // Próxima clase y asistencia (tutor).
             Route::get('agenda', [AgendaController::class, 'index'])->name('agenda');

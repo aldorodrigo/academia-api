@@ -49,7 +49,9 @@ class ChargeHistory
         if ($charge->isVoided()) {
             $entries->push([
                 'at' => $charge->voided_at,
-                'text' => "Anulada: {$charge->void_reason}",
+                'text' => $charge->isWaived()
+                    ? 'Condonada '.$money($charge->waived_amount).": {$charge->void_reason}"
+                    : "Anulada: {$charge->void_reason}",
                 'by' => $names($charge->voided_by),
             ]);
 

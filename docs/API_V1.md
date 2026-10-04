@@ -1429,3 +1429,61 @@ código de la copia, invitaciones a celular y correo).
   porque los antivirus de correo abren los links solos.
 - **Vista previa de los links:** la app web tiene las etiquetas `og:` de Tuku (título, descripción y la tarjeta
   `https://tukuha.app/brand/tuku-tarjeta-redes.png`), que WhatsApp muestra al compartir una invitación.
+
+## Bajas y condonación (implementado)
+
+La baja y la condonación se hacen en el panel (`docs/PLAN_BAJAS.md`, `business-logic.md` §3 y §5). La deuda de un
+alumno dado de baja queda como histórica hasta que se paga, se anula o se condona; la app la muestra marcada.
+
+### Técnico: "Dejó de venir"
+
+#### `GET groups/{id}?month=2026-06` (se amplía)
+
+Cada alumno de `students` suma `"dropout_reported_on": "2026-06-03"` (fecha local del aviso) o `null`.
+
+#### `POST groups/{id}/students/{student}/dropout`
+
+Avisa al club que el alumno dejó de venir (quien puede tomar asistencia en el grupo). No da la baja: la inscripción
+queda marcada y les llega un aviso (push `dropout_reported` con `route: "/inicio"`, y correo con "Ver en el panel") a
+quienes pueden darla. Avisar de nuevo cambia la nota sin volver a mandar el aviso.
+
+```json
+{ "note": "No viene hace 3 semanas" }
+```
+
+`note` es opcional (hasta 255). Responde `{ "data": { "dropout_reported_on": "2026-06-03" } }`. 404 si el grupo no
+es del técnico o el alumno no está activo o becado en el grupo (por ejemplo, ya dado de baja).
+
+#### `DELETE groups/{id}/students/{student}/dropout`
+
+Deshace el aviso ("Sigue viniendo"). Responde `{ "data": { "dropout_reported_on": null } }`.
+
+### Informes (permiso `view_reports`)
+
+#### `GET reports/delinquents?min_months=1&withdrawn=only` (se amplía)
+
+- Cada familia suma `withdrawn`: sus hijos dados de baja (ninguna inscripción sin baja en temporadas vigentes o
+  próximas), con la fecha de la última baja. Vacío si no hay.
+- `withdrawn` (opcional): `only` (familias con algún hijo dado de baja) o `exclude` (sin ninguno). Sin el parámetro,
+  todas; otro valor, 422. Viaja en los links de PDF y Excel, que suman la columna "Dados de baja".
+
+```json
+{
+  "family": "Familia Zárate",
+  "students": ["Matías"],
+  "overdue": 450000,
+  "oldest_due_on": "2026-04-10",
+  "months_overdue": 3,
+  "contact": { "name": "Rosa Zárate", "phone": "0981 222 333" },
+  "withdrawn": [{ "student_id": 9, "student": "Matías", "on": "2026-06-03" }]
+}
+```
+
+#### `GET reports/balances` (se amplía)
+
+Cada familia suma `withdrawn`, igual que en Morosos.
+
+### Cargos
+
+- `status` suma `condonado` ("Condonado"): se perdonó lo que faltaba pagar, con motivo y quién. Como las anuladas, no
+  aparece en `GET account` ni suma en saldos e informes.

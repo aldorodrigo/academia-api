@@ -265,6 +265,8 @@ return [
         'Take:Attendance' => 'Tomar asistencia en cualquier grupo',
         // Aprobar o rechazar los comprobantes de transferencia de los tutores (tesorero y protesorero lo hacen por su cargo).
         'Review:PaymentReports' => 'Validar comprobantes de pago',
+        // Condonar lo que falta pagar de cuotas (por ejemplo, la deuda de un alumno dado de baja), con motivo.
+        'Waive:Charge' => 'Condonar deudas',
     ],
 
     /*

@@ -41,7 +41,7 @@ class ReportDownloadController extends Controller
                 CarbonImmutable::parse($parameters['to']),
             ),
             FamilyBalancesReport::key() => new FamilyBalancesReport($organization),
-            DelinquentsReport::key() => new DelinquentsReport($organization, (int) ($parameters['min_months'] ?? 1)),
+            DelinquentsReport::key() => new DelinquentsReport($organization, (int) ($parameters['min_months'] ?? 1), $parameters['withdrawn'] ?? null),
             default => abort(404),
         };
     }
