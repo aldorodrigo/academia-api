@@ -2,6 +2,7 @@
 
 use App\Actions\Auth\SendVerificationCode;
 use App\Enums\OrganizationRole;
+use App\Enums\OrganizationType;
 use App\Mail\EmailVerificationCodeMail;
 use App\Models\Organization;
 use App\Models\Role;
@@ -163,6 +164,38 @@ describe('alta del club', function () {
         expect($this->actingAs($this->user, 'sanctum')
             ->getJson('/api/v1/organization', ['X-Organization' => 'academia-ritmo'])
             ->json('data.membership.permissions'))->toContain('configure_organization');
+    });
+
+    it('crea el club con el vocabulario de las plantillas, para cada tipo', function () {
+        $types = $this->actingAs($this->user, 'sanctum')->getJson('/api/v1/onboarding/templates')
+            ->assertOk()
+            ->json('data.organization_types');
+
+        expect($types)->toHaveCount(count(OrganizationType::cases()));
+
+        foreach ($types as $type) {
+            $slug = 'prueba-'.str_replace('_', '-', $type['value']);
+
+            // Lo mismo que manda la app: la terminología tal cual llega, con todas sus claves.
+            $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/organizations', [
+                'name' => "Prueba {$type['label']}",
+                'type' => $type['value'],
+                'slug' => $slug,
+                'terminology' => $type['terminology'],
+            ])->assertCreated();
+
+            $organization = Organization::query()->where('slug', $slug)->firstOrFail();
+            foreach ($type['terminology'] as $key => $term) {
+                expect($organization->term($key))->toBe($term);
+            }
+        }
+    });
+
+    it('rechaza claves de vocabulario desconocidas', function () {
+        $this->actingAs($this->user, 'sanctum')->postJson('/api/v1/organizations', [
+            'name' => 'Academia Ritmo', 'type' => 'academy', 'slug' => 'academia-ritmo',
+            'terminology' => ['space' => 'Pileta', 'coach' => 'Entrenador'],
+        ])->assertUnprocessable()->assertJsonValidationErrors('terminology');
     });
 
     it('sin verificar la cuenta no se crea', function () {
