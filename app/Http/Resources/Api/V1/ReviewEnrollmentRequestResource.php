@@ -39,8 +39,11 @@ class ReviewEnrollmentRequestResource extends EnrollmentRequestResource
                 'guardians' => $existing->guardians->reject(fn ($guardian) => $guardian->user_id === $this->user_id)
                     ->map(fn ($guardian) => $guardian->full_name)->values(),
             ] : null,
+            // Las de la disciplina que puede confirmar (el técnico, las suyas).
             'group_options' => $this->isPending()
-                ? EnrollmentRequestAccess::groupOptions($this->season, $this->group->program, $birthDate, $this->enrollment_id)
+                ? collect(EnrollmentRequestAccess::groupOptions($this->season, $this->group->program, $birthDate, $this->enrollment_id))
+                    ->filter(fn (array $group) => $request->user() && EnrollmentRequestAccess::canReviewGroup($request->user(), $group['id']))
+                    ->values()->all()
                 : [],
             'mid_period' => $this->isPending() ? EnrollmentRequestAccess::midPeriod($this->season, $this->group, $today) : null,
         ];

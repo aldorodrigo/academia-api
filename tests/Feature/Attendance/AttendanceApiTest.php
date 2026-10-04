@@ -112,7 +112,7 @@ function todayClassId(User $user): int
 describe('técnico', function () {
     it('ve las clases de hoy de sus grupos y el permiso en la organización', function () {
         attendanceApi($this->instructor, 'GET', 'organization')
-            ->assertJsonPath('data.membership.permissions', ['take_attendance']);
+            ->assertJsonPath('data.membership.permissions', ['take_attendance', 'manage_enrollment_requests']);
 
         attendanceApi($this->instructor, 'GET', 'classes')
             ->assertOk()

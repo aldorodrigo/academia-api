@@ -206,23 +206,35 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Ficha médica: visible solo para roles autorizados.
 
 ### Inscripción desde la app *(2026-10-04, `docs/PLAN_INSCRIPCION_TUTOR.md`)*
-- Un **miembro activo** (normalmente un tutor) pide la inscripción de un hijo: nombre, apellido, fecha de nacimiento,
-  documento (opcional), parentesco, disciplina, temporada vigente o próxima y categoría activa (la API sugiere la que
-  corresponde por año de nacimiento) y, si quiere, la ficha médica. La **solicitud** queda `pendiente` ("En revisión"):
-  no crea alumnos ni cargos.
-- Una sola pendiente por chico (documento, o nombre + apellido + nacimiento) y usuario. Si ya es su hijo y tiene
-  inscripción en esa disciplina y temporada, no se puede pedir. Mientras está pendiente el tutor la cancela.
-- **Aprueba** quien tiene "Gestionar solicitudes de inscripción" o puede crear inscripciones (secretario y prosecretario
-  por defecto; el admin siempre), en el panel o en la app. Puede cambiar la categoría (de la misma disciplina) y qué se
-  cobra del período en curso (`MidPeriod`, por defecto el del plan). Si la categoría tiene cupo y está completa
-  (ocupan las inscripciones activas, becadas o pendientes de la temporada), tiene que confirmarlo.
-- **Al aprobar**, en una sola operación (`RegisterStudent`): alumno (reutilizado si ya existe), tutor vinculado a la
-  cuenta que la pidió sin invitación (su ficha de tutor si ya tiene, sin pisarla), familia automática, inscripción
-  `activo` y cuotas según el plan. La ficha médica pasa a la del alumno si no tenía. Si no tenía el rol `tutor`, se le
-  asigna. **Rechazar** pide motivo. Las dos cosas avisan al tutor (push y correo); una solicitud nueva avisa a quienes
-  aprueban.
-- La ficha médica de la solicitud se guarda cifrada, no la ve quien aprueba y se borra al aprobar (ya está en la ficha),
-  rechazar o cancelar.
+- **"Entra ya, se confirma después".** Un **miembro activo** (normalmente un tutor) pide la inscripción de un hijo:
+  nombre, apellido, fecha de nacimiento, **documento** (obligatorio), parentesco, disciplina, temporada vigente o
+  próxima y categoría activa (la API sugiere la que corresponde por año de nacimiento) y, si quiere, la ficha médica.
+  El chico queda dado de alta (`RegisterStudent`) con la inscripción **`pendiente`**: aparece en "Mis hijos" y en las
+  clases del técnico como "Nuevo, por confirmar" y se le toma asistencia, pero **no se cobra** (ni inscripción ni cuotas).
+- Una sola solicitud por confirmar por documento. Si ya es su hijo y tiene inscripción en esa disciplina y temporada, o
+  el chico ya está en esa categoría, no se puede pedir. Si se había dado de baja de esa categoría, vuelve desde hoy (los
+  meses que estuvo afuera no se cobran). Si el documento es de un alumno de otra familia, va a clases ya pero el tutor
+  se le vincula (y ve sus datos) recién al confirmar; sus datos no se cambian.
+- **Confirman** quien tiene "Confirmar inscripciones de la app (todas las categorías)" (secretario y prosecretario por
+  defecto; el admin siempre) y quien tiene "Confirmar inscripciones de la app en sus categorías" (el técnico por
+  defecto, en las suyas); los dos se editan por rol. Con un toque desde la planilla, desde la lista de la app o desde
+  el panel. Puede cambiar la categoría (de la misma disciplina, entre las que confirma) y qué se cobra del período en
+  curso (`MidPeriod`, por defecto el del plan). Si la categoría está completa (ocupan las inscripciones activas,
+  becadas o pendientes, sin contar el lugar de la propia solicitud), tiene que confirmarlo.
+- **Al confirmar**, la inscripción pasa a `activo`: se emiten el cargo de inscripción y las cuotas desde el día en que
+  empezó a ir. El tutor queda vinculado a su cuenta sin invitación (su ficha de tutor si ya tenía, sin pisarla), la
+  ficha médica pasa a la del alumno si no tenía y, si no tenía el rol `tutor`, se le asigna.
+- **Rechazar** pide motivo y saca al chico de la lista: se borra la inscripción pendiente (o vuelve a la baja que
+  tenía) y el alumno si lo creó la solicitud y no tiene nada más. El tutor también puede cancelarla mientras está por
+  confirmar (mismo efecto, sin aviso). Confirmar y rechazar avisan al tutor (push y correo); una solicitud nueva avisa a
+  quienes pueden confirmar en esa categoría.
+- Si quien pide puede confirmar en esa categoría, **se confirma sola**. Siempre queda registrado quién confirmó o rechazó.
+- La ficha médica de la solicitud se guarda cifrada, no la ve quien confirma y se borra al confirmar (ya está en la
+  ficha), rechazar o cancelar.
+- **Cargar alumno desde la app:** quien puede crear alumnos (el admin, el secretario) da de alta directo, como "Nuevo
+  jugador" del panel: datos del chico (documento obligatorio), categoría sugerida y su tutor (nombre, celular, correo
+  opcional). Si el tutor no usa la app, se crea su invitación y la app la manda por WhatsApp (link `wa.me`).
+- "Nuevo jugador" del panel también exige el documento (los alumnos que ya estaban sin documento se siguen editando).
 - Pendiente para el Sprint 5e: el link público del club (familias que todavía no están), actividades y lista de espera.
 
 ### Lugares, canchas y choques *(Sprint 5d)*
