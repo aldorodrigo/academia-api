@@ -10,7 +10,8 @@ use Spatie\Permission\PermissionRegistrar;
 /**
  * Permisos con los que nace cada rol base (business-logic.md §2), para que la comisión vea lo
  * suyo sin que el administrador tenga que armarlo en Roles. El administrador los puede cambiar.
- * El admin no los necesita (pasa por Gate::before); técnico y tutor usan sus grupos e hijos.
+ * El admin no los necesita (pasa por Gate::before); técnico y tutor usan sus grupos e hijos (el
+ * técnico, además, cobra en efectivo desde la app).
  */
 class DefaultPermissions
 {
@@ -37,12 +38,12 @@ class DefaultPermissions
             OrganizationRole::Treasurer => [
                 ...self::grant(self::FINANCE, self::MANAGE),
                 ...self::grant([...self::PEOPLE, ...self::ACADEMIC], self::VIEW),
-                'View:Reports', 'Approve:Scholarship',
+                'View:Reports', 'Approve:Scholarship', 'Collect:Payments',
             ],
             OrganizationRole::DeputyTreasurer => [
                 ...self::grant(self::FINANCE, self::MANAGE),
                 ...self::grant([...self::PEOPLE, ...self::ACADEMIC], self::VIEW),
-                'View:Reports',
+                'View:Reports', 'Collect:Payments',
             ],
             // Invitan a tutores y técnicos (no a la comisión: ver RoleFields::options).
             OrganizationRole::Secretary, OrganizationRole::DeputySecretary => [
@@ -52,7 +53,9 @@ class DefaultPermissions
             ],
             OrganizationRole::Member => ['View:Reports'],
             OrganizationRole::Auditor => [...self::grant(self::FINANCE, self::VIEW), 'View:Reports'],
-            OrganizationRole::Admin, OrganizationRole::Instructor, OrganizationRole::Guardian => [],
+            // Cobra cuotas en efectivo desde la app (queda en su caja hasta que la deposita).
+            OrganizationRole::Instructor => ['Collect:Payments'],
+            OrganizationRole::Admin, OrganizationRole::Guardian => [],
         };
     }
 

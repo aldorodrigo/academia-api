@@ -1429,3 +1429,167 @@ código de la copia, invitaciones a celular y correo).
   porque los antivirus de correo abren los links solos.
 - **Vista previa de los links:** la app web tiene las etiquetas `og:` de Tuku (título, descripción y la tarjeta
   `https://tukuha.app/brand/tuku-tarjeta-redes.png`), que WhatsApp muestra al compartir una invitación.
+
+## Cobro en efectivo y caja del técnico
+
+Plan: `PLAN_COBRO_EFECTIVO.md`. Quien tiene el permiso **`collect_payments`** en `GET organization` (técnico, tesorero
+y protesorero por defecto; el admin siempre) cobra cuotas en efectivo desde la app. El pago entra en **su caja**
+("Caja de Juan Pérez", una cuenta del club con titular) y queda ahí hasta que la deposita en una cuenta del club; el
+depósito queda **por confirmar** hasta que lo confirma quien valida (`review_payment_reports`). Requieren token y
+organización; cobrar y depositar necesitan conexión.
+
+### Cobrar (permiso `collect_payments`)
+
+#### `GET collections/students?search=mateo`
+
+Alumnos que puede cobrar: todos si ve todos los alumnos (tesorero, secretario, admin); si no, los inscriptos (temporada
+vigente o próxima) en sus grupos. `search` opcional (nombre, apellido o documento). Máximo 200, por apellido.
+
+```json
+{ "data": [
+  { "id": 12, "full_name": "Mateo Benítez", "photo_url": null, "groups": ["Sub-10"],
+    "family": "Familia Benítez", "due_now": 300000, "overdue": 150000 }
+] }
+```
+
+- `due_now` / `overdue`: lo que debe hoy la familia (sin las próximas) y la parte vencida. `family` puede ser `null`.
+
+#### `GET collections/students/{id}`
+
+```json
+{
+  "data": {
+    "student": { "id": 12, "full_name": "Mateo Benítez" },
+    "family": { "id": 7, "name": "Familia Benítez", "students": ["Mateo", "Sofía"] },
+    "guardians": [{ "id": 3, "full_name": "Ana Benítez" }],
+    "credit": 0,
+    "charges": [
+      { "…": "cargo de GET account", "settle_amount": 135000,
+        "early_payment": { "amount": 15000, "label": "Pronto pago −10 %" }, "under_review": false }
+    ],
+    "cash_box": { "id": 9, "name": "Caja de Juan Pérez", "balance": 300000, "active": true }
+  }
+}
+```
+
+- `charges`: las cuotas pendientes de **toda la familia**, de la más vieja a la más nueva (incluye las próximas, con
+  `is_upcoming`). `settle_amount`: lo que la salda si se paga hoy (con el pronto pago, `early_payment`, si
+  corresponde). `under_review`: está en un comprobante de transferencia en revisión.
+- `family`: `null` si el alumno todavía no tiene cuotas (se crea al cobrar). `credit`: saldo a favor de la familia.
+- `cash_box`: la caja de quien cobra (`null` si todavía no cobró nunca). `active: false` = caja cerrada.
+- Alumno fuera de su alcance → `404`.
+
+#### `POST collections`
+
+```json
+{ "student_id": 12, "amount": 285000, "charge_ids": [501, 502], "guardian_id": 3, "notes": "Pagó la abuela",
+  "request_id": "4f1c2b9e8a7d4c3b" }
+```
+
+| Campo | |
+|---|---|
+| `student_id` | obligatorio, en su alcance |
+| `amount` | entero, obligatorio, > 0 |
+| `charge_ids[]` | opcional: cuotas pendientes de la familia; vacío = automático (de la más vieja a la más nueva) |
+| `guardian_id` | opcional: tutor de la familia que pagó |
+| `notes` | opcional, hasta 500 |
+| `request_id` | opcional, 8 a 64 caracteres: el mismo valor dentro de 24 h devuelve el mismo pago (reintentos) |
+
+→ `201`:
+
+```json
+{ "data": { "payment": { "…": "pago de GET account" }, "applied": 285000, "credit": 0,
+            "cash_box": { "id": 9, "name": "Caja de Juan Pérez", "balance": 585000, "active": true },
+            "message": "Cobrado ₲ 285.000. Recibo N° 000124." } }
+```
+
+- Pago en **efectivo**, fecha de hoy, en la caja de quien cobra (se crea con el primer cobro). Se imputa a las cuotas
+  elegidas que sigan pendientes, en orden de vencimiento y con pronto pago; lo que sobra (`credit`) queda a favor de la
+  familia. `applied`: lo imputado a cuotas.
+- Caja cerrada → `422` "Tu caja está cerrada. Hablá con el tesorero.". Sin permiso → `403`.
+- Avisa a la familia (push y correo): "Recibimos tu pago de ₲ 285.000 en efectivo (cobró Juan Pérez). Recibo N° 000124.".
+
+### Mi caja (permiso `collect_payments`)
+
+#### `GET me/cash-box`
+
+```json
+{
+  "data": {
+    "id": 9, "name": "Caja de Juan Pérez", "active": true,
+    "balance": 585000, "pending_deposits": 300000, "available": 285000,
+    "movements": [
+      { "id": 77, "occurred_on": "2026-10-04", "description": "Recibo N° 000124 · Familia Benítez",
+        "amount": 285000, "kind": "cobro", "receipt_url": "https://…/recibos/124?expires=…&signature=…" }
+    ],
+    "deposits": [ { "…": "depósito" } ],
+    "deposit_accounts": [{ "id": 1, "name": "Caja", "type": "caja" }, { "id": 2, "name": "Banco Itaú", "type": "banco" }]
+  }
+}
+```
+
+- Sin caja todavía: `id` y `name` `null`, `active` `true`, todo en 0 y listas vacías (salvo `deposit_accounts`).
+- `available` = `balance` − `pending_deposits` (lo que puede depositar).
+- `movements`: los últimos 50, del más nuevo al más viejo. `kind`: `cobro`, `deposito`, `anulacion` u `otro`;
+  `receipt_url` solo en los cobros.
+- `deposits`: los últimos 20, del más nuevo al más viejo. `deposit_accounts`: cuentas activas del club (sin titular).
+
+#### Objeto depósito
+
+```json
+{ "id": 4, "amount": 300000, "deposited_on": "2026-10-04",
+  "money_account": { "id": 2, "name": "Banco Itaú" }, "reference": "Boleta 5521", "notes": null,
+  "status": "pendiente", "status_label": "Por confirmar", "rejection_reason": null,
+  "created_at": "2026-10-04T19:02:00-03:00", "reviewed_at": null,
+  "holder": { "id": 5, "name": "Juan Pérez" } }
+```
+
+- `status`: `pendiente` ("Por confirmar"), `confirmado` ("Confirmado"), `rechazado` ("Rechazado") o `anulado`
+  ("Anulado": se confirmó y después se anuló la transferencia en el panel).
+
+#### `POST me/cash-box/deposits`
+
+`{ "amount": 300000, "money_account_id": 2, "deposited_on": "2026-10-04", "reference": "Boleta 5521", "notes": null }`
+(`deposited_on` no futura; `reference` hasta 100; `notes` hasta 500) → `201` con el depósito. Más que `available` →
+`422` "Tenés ₲ 285.000 para depositar.". Cuenta que no es del club → `422`. Avisa a quienes validan.
+
+#### `DELETE me/cash-box/deposits/{id}`
+
+Retira un depósito propio por confirmar → `204`. Ya revisado → `422`.
+
+### Quien valida (permiso `review_payment_reports`)
+
+#### `GET cash-boxes`
+
+```json
+{
+  "data": {
+    "total": 885000,
+    "boxes": [
+      { "id": 9, "name": "Caja de Juan Pérez", "holder": { "id": 5, "name": "Juan Pérez", "active": true },
+        "balance": 585000, "pending_deposits": 300000, "last_movement_on": "2026-10-04" }
+    ],
+    "deposits": [ { "…": "depósito por confirmar" } ]
+  }
+}
+```
+
+- `boxes`: cajas personales con saldo distinto de 0 o depósitos por confirmar, de la de más saldo a la de menos.
+  `holder.active: false` = ya no es miembro activo. `total`: suma de los saldos.
+- `deposits`: los por confirmar, del más viejo al más nuevo.
+
+#### `POST cash-deposits/{id}/confirm`
+
+→ el depósito confirmado. Registra la transferencia de la caja a la cuenta del depósito, con su fecha. Ya revisado →
+`422`. Avisa al técnico: "Confirmamos tu depósito de ₲ 300.000 en Banco Itaú.".
+
+#### `POST cash-deposits/{id}/reject`
+
+`{ "reason": "No llegó al banco." }` (obligatorio, hasta 500) → el depósito rechazado; la plata sigue en su caja. Ya
+revisado → `422`. Avisa al técnico: "No confirmamos tu depósito de ₲ 300.000: No llegó al banco.".
+
+### Push
+
+Con copia por correo. `data`: `{ "type": "payment_received", "route": "/estado-de-cuenta" }` a la familia,
+`{ "type": "cash_deposit", "route": "/efectivo" }` a quienes validan y
+`{ "type": "cash_deposit_reviewed", "route": "/mi-caja" }` al técnico.

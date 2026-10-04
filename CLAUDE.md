@@ -153,6 +153,10 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `ApplyCredit` (saldo a favor, se llama al generar cargos), `VoidPayment`. `Payment`, `PaymentAllocation` y
   `LedgerEntry` son inmutables. Recibo: `ReceiptController` (ruta firmada `recibos/{payment}`).
 - Tesorería: `App\Actions\Treasury\ExpenseLedger` (registrar, pagar, anular, recurrentes) y `TransferFunds`.
+- Cobro en efectivo desde la app (`docs/PLAN_COBRO_EFECTIVO.md`): `CollectCashPayment` (usa `RegisterPayment`; entra en
+  la caja personal, `MoneyAccount::ensureCashBoxOf()`, cuenta con `user_id`), acceso en `CashCollectionAccess` (permiso
+  `Collect:Payments`, `collect_payments` en la app). Depósitos de la caja: `Treasury\CashDeposits` (por confirmar;
+  confirmar = `TransferFunds`); los confirma quien valida comprobantes. Las cuentas del club son `MoneyAccount::club()`.
 - Informes: `App\Reports\*` (`data()` para API/panel, `pdf()`, `xlsx()` con openspout); descarga por ruta firmada
   `informes/{report}.{format}` (`ReportDownloadController`). Permiso `View:Reports`; la app lo recibe en
   `membership.permissions` como `view_reports`. Los jugadores sin familia cuentan como su propio grupo.

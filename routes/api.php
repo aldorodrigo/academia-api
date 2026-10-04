@@ -3,8 +3,11 @@
 use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AgendaController;
 use App\Http\Controllers\Api\V1\AuthTokenController;
+use App\Http\Controllers\Api\V1\CashBoxController;
+use App\Http\Controllers\Api\V1\CashDepositController;
 use App\Http\Controllers\Api\V1\ClassController;
 use App\Http\Controllers\Api\V1\ClassResponseController;
+use App\Http\Controllers\Api\V1\CollectionController;
 use App\Http\Controllers\Api\V1\CurrentOrganizationController;
 use App\Http\Controllers\Api\V1\DeviceController;
 use App\Http\Controllers\Api\V1\GroupController;
@@ -89,6 +92,17 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('payment-reports', [PaymentReportController::class, 'index'])->name('payment-reports.index');
             Route::post('payment-reports/{report}/approve', [PaymentReportController::class, 'approve'])->whereNumber('report')->name('payment-reports.approve');
             Route::post('payment-reports/{report}/reject', [PaymentReportController::class, 'reject'])->whereNumber('report')->name('payment-reports.reject');
+
+            // Cobro en efectivo desde la app: entra en la caja de quien cobra hasta que la deposita.
+            Route::get('collections/students', [CollectionController::class, 'students'])->name('collections.students');
+            Route::get('collections/students/{student}', [CollectionController::class, 'show'])->whereNumber('student')->name('collections.show');
+            Route::post('collections', [CollectionController::class, 'store'])->middleware('throttle:30,1')->name('collections.store');
+            Route::get('me/cash-box', [CashBoxController::class, 'show'])->name('cash-box.show');
+            Route::post('me/cash-box/deposits', [CashBoxController::class, 'deposit'])->middleware('throttle:10,1')->name('cash-box.deposits.store');
+            Route::delete('me/cash-box/deposits/{deposit}', [CashBoxController::class, 'withdraw'])->whereNumber('deposit')->name('cash-box.deposits.destroy');
+            Route::get('cash-boxes', [CashDepositController::class, 'index'])->name('cash-boxes.index');
+            Route::post('cash-deposits/{deposit}/confirm', [CashDepositController::class, 'confirm'])->whereNumber('deposit')->name('cash-deposits.confirm');
+            Route::post('cash-deposits/{deposit}/reject', [CashDepositController::class, 'reject'])->whereNumber('deposit')->name('cash-deposits.reject');
 
             Route::get('reports/balance', [ReportController::class, 'balance'])->name('reports.balance');
             Route::get('reports/balances', [ReportController::class, 'balances'])->name('reports.balances');

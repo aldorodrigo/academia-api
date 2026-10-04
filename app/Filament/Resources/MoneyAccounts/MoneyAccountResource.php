@@ -84,10 +84,12 @@ class MoneyAccountResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->withSum('entries', 'amount'))
+            ->modifyQueryUsing(fn (Builder $query) => $query->withSum('entries', 'amount')->with('holder'))
             ->columns([
                 TextColumn::make('name')->label('Nombre')->searchable(),
                 TextColumn::make('type')->label('Tipo')->badge(),
+                // Cajas personales: la plata del club que tiene quien cobra en efectivo desde la app.
+                TextColumn::make('holder.name')->label('En poder de')->placeholder('Club'),
                 TextColumn::make('entries_sum_amount')->label('Saldo')->alignEnd()
                     ->formatStateUsing(fn ($state) => Money::pyg((int) $state)->format())
                     ->default(0),

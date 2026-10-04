@@ -98,12 +98,12 @@ function paidPack(): ClassPack
 
 describe('módulo y permisos', function () {
     it('el profesor tiene teach_lessons; sin el módulo no hay clases particulares', function () {
-        lessonsApi($this->teacher, 'GET', 'organization')->assertJsonPath('data.membership.permissions', ['teach_lessons']);
+        lessonsApi($this->teacher, 'GET', 'organization')->assertJsonPath('data.membership.permissions', ['collect_payments', 'teach_lessons']);
         lessonsApi($this->adult, 'GET', 'organization')->assertJsonPath('data.membership.permissions', []);
 
         $this->org->update(['features' => []]);
         lessonsApi($this->adult, 'GET', 'lessons/teachers')->assertNotFound();
-        lessonsApi($this->teacher, 'GET', 'organization')->assertJsonPath('data.membership.permissions', []);
+        lessonsApi($this->teacher, 'GET', 'organization')->assertJsonPath('data.membership.permissions', ['collect_payments']);
     });
 
     it('lista los profesores con precios, paquetes y los alumnos a cargo', function () {

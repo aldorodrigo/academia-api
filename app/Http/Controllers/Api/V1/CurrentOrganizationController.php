@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Attendance\AttendanceAccess;
+use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\PaymentReportAccess;
 use App\Enums\Feature;
 use App\Http\Controllers\Controller;
@@ -53,6 +54,7 @@ class CurrentOrganizationController extends Controller
                         ->keys()
                         ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
                         ->when(PaymentReportAccess::canReview($user, $organization), fn ($permissions) => $permissions->push('review_payment_reports'))
+                        ->when(CashCollectionAccess::canCollect($user), fn ($permissions) => $permissions->push('collect_payments'))
                         ->when(
                             $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
                             fn ($permissions) => $permissions->push('teach_lessons'),

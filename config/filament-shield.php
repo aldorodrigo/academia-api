@@ -265,6 +265,8 @@ return [
         'Take:Attendance' => 'Tomar asistencia en cualquier grupo',
         // Aprobar o rechazar los comprobantes de transferencia de los tutores (tesorero y protesorero lo hacen por su cargo).
         'Review:PaymentReports' => 'Validar comprobantes de pago',
+        // Cobrar cuotas en efectivo desde la app: el pago entra en la caja de quien cobra hasta que la deposita.
+        'Collect:Payments' => 'Cobrar en efectivo desde la app',
     ],
 
     /*
