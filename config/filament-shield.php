@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use App\Filament\Resources\PaymentReports\PaymentReportResource;
 use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
 use Filament\Pages\Dashboard;
 use Filament\Widgets\AccountWidget;
@@ -195,7 +196,8 @@ return [
             ],
         ],
         'exclude' => [
-            //
+            // Se accede con el permiso "Validar comprobantes de pago" (o el cargo de tesorero).
+            PaymentReportResource::class,
         ],
     ],
 
@@ -261,6 +263,8 @@ return [
         'View:Reports' => 'Ver informes',
         // Asistencia de todos los grupos (coordinador); el instructor la toma en sus grupos sin este permiso.
         'Take:Attendance' => 'Tomar asistencia en cualquier grupo',
+        // Aprobar o rechazar los comprobantes de transferencia de los tutores (tesorero y protesorero lo hacen por su cargo).
+        'Review:PaymentReports' => 'Validar comprobantes de pago',
     ],
 
     /*

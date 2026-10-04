@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Billing\PaymentReportAccess;
 use App\Enums\ChargeStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\ChargeResource;
+use App\Http\Resources\Api\V1\PaymentReportResource;
 use App\Http\Resources\Api\V1\PaymentResource;
 use App\Models\Charge;
+use App\Models\MoneyAccount;
 use App\Models\Payment;
+use App\Models\PaymentReport;
 use App\Models\Student;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -34,16 +38,17 @@ class AccountController extends Controller
 
         abort_if($student === null, 404, 'No encontramos a este alumno.');
 
-        return response()->json(['data' => $this->account($request, new Collection([$student]))]);
+        return response()->json(['data' => $this->account($request, new Collection([$student]), onlyStudent: true)]);
     }
 
     /**
-     * Cargos no anulados de los alumnos, pagos de sus familias y saldo a favor.
+     * Cargos no anulados de los alumnos, pagos de sus familias, saldo a favor y
+     * comprobantes de transferencia informados.
      *
      * @param  Collection<int, Student>  $students
      * @return array<string, mixed>
      */
-    private function account(Request $request, Collection $students): array
+    private function account(Request $request, Collection $students, bool $onlyStudent = false): array
     {
         $charges = Charge::query()
             ->notVoided()
@@ -62,6 +67,17 @@ class AccountController extends Controller
             ->limit(50)
             ->get();
         $credit = (int) $payments->sum(fn (Payment $payment) => $payment->credit());
+
+        // En la ficha de un hijo, solo los comprobantes que incluyen cuotas suyas.
+        $reports = PaymentReport::query()
+            ->whereIn('family_id', $familyIds)
+            ->with(['moneyAccount', 'payment'])
+            ->latest()
+            ->orderByDesc('id')
+            ->get()
+            ->when($onlyStudent, fn ($reports) => $reports->filter(
+                fn (PaymentReport $report) => array_intersect($report->charge_ids, $charges->modelKeys()) !== [],
+            ));
 
         // Próximas: cuotas creadas por adelantado cuyo período no empezó.
         $totals = fn ($charges) => [
@@ -88,6 +104,13 @@ class AccountController extends Controller
             ])->values(),
             'charges' => ChargeResource::collection($charges)->toArray($request),
             'payments' => PaymentResource::collection($payments)->toArray($request),
+            'transfer_accounts' => PaymentReportAccess::transferAccounts()->map(fn (MoneyAccount $account) => [
+                'id' => $account->id,
+                'name' => $account->name,
+                'details' => $account->transfer_details,
+            ])->values(),
+            'payment_reports' => PaymentReportResource::collection($reports->take(20)->values())->toArray($request),
+            'pending_reports_amount' => (int) $reports->filter(fn (PaymentReport $report) => $report->isPending())->sum('amount'),
         ];
     }
 }

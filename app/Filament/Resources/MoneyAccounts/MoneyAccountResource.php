@@ -12,9 +12,11 @@ use BackedEnum;
 use Filament\Actions\EditAction;
 use Filament\Actions\ViewAction;
 use Filament\Forms\Components\Select;
+use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
 use Filament\Forms\Components\Toggle;
 use Filament\Resources\Resource;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 use Filament\Support\Icons\Heroicon;
 use Filament\Tables\Columns\IconColumn;
@@ -48,7 +50,7 @@ class MoneyAccountResource extends Resource
     {
         return $schema->columns(2)->components([
             TextInput::make('name')->label('Nombre')->placeholder('Banco Itaú')->required()->maxLength(255),
-            Select::make('type')->label('Tipo')->options(MoneyAccountType::class)->default(MoneyAccountType::Bank)->required(),
+            Select::make('type')->label('Tipo')->options(MoneyAccountType::class)->default(MoneyAccountType::Bank)->required()->live(),
             TextInput::make('opening_balance')
                 ->label('Saldo inicial')
                 ->prefix('₲')
@@ -57,8 +59,26 @@ class MoneyAccountResource extends Resource
                 ->default(0)
                 ->helperText('Se registra como primer movimiento de la cuenta.')
                 ->visibleOn('create'),
+            Textarea::make('transfer_details')
+                ->label('Datos para transferir')
+                ->placeholder("Cuenta corriente 1234567\nTitular: Club Jakare\nRUC 80012345-6")
+                ->helperText('Los ven los tutores en la app al informar una transferencia. Vacío = la cuenta no se muestra.')
+                ->rows(3)
+                ->maxLength(1000)
+                ->columnSpanFull()
+                ->visible(fn (Get $get) => self::acceptsTransfers($get('type'))),
             Toggle::make('is_active')->label('Activa')->default(true)->visibleOn('edit'),
         ]);
+    }
+
+    /**
+     * Bancos y billeteras reciben transferencias; la caja no.
+     */
+    private static function acceptsTransfers(mixed $type): bool
+    {
+        $type = $type instanceof MoneyAccountType ? $type : MoneyAccountType::tryFrom((string) $type);
+
+        return in_array($type, [MoneyAccountType::Bank, MoneyAccountType::Wallet], true);
     }
 
     public static function table(Table $table): Table

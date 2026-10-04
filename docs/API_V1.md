@@ -1265,3 +1265,107 @@ Reenviar → `{ "link": "…", "whatsapp_url": "…" }` (token nuevo, 14 días m
 `"phone"`: una invitación va a un correo **o** a un celular (`email` y `phone` pueden ser `null`, nunca los dos).
 `user_exists` busca la cuenta por cualquiera de los dos. Al aceptar una invitación por celular, la cuenta nueva queda
 con ese celular verificado (el link llegó a ese WhatsApp), igual que con el correo.
+
+## Comprobantes de transferencia (implementado)
+
+El tutor informa un pago por transferencia con el comprobante (foto o PDF); queda **pendiente** hasta que alguien con
+el permiso "Validar comprobantes" (administrador y tesorero por defecto) lo aprueba o lo rechaza, en el panel o en la
+app. Recién al aprobarlo se registra el pago (con su recibo) y impacta en la cuenta (`business-logic.md` regla 13).
+
+### Objeto comprobante
+
+```json
+{
+  "id": 31,
+  "amount": 210000,
+  "paid_on": "2026-10-02",
+  "reference": "Transf. 99812",
+  "notes": null,
+  "status": "pendiente",
+  "status_label": "En revisión",
+  "rejection_reason": null,
+  "money_account": { "id": 2, "name": "Banco Itaú" },
+  "charges": [
+    { "id": 501, "description": "Cuota octubre 2026", "student_first_name": "Sofía", "pending_amount": 60000 }
+  ],
+  "proof_url": "https://api.example.com/comprobantes-de-pago/31?expires=…&signature=…",
+  "proof_name": "comprobante.jpg",
+  "created_at": "2026-10-02T21:14:00-03:00",
+  "reviewed_at": null,
+  "receipt_number": null,
+  "receipt_url": null
+}
+```
+
+- `status`: `pendiente` ("En revisión"), `aprobado` ("Aprobado") o `rechazado` ("Rechazado").
+- `money_account`: la cuenta a la que dice haber transferido (o `null`). `charges`: las cuotas que eligió pagar
+  (`pending_amount` es lo que falta hoy; vacío = pago a cuenta).
+- `proof_url`: link firmado y temporal (30 minutos) al archivo; se abre sin token.
+- Aprobado: `receipt_number` y `receipt_url` del pago que se registró. Rechazado: `rejection_reason`.
+
+### Tutor
+
+#### `GET account` (se amplía)
+
+- `transfer_accounts`: cuentas bancarias o billeteras activas con datos para transferir, para mostrarlos antes de
+  informar el pago: `[{ "id": 2, "name": "Banco Itaú", "details": "Cuenta corriente 123456\nTitular: Club Jakare\nRUC 80012345-6" }]`.
+- `payment_reports`: últimos comprobantes de la familia (máx. 20, del más nuevo al más viejo), con el objeto de arriba.
+- `pending_reports_amount`: suma de los comprobantes en revisión (para mostrar "₲ 210.000 en revisión").
+
+En `GET students/{id}/account` vienen los comprobantes que incluyen cuotas de ese hijo.
+
+#### `POST payment-reports` (multipart)
+
+| Campo | |
+|---|---|
+| `amount` | entero, obligatorio, > 0 |
+| `paid_on` | fecha, obligatoria, no futura |
+| `proof` | archivo obligatorio: jpg, png, webp, heic o pdf, hasta 5 MB |
+| `charge_ids[]` | opcional: cuotas pendientes de sus hijos (todas de la misma familia) |
+| `money_account_id` | opcional: una de `transfer_accounts` |
+| `reference` | opcional, hasta 100 |
+| `notes` | opcional, hasta 500 |
+
+→ `201` con el comprobante. La familia sale de las cuotas elegidas; sin cuotas, de sus hijos (si tiene hijos en más
+de una familia → `422` "Elegí qué cuotas pagás."). Una cuota que ya está en otro comprobante en revisión → `422`
+"Ya informaste un pago para «Cuota octubre 2026»; esperá a que lo revisen.". Avisa por push a quienes validan.
+
+#### `DELETE payment-reports/{id}`
+
+Retira un comprobante propio en revisión → `204`. Ya revisado → `422`.
+
+### Quien valida (permiso `review_payment_reports` en `GET organization`)
+
+#### `GET payment-reports?status=pendiente`
+
+`status` opcional (`pendiente` por defecto; `todos` para los últimos 50). Cada comprobante suma:
+
+```json
+{
+  "family": { "id": 7, "name": "Familia Benítez", "students": ["Sofía", "Mateo"] },
+  "reported_by": "Ana Benítez",
+  "pending_balance": 270000,
+  "money_accounts": [{ "id": 1, "name": "Caja" }, { "id": 2, "name": "Banco Itaú" }]
+}
+```
+
+- `pending_balance`: lo que la familia debe hoy (todas sus cuotas pendientes).
+- `money_accounts`: cuentas activas donde puede entrar el pago.
+
+#### `POST payment-reports/{id}/approve`
+
+`{ "money_account_id": 2, "received_on": "2026-10-02", "amount": 210000 }` (todo opcional: por defecto la cuenta
+informada o la primera bancaria, la fecha y el monto del comprobante) → el comprobante aprobado. Registra el pago por
+transferencia (referencia y comprobante incluidos) imputado a las cuotas elegidas que sigan pendientes, del
+vencimiento más viejo al más nuevo; lo que sobra queda como saldo a favor. Ya revisado → `422`. Push al tutor:
+"Aprobamos tu pago de ₲ 210.000. Recibo N° 000124.".
+
+#### `POST payment-reports/{id}/reject`
+
+`{ "reason": "El comprobante no se lee." }` (obligatorio) → el comprobante rechazado. Ya revisado → `422`. Push al
+tutor: "No pudimos aprobar tu pago de ₲ 210.000: El comprobante no se lee.".
+
+### Push
+
+`data`: `{ "type": "payment_report", "route": "/comprobantes" }` para quien valida y
+`{ "type": "payment_report_reviewed", "route": "/estado-de-cuenta" }` para el tutor.

@@ -18,7 +18,7 @@ class ListMoneyAccounts extends ListRecords
         return [
             // El saldo inicial es el primer movimiento (el saldo nunca se edita).
             CreateAction::make()->using(fn (array $data) => DB::transaction(function () use ($data) {
-                $account = MoneyAccount::query()->create(collect($data)->only(['name', 'type'])->all());
+                $account = MoneyAccount::query()->create(collect($data)->only(['name', 'type', 'transfer_details'])->all());
                 $opening = (int) ($data['opening_balance'] ?? 0);
 
                 if ($opening > 0) {

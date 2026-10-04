@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Http\Controllers\Api\V1\OnboardingController;
 use App\Http\Controllers\Api\V1\OrganizationController;
 use App\Http\Controllers\Api\V1\PasswordResetController;
+use App\Http\Controllers\Api\V1\PaymentReportController;
 use App\Http\Controllers\Api\V1\RegisterController;
 use App\Http\Controllers\Api\V1\ReportController;
 use App\Http\Controllers\Api\V1\Setup\GroupController as SetupGroupController;
@@ -80,6 +81,13 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
             Route::get('account', [AccountController::class, 'index'])->name('account.index');
             Route::get('students/{student}/account', [AccountController::class, 'show'])->whereNumber('student')->name('students.account');
+
+            // Comprobantes de transferencia: el tutor los informa, quien valida los aprueba o rechaza.
+            Route::post('payment-reports', [PaymentReportController::class, 'store'])->middleware('throttle:10,1')->name('payment-reports.store');
+            Route::delete('payment-reports/{report}', [PaymentReportController::class, 'destroy'])->whereNumber('report')->name('payment-reports.destroy');
+            Route::get('payment-reports', [PaymentReportController::class, 'index'])->name('payment-reports.index');
+            Route::post('payment-reports/{report}/approve', [PaymentReportController::class, 'approve'])->whereNumber('report')->name('payment-reports.approve');
+            Route::post('payment-reports/{report}/reject', [PaymentReportController::class, 'reject'])->whereNumber('report')->name('payment-reports.reject');
 
             Route::get('reports/balance', [ReportController::class, 'balance'])->name('reports.balance');
             Route::get('reports/balances', [ReportController::class, 'balances'])->name('reports.balances');

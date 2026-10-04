@@ -231,7 +231,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - Comisión: reuniones, actas y resoluciones (PDF, votación, publicación a grupos que notifica y genera cargos).
 - ~~Asistencia desde la app del instructor y suspensión de prácticas con aviso~~ (adelantado al Sprint 5).
 - Eventos y torneos con confirmación de los padres.
-- Comprobante de pago subido por el padre + validación del tesorero.
+- ~~Comprobante de pago subido por el padre + validación del tesorero~~ (hecho: «Comprobantes de transferencia», §10).
 - Actividades para tus hijos, etapas A y B (`PLAN_ACTIVIDADES.md`): actividades publicadas por la organización y solicitud de inscripción online.
 - Calendario, encuestas y preferencias de notificación.
 
@@ -521,5 +521,22 @@ Plan aprobado e implementado el 03/10/2026 (`PLAN_PRIMEROS_PASOS.md`, etapa 1; c
   límite bajo; cuenta de Cloudflare para Turnstile.
 - Pendiente: texto de términos y política de datos; cambiar o agregar celular/correo desde "Mi cuenta"; etapa 2
   (5e, link de inscripción) y etapa 3 (5f).
+
+### Comprobantes de transferencia ✅
+- **Pedido (2026-10-03):** que funcionen de punta a punta tres casos de uso: el administrador gestiona las cuotas
+  (panel), el técnico la asistencia (Sprint 5) y el tutor recibe avisos de horario, marca asistencia ("¿Lo llevás?") y
+  **registra el pago de la cuota por transferencia adjuntando el comprobante**. Lo único que faltaba era esto último.
+- **Contrato:** sección «Comprobantes de transferencia» de `API_V1.md`.
+- **App:** "Informar transferencia" en el estado de cuenta (datos para transferir con botón copiar, cuotas elegidas
+  de la más vieja a la más nueva con el monto sugerido, fecha, cuenta, N° de operación y foto o PDF hasta 5 MB);
+  comprobantes en revisión o rechazados arriba de los pagos (ver, retirar). Quien valida (`review_payment_reports`)
+  tiene tarjeta en el inicio y `/comprobantes` (aprobar con cuenta, fecha y monto; rechazar con motivo).
+- **API y panel:** `payment_reports` (archivo en disco privado, link firmado de 30 min). Aprobar registra el pago por
+  transferencia con recibo, imputado a las cuotas elegidas que sigan pendientes (lo que sobra, saldo a favor);
+  rechazar guarda el motivo. Push a quienes validan y al tutor. Validan el tesorero y el protesorero por su cargo, el
+  admin y quien tenga el permiso "Validar comprobantes de pago". Panel: Finanzas → Comprobantes (con contador) y
+  "Datos para transferir" en las cuentas bancarias y billeteras.
+- Probado de punta a punta en la web (tutor informa, tesorera aprueba desde la app, recibo en el estado de cuenta;
+  técnico toma asistencia; admin ve cargos y rechaza desde el panel).
 
 ### Después: Sprint 5b — avisos segmentados con lectura

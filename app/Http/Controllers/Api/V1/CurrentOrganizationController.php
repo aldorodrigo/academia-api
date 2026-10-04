@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Attendance\AttendanceAccess;
+use App\Actions\Billing\PaymentReportAccess;
 use App\Enums\Feature;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsureCanConfigureOrganization;
@@ -51,6 +52,7 @@ class CurrentOrganizationController extends Controller
                         ->filter(fn (string $permission) => $user->can($permission))
                         ->keys()
                         ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
+                        ->when(PaymentReportAccess::canReview($user, $organization), fn ($permissions) => $permissions->push('review_payment_reports'))
                         ->when(
                             $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
                             fn ($permissions) => $permissions->push('teach_lessons'),

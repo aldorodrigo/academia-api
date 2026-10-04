@@ -92,6 +92,10 @@ class BillingSeeder extends Seeder
 
         // Un pago de la familia Benítez que salda los primeros meses y deja saldo a favor.
         $bank = MoneyAccount::query()->firstOrCreate(['name' => 'Banco Itaú'], ['type' => MoneyAccountType::Bank]);
+        // Datos que ve el tutor para transferir antes de informar el pago.
+        if (blank($bank->transfer_details)) {
+            $bank->update(['transfer_details' => "Cuenta corriente 1234567\nTitular: Club Jakare\nRUC 80012345-6"]);
+        }
         $family = Family::query()->where('name', 'Familia Benítez')->first();
 
         if ($family !== null && $family->payments()->doesntExist()) {
