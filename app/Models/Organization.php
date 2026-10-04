@@ -85,6 +85,7 @@ class Organization extends Model
         return [
             'type' => OrganizationType::class,
             'terminology' => 'array',
+            'terminology_confirmed_at' => 'datetime',
             'features' => 'array',
             'billing' => 'array',
             'class_reminder_hours' => 'integer',

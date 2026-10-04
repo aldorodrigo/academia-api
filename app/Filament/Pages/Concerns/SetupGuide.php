@@ -5,7 +5,9 @@ namespace App\Filament\Pages\Concerns;
 use App\Actions\Academic\CreatePrograms;
 use App\Actions\Academic\SaveGroups;
 use App\Actions\Onboarding\ManageInstructors;
+use App\Actions\Organizations\UpdateTerminology;
 use App\Enums\GroupCriterion;
+use App\Enums\OrganizationType;
 use App\Filament\Actions\ShowInvitationLinkAction;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Seasons\SeasonResource;
@@ -20,6 +22,7 @@ use App\Models\Venue;
 use App\Support\Onboarding\Checklist;
 use App\Support\Onboarding\Team;
 use App\Support\Onboarding\Templates;
+use App\Support\Onboarding\VocabularySuggestion;
 use App\Support\Scheduling\ScheduleConflicts;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -61,7 +64,7 @@ trait SetupGuide
     }
 
     /**
-     * @return array{steps: list<array<string, mixed>>, done: int, total: int, next: ?string, completed: bool, dismissed: bool}
+     * @return array{steps: list<array<string, mixed>>, done: int, total: int, next: ?string, completed: bool, dismissed: bool, terminology_suggestion: ?array<string, mixed>}
      */
     public static function checklist(): array
     {
@@ -192,8 +195,92 @@ trait SetupGuide
                     ...collect($data['programs'] ?? [])->map(fn (string $name) => $templates[$name])->all(),
                     ...($data['custom'] ?? []),
                 ]);
+
+                // Una academia que enseña fútbol: ¿categoría, técnico y cancha?
+                if (VocabularySuggestion::for($this->tenant()) !== null) {
+                    $this->replaceMountedAction('terminology');
+
+                    return;
+                }
+
                 $this->notifyDone('Listo. Ahora, '.$this->plural('group').' y horarios.');
             });
+    }
+
+    /**
+     * Propuesta de las palabras de deporte (después de "¿Qué enseñan?"): elige las palabras o deja
+     * las de antes. No se cierra sin elegir.
+     */
+    public function terminologyAction(): Action
+    {
+        $suggestion = fn () => VocabularySuggestion::for($this->tenant());
+        $words = fn (array $items) => self::words(array_map('mb_strtolower', array_values($items)));
+
+        return Action::make('terminology')
+            ->modalHeading('¿Cómo les dicen?')
+            ->modalDescription(fn () => ($s = $suggestion())
+                ? 'En '.$words($s['programs']).' se suele decir '.$words($s['suggested']).'. Elegí las palabras que usan ustedes: las pantallas van a decir eso.'
+                : null)
+            ->fillForm(fn () => ['terminology' => $suggestion()['suggested'] ?? []])
+            ->schema(fn () => collect($suggestion()['suggested'] ?? [])->map(
+                fn (string $word, string $key) => TextInput::make("terminology.{$key}")
+                    ->label(self::TERM_QUESTIONS[$key] ?? $key)
+                    ->datalist(collect(Templates::terminologyOptions()[$key] ?? [])->push($word)->unique()->values()->all())
+                    ->helperText('Elegí una o escribí la que usan.')
+                    ->required()
+                    ->maxLength(30),
+            )->values()->all())
+            ->modalSubmitActionLabel('Usar estas palabras')
+            ->modalCancelAction(false)
+            ->closeModalByClickingAway(false)
+            ->closeModalByEscaping(false)
+            ->modalCloseButton(false)
+            ->extraModalFooterActions(fn () => [
+                Action::make('keepTerminology')
+                    ->label('Dejar como estaba ('.$words($suggestion()['current'] ?? []).')')
+                    ->color('gray')
+                    ->cancelParentActions()
+                    ->action(function (UpdateTerminology $update) {
+                        $update->handle($this->tenant(), []);
+                        $this->notifyDone('Listo. Ahora, '.$this->plural('group').' y horarios.');
+                    }),
+            ])
+            ->action(function (array $data, UpdateTerminology $update) {
+                $update->handle($this->tenant(), $data['terminology'] ?? []);
+                Notification::make()->success()->title('Listo: las pantallas ya dicen así.')->send();
+                // Los títulos del menú y de la guía usan las palabras nuevas.
+                $this->redirect(Dashboard::getUrl());
+            });
+    }
+
+    /** Qué nombra cada palabra del vocabulario. */
+    private const TERM_QUESTIONS = [
+        'student' => 'A los que aprenden',
+        'instructor' => 'A quienes enseñan',
+        'group' => 'A los grupos',
+        'space' => 'Al lugar de la clase',
+    ];
+
+    /**
+     * "a, b y c".
+     *
+     * @param  list<string>  $items
+     */
+    private static function words(array $items): string
+    {
+        return count($items) <= 1
+            ? implode('', $items)
+            : implode(', ', array_slice($items, 0, -1)).' y '.end($items);
+    }
+
+    /**
+     * Qué es la organización ("club", "academia"), para "Configurá tu academia".
+     */
+    public static function typeNoun(): string
+    {
+        $tenant = Filament::getTenant();
+
+        return ($tenant instanceof Organization && $tenant->type ? $tenant->type : OrganizationType::Club)->noun();
     }
 
     // Paso 2: categorías y horarios

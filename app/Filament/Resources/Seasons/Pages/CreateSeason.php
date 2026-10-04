@@ -9,6 +9,7 @@ use App\Filament\Resources\Enrollments\Pages\SeasonTransfer;
 use App\Filament\Resources\Seasons\SeasonResource;
 use App\Filament\Resources\Seasons\Support\SeasonPlan;
 use App\Filament\Resources\Seasons\Support\SeasonPlanSteps;
+use App\Filament\Support\Terms;
 use App\Models\Enrollment;
 use App\Models\Season;
 use Filament\Actions\Action;
@@ -74,11 +75,11 @@ class CreateSeason extends CreateRecord
         }
 
         return $notification
-            ->body("¿Pasamos a los {$players} jugadores de {$previous->name} ahora?")
+            ->body('¿Pasamos a '.Terms::gendered('student', 'Jugador', 'los', 'las')." {$players} ".Terms::plural('student', 'Jugador')." de {$previous->name} ahora?")
             ->persistent()
             ->actions([
                 Action::make('transfer')
-                    ->label('Pasar jugadores')
+                    ->label('Pasar '.Terms::plural('student', 'Jugador'))
                     ->button()
                     ->url(EnrollmentResource::getUrl('transfer', ['from' => $previous->id, 'to' => $season->id])),
                 Action::make('later')->label('Más tarde')->close(),

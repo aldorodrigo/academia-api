@@ -10,6 +10,7 @@ use App\Enums\DailyGrouping;
 use App\Enums\FeeFrequency;
 use App\Enums\MidPeriod;
 use App\Enums\SeasonKind;
+use App\Filament\Support\Terms;
 use App\Models\FeeConcept;
 use App\Models\Group;
 use App\Models\Organization;
@@ -285,7 +286,7 @@ class SeasonPlan
         $text .= match (true) {
             $season->chargesByAttendance() => ' Cada cuota se crea '.$unit->createdAfter().', con las clases a las que vino según la asistencia.',
             $season->chargesAfterPeriod() => ' Cada cuota se crea '.$unit->createdAfter().', con las clases que se dieron (las suspendidas no se cobran).',
-            $season->issue_upfront => ' Las '.self::periodsCount($state).' cuotas de cada jugador se crean todas al inscribirlo.',
+            $season->issue_upfront => ' Las '.self::periodsCount($state).' cuotas de cada '.Terms::singular('student', 'Jugador').' se crean todas al inscribirlo.',
             default => ' Cada cuota se crea '.$unit->createdAtStart().'.',
         };
 

@@ -977,14 +977,15 @@ Lo que la app y el panel ofrecen como sugerencia:
   "data": {
     "organization_types": [
       { "value": "club", "label": "Club", "description": "Club o asociación deportiva",
-        "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Jugador", "instructor": "Técnico", "guardian": "Tutor" } },
+        "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Jugador", "instructor": "Técnico", "guardian": "Tutor", "space": "Cancha" } },
       { "value": "academy", "label": "Academia", "description": "Academia de deporte, danza, música o idiomas",
-        "terminology": { "program": "Disciplina", "group": "Grupo", "student": "Alumno", "instructor": "Profesor", "guardian": "Tutor" } }
+        "terminology": { "program": "Disciplina", "group": "Grupo", "student": "Alumno", "instructor": "Profesor", "guardian": "Tutor", "space": "Sala" } }
     ],
     "terminology_options": {
       "student": ["Jugador", "Alumno", "Alumna", "Atleta"],
       "instructor": ["Técnico", "Profesor", "Profesora", "Instructor", "Entrenador"],
-      "group": ["Categoría", "Grupo", "Nivel", "Clase"]
+      "group": ["Categoría", "Grupo", "Nivel", "Clase"],
+      "space": ["Cancha", "Sala", "Aula", "Espacio", "Pileta"]
     },
     "programs": [
       { "name": "Fútbol", "group_criterion": "birth_year" },
@@ -1053,6 +1054,13 @@ Sin ese permiso, los endpoints de esta sección responden `403`.
   menos un técnico (con el rol vigente, invitado o el propio admin; bloqueado sin categorías).
 - `completed`: todos los pasos hechos u omitidos. `next`: el primer paso pendiente (`null` si está completa).
 - `dismissed`: la guía se cerró; no se abre sola, pero sigue la tarjeta del inicio hasta completarla.
+- La descripción de `programs` dice "… que ofrece el club / la academia / la escuela / la comisión" según el tipo.
+- `terminology_suggestion` (vocabulario por deporte, ver `PLAN_VOCABULARIO.md`): `null` o
+  `{ "programs": ["Fútbol"], "current": { "group": "Grupo", "instructor": "Profesor", "space": "Sala" },
+  "suggested": { "group": "Categoría", "instructor": "Técnico", "space": "Cancha" } }`. Aparece cuando hay una
+  disciplina deportiva (Fútbol, Futsal, Básquet, Vóley, Handball, Hockey, Rugby; también "Fútbol 7" o "futbol"),
+  solo con las palabras que siguen como vinieron con el tipo y son distintas de las de deporte, y mientras el
+  vocabulario no esté confirmado. La app la muestra al guardar el paso 1 y responde con `PUT organization/terminology`.
 
 #### `PUT onboarding`
 
@@ -1061,6 +1069,19 @@ Sin ese permiso, los endpoints de esta sección responden `403`.
 #### `PUT onboarding/steps/{key}`
 
 `{ "skipped": true }` → el mismo objeto. `422` si el paso no se puede omitir.
+
+#### `PUT organization/terminology`
+
+"Cómo les dicen" (la propuesta de deporte y "Mi cuenta" → "Cómo les dicen"):
+`{ "terminology": { "group": "Categoría", "instructor": "Técnico", "space": "Cancha" } }` →
+`{ "data": { "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Alumno", "instructor": "Técnico", "guardian": "Tutor", "space": "Cancha" } } }`.
+
+- Claves `program`, `group`, `student`, `instructor`, `guardian`, `space` (en singular, hasta 30 caracteres; se guarda
+  con mayúscula inicial). Las que no se mandan quedan igual; vacía o `null` = la del tipo.
+- `{ "terminology": {} }` = "Dejar como estaba": no cambia nada.
+- Siempre deja el vocabulario confirmado: `terminology_suggestion` no vuelve a aparecer. También se confirma al
+  cambiar el vocabulario en Configuración del panel y al crear la organización con palabras distintas de las del tipo.
+- Después, `GET organization` trae el vocabulario nuevo.
 
 ### Paso 1: disciplinas
 

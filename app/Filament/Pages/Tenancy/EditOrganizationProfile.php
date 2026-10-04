@@ -2,9 +2,11 @@
 
 namespace App\Filament\Pages\Tenancy;
 
+use App\Actions\Organizations\UpdateTerminology;
 use App\Enums\AdjustmentType;
 use App\Enums\Feature;
 use App\Enums\OrganizationType;
+use App\Filament\Support\Terms;
 use App\Models\Organization;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
@@ -111,8 +113,8 @@ class EditOrganizationProfile extends EditTenantProfile
                         ->helperText('Horas antes de cada clase en que sale el aviso "¿Lo llevás?" a los tutores que lo pidieron. Si cae de noche, sale a las 20:00 del día anterior.')
                         ->numeric()->integer()->minValue(1)->maxValue(24)->suffix('horas antes')->required(),
                     TextInput::make('instructor_reminder_hours')
-                        ->label('Aviso al técnico')
-                        ->helperText('Horas antes de cada clase en que el técnico recibe "Hoy tenés clase…" con cuántos van. Cada usuario puede elegir sus propios avisos en la app.')
+                        ->label(fn () => 'Aviso '.Terms::gendered('instructor', 'Técnico', 'al', 'a la').' '.Terms::singular('instructor', 'Técnico'))
+                        ->helperText(fn () => 'Horas antes de cada clase en que '.Terms::gendered('instructor', 'Técnico', 'el', 'la').' '.Terms::singular('instructor', 'Técnico').' recibe "Hoy tenés clase…" con cuántos van. Cada usuario puede elegir sus propios avisos en la app.')
                         ->numeric()->integer()->minValue(1)->maxValue(24)->suffix('horas antes')->required(),
                 ])
                 ->columns(2),
@@ -153,7 +155,20 @@ class EditOrganizationProfile extends EditTenantProfile
             ->filter()
             ->all() ?: null;
 
+        // Cambió el vocabulario: ya decidió cómo les dicen (no se le proponen las palabras de deporte).
+        $this->terminologyChanged = collect(UpdateTerminology::KEYS)
+            ->contains(fn (string $key) => ($data['terminology'][$key] ?? Organization::DEFAULT_TERMINOLOGY[$key]) !== $this->tenant->term($key));
+
         return $data;
+    }
+
+    private bool $terminologyChanged = false;
+
+    protected function afterSave(): void
+    {
+        if ($this->terminologyChanged) {
+            $this->tenant->forceFill(['terminology_confirmed_at' => now()])->save();
+        }
     }
 
     protected function getRedirectUrl(): ?string

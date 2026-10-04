@@ -204,6 +204,21 @@ describe('recibo', function () {
         $this->get($url)->assertForbidden();
     });
 
+    it('dice "Alumno" (o lo que usen) en vez de "Jugador"', function () {
+        $this->jakare->update(['terminology' => ['student' => 'Alumno']]);
+        $payment = pay(150000);
+
+        $html = view('receipts.show', [
+            'payment' => $payment->load(['organization', 'family', 'guardian', 'moneyAccount', 'allocations.charge.student']),
+            'organization' => $payment->organization,
+            'allocations' => $payment->originalAllocations(),
+            'credit' => $payment->creditGenerated(),
+            'money' => fn (int $amount) => Money::pyg($amount),
+        ])->render();
+
+        expect($html)->toContain('<th>Alumno</th>')->not->toContain('Jugador');
+    });
+
     it('monto en letras', function () {
         expect(Money::pyg(150000)->inWords())->toBe('ciento cincuenta mil guaraníes')
             ->and(Money::pyg(21500)->inWords())->toBe('veintiún mil quinientos guaraníes')

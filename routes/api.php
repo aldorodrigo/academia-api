@@ -28,6 +28,7 @@ use App\Http\Controllers\Api\V1\Setup\SeasonController as SetupSeasonController;
 use App\Http\Controllers\Api\V1\Setup\SiteController as SetupSiteController;
 use App\Http\Controllers\Api\V1\StudentAttendanceController;
 use App\Http\Controllers\Api\V1\StudentController;
+use App\Http\Controllers\Api\V1\TerminologyController;
 use App\Http\Controllers\Api\V1\VenueController;
 use Illuminate\Support\Facades\Route;
 
@@ -139,6 +140,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                 Route::get('onboarding', [OnboardingController::class, 'show'])->name('onboarding.show');
                 Route::put('onboarding', [OnboardingController::class, 'update'])->name('onboarding.update');
                 Route::put('onboarding/steps/{key}', [OnboardingController::class, 'skip'])->name('onboarding.skip');
+                Route::put('organization/terminology', [TerminologyController::class, 'update'])->name('organization.terminology');
 
                 Route::prefix('setup')->name('setup.')->group(function () {
                     Route::get('programs', [SetupProgramController::class, 'index'])->name('programs.index');

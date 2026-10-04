@@ -5,7 +5,7 @@
 
 @if ($compact)
     <x-filament::section icon="heroicon-o-rocket-launch" icon-color="primary" compact>
-        <x-slot name="heading">Configurá tu club · {{ $checklist['done'] }} de {{ $checklist['total'] }}</x-slot>
+        <x-slot name="heading">Configurá tu {{ static::typeNoun() }} · {{ $checklist['done'] }} de {{ $checklist['total'] }}</x-slot>
         @if ($checklist['next'])
             <x-slot name="description">Sigue: {{ $steps[$checklist['next']]['title'] }}</x-slot>
         @endif
@@ -13,7 +13,7 @@
     </x-filament::section>
 @else
     <x-filament::section icon="heroicon-o-rocket-launch" icon-color="primary">
-        <x-slot name="heading">Configurá tu club</x-slot>
+        <x-slot name="heading">Configurá tu {{ static::typeNoun() }}</x-slot>
         <x-slot name="description">Te llevamos paso a paso. Se guarda solo: podés dejarlo y seguir después.</x-slot>
         <x-slot name="afterHeader">{{ $this->dismissGuideAction }}</x-slot>
 

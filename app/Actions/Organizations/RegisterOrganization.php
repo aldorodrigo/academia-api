@@ -40,6 +40,11 @@ class RegisterOrganization
                 'self_service' => true,
             ]);
 
+            // Eligió otras palabras que las del tipo: ya decidió, no se le proponen las de deporte.
+            if ($terminology !== Templates::terminologyFor($type)) {
+                $organization->forceFill(['terminology_confirmed_at' => now()])->save();
+            }
+
             $organization->memberships()->create(['user_id' => $user->id, 'status' => MembershipStatus::Active]);
             $this->assigner->assign($organization, $user, OrganizationRole::Admin, assignedBy: $user);
 

@@ -4,6 +4,7 @@ namespace App\Support\Onboarding;
 
 use App\Enums\GroupCriterion;
 use App\Enums\OrganizationType;
+use Illuminate\Support\Str;
 
 /**
  * Sugerencias del alta y de la guía "Primeros pasos": las mismas para el panel y la app.
@@ -23,6 +24,37 @@ class Templates
             OrganizationType::School => ['program' => 'Disciplina', 'group' => 'Grupo', 'student' => 'Alumno', 'instructor' => 'Profesor', 'guardian' => 'Tutor', 'space' => 'Aula'],
             OrganizationType::ParentsAssociation => ['program' => 'Actividad', 'group' => 'Grupo', 'student' => 'Alumno', 'instructor' => 'Profesor', 'guardian' => 'Tutor', 'space' => 'Espacio'],
         };
+    }
+
+    /**
+     * Las palabras de deporte que se proponen a una academia, escuela o comisión que enseña uno.
+     *
+     * @return array{group: string, instructor: string, space: string}
+     */
+    public static function sportTerminology(): array
+    {
+        return ['group' => 'Categoría', 'instructor' => 'Técnico', 'space' => 'Cancha'];
+    }
+
+    /**
+     * Deportes en los que se dice categoría, técnico y cancha: los de equipo, que se arman por edad.
+     *
+     * @return list<string>
+     */
+    public static function sports(): array
+    {
+        return ['Fútbol', 'Futsal', 'Básquet', 'Vóley', 'Handball', 'Hockey', 'Rugby'];
+    }
+
+    /**
+     * "Fútbol", "futbol infantil" o "Fútbol 7" son fútbol: sin mayúsculas ni tildes, por la primera palabra.
+     */
+    public static function isSport(string $program): bool
+    {
+        $normalize = fn (string $word) => Str::of($word)->ascii()->lower()->trim()->toString();
+        $first = Str::before($normalize($program).' ', ' ');
+
+        return in_array($first, array_map($normalize, self::sports()), true);
     }
 
     /**
@@ -67,7 +99,7 @@ class Templates
      */
     public static function programs(): array
     {
-        $byAge = ['Fútbol', 'Futsal', 'Básquet', 'Vóley', 'Handball', 'Hockey', 'Rugby'];
+        $byAge = self::sports();
         $byLevel = ['Natación', 'Tenis', 'Pádel', 'Danza', 'Patín', 'Gimnasia', 'Artes marciales', 'Ajedrez', 'Música', 'Inglés'];
 
         return [

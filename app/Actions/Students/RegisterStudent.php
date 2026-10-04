@@ -17,6 +17,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Support\Phone;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -63,7 +64,7 @@ class RegisterStudent
                 $toInvite = $this->guardians($student, $guardians);
 
                 if (! $student->isAdult() && $student->guardians()->doesntExist()) {
-                    throw new ImportRowException('El jugador es menor de edad: cargá al menos un tutor.');
+                    throw new ImportRowException($this->minorWithoutGuardian($this->current->get()));
                 }
 
                 Family::syncFor($student);
@@ -78,6 +79,18 @@ class RegisterStudent
 
             return $student;
         });
+    }
+
+    /**
+     * "El jugador es menor de edad: cargá al menos un tutor." con el vocabulario del club.
+     */
+    private function minorWithoutGuardian(Organization $organization): string
+    {
+        $student = $organization->term('student');
+        $guardian = $organization->term('guardian');
+
+        return Vocabulary::gendered($student, 'El', 'La').' '.mb_strtolower($student)
+            .' es menor de edad: cargá al menos '.Vocabulary::gendered($guardian, 'un', 'una').' '.mb_strtolower($guardian).'.';
     }
 
     /**

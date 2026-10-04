@@ -41,7 +41,7 @@ class MidPeriodPreview
         $next = $period->end->addDay()->format('d/m');
 
         if ($tariff === null) {
-            return 'Todavía no hay monto cargado para esta categoría en la temporada.';
+            return 'Todavía no hay monto cargado para '.Terms::gendered('group', 'Categoría', 'este', 'esta').' '.Terms::singular('group', 'Categoría').' en la temporada.';
         }
 
         $mode = $get('mid_period');
