@@ -27,17 +27,7 @@ class Templates
     }
 
     /**
-     * Las palabras de deporte que se proponen a una academia, escuela o comisión que enseña uno.
-     *
-     * @return array{group: string, instructor: string, space: string}
-     */
-    public static function sportTerminology(): array
-    {
-        return ['group' => 'Categoría', 'instructor' => 'Técnico', 'space' => 'Cancha'];
-    }
-
-    /**
-     * Deportes en los que se dice categoría, técnico y cancha: los de equipo, que se arman por edad.
+     * Deportes de equipo: se arman por edad y se dice jugador, técnico, categoría y cancha.
      *
      * @return list<string>
      */
@@ -47,14 +37,32 @@ class Templates
     }
 
     /**
-     * "Fútbol", "futbol infantil" o "Fútbol 7" son fútbol: sin mayúsculas ni tildes, por la primera palabra.
+     * Las palabras habituales de una disciplina, que se le proponen a la organización (cada deporte con
+     * lo suyo); null si no hay una propuesta clara (danza, música, ajedrez…). "Fútbol", "futbol infantil"
+     * o "Fútbol 7" son fútbol: sin mayúsculas ni tildes, por la primera palabra.
+     *
+     * @return array{student: string, instructor: string, group: string, space: string}|null
      */
-    public static function isSport(string $program): bool
+    public static function programTerminology(string $program): ?array
     {
-        $normalize = fn (string $word) => Str::of($word)->ascii()->lower()->trim()->toString();
-        $first = Str::before($normalize($program).' ', ' ');
+        $normalize = fn (string $word) => Str::of($word)->ascii()->lower()->squish()->toString();
+        $name = $normalize($program);
 
-        return in_array($first, array_map($normalize, self::sports()), true);
+        // Tenis de mesa no se juega en una cancha.
+        if (str_starts_with($name, 'tenis de mesa')) {
+            return null;
+        }
+
+        $team = ['student' => 'Jugador', 'instructor' => 'Técnico', 'group' => 'Categoría', 'space' => 'Cancha'];
+        $court = ['student' => 'Alumno', 'instructor' => 'Profesor', 'group' => 'Nivel', 'space' => 'Cancha'];
+        $byProgram = [
+            ...array_fill_keys(array_map($normalize, self::sports()), $team),
+            'natacion' => ['student' => 'Alumno', 'instructor' => 'Profesor', 'group' => 'Nivel', 'space' => 'Pileta'],
+            'tenis' => $court,
+            'padel' => $court,
+        ];
+
+        return $byProgram[Str::before($name.' ', ' ')] ?? null;
     }
 
     /**
@@ -78,6 +86,23 @@ class Templates
     }
 
     /**
+     * Qué nombra cada palabra del vocabulario ("¿Cómo les dicen…?").
+     *
+     * @return array<string, string>
+     */
+    public static function termQuestions(): array
+    {
+        return [
+            'program' => 'A lo que enseñan',
+            'student' => 'A los que aprenden',
+            'instructor' => 'A quienes enseñan',
+            'group' => 'A los grupos',
+            'space' => 'Al lugar de la clase',
+            'guardian' => 'A los responsables de cada uno',
+        ];
+    }
+
+    /**
      * Opciones de "¿Cómo les dicen?" (en singular).
      *
      * @return array<string, list<string>>
@@ -85,10 +110,12 @@ class Templates
     public static function terminologyOptions(): array
     {
         return [
+            'program' => ['Disciplina', 'Actividad', 'Deporte', 'Taller'],
             'student' => ['Jugador', 'Alumno', 'Alumna', 'Atleta'],
             'instructor' => ['Técnico', 'Profesor', 'Profesora', 'Instructor', 'Entrenador'],
             'group' => ['Categoría', 'Grupo', 'Nivel', 'Clase'],
             'space' => ['Cancha', 'Sala', 'Aula', 'Espacio', 'Pileta'],
+            'guardian' => ['Tutor', 'Responsable', 'Encargado'],
         ];
     }
 

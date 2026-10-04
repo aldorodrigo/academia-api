@@ -1,9 +1,14 @@
 # Vocabulario por deporte (D2 y D3 de la prueba integral)
 
-Decisión del usuario (2026-10-04): cuando una academia (o escuela, o comisión) enseña un deporte, se le propone
-**Categoría, Técnico y Cancha** en vez de Grupo, Profesor y Sala, y el usuario decide cómo quedan.
+Decisiones del usuario (2026-10-04):
 
-## Cuándo se sabe que es un deporte
+- Primera ronda: cuando una academia (o escuela, o comisión) enseña un deporte, se le propone Categoría, Técnico y
+  Cancha en vez de Grupo, Profesor y Sala, y el usuario decide cómo quedan.
+- Segunda ronda: **cada deporte con lo suyo** (también Alumno → Jugador en los de equipo), la propuesta sin contestar
+  **se recuerda en la guía** hasta que conteste, y Configuración → Vocabulario del panel usa las palabras reales de la
+  organización con nombres que se entienden.
+
+## Cuándo se sabe qué enseñan
 
 El tipo se elige en "Tu club"; la disciplina, recién en el paso 1 de "Primeros pasos".
 
@@ -13,54 +18,74 @@ El tipo se elige en "Tu club"; la disciplina, recién en el paso 1 de "Primeros 
   danza, música o idiomas) y duplica lo que el paso 1 ya pregunta.
 - En el paso 1 la disciplina ya está elegida: la propuesta le aparece solo a quien le sirve, con un toque, y justo
   antes del paso 2 ("Categorías y horarios"), que es donde las palabras empiezan a importar.
-- Sirve igual para los clubes creados desde el panel y para quien agrega un deporte más tarde (mientras no haya
-  decidido nada sobre el vocabulario).
+- Sirve igual para las organizaciones creadas desde el panel y para quien agrega una disciplina más tarde (mientras no
+  haya decidido nada sobre el vocabulario).
+
+### Cada deporte con lo suyo (`Templates::programTerminology`)
+
+| Disciplina | Alumno | Profesor | Grupo | Lugar |
+| --- | --- | --- | --- | --- |
+| Fútbol, Futsal, Básquet, Vóley, Handball, Hockey, Rugby | Jugador | Técnico | Categoría | Cancha |
+| Natación | Alumno | Profesor | Nivel | Pileta |
+| Tenis, Pádel | Alumno | Profesor | Nivel | Cancha |
+| Danza, Patín, Gimnasia, Artes marciales, Ajedrez, Música, Inglés y las que escriban | — (sin propuesta) | | | |
+
+Se compara sin mayúsculas ni tildes y por la primera palabra: "Fútbol 7", "futbol infantil" o "Padel" cuentan.
+"Tenis de mesa" no (no hay cancha).
 
 ### Regla (la decide la API, `App\Support\Onboarding\VocabularySuggestion`)
 
-Hay propuesta si:
+1. **Manda la primera disciplina elegida que tenga propuesta** (por orden de alta; en la app y el panel, el orden en
+   que se eligieron). Las sin propuesta (Danza…) no cuentan. Si la primera ya tiene sus palabras (un club de fútbol
+   que después suma natación), no hay propuesta: es la disciplina principal y no se le cambian las palabras por una
+   secundaria.
+2. Solo se proponen las palabras que siguen como vinieron con el tipo y son distintas de las de esa disciplina; lo que
+   el usuario ya eligió no se toca. Vale para cualquier tipo: un club de natación recibe Alumno, Profesor, Nivel y
+   Pileta; uno de fútbol, nada.
+3. El vocabulario no se confirmó (`organizations.terminology_confirmed_at`). Se confirma al usar las propuestas o
+   dejar como estaba, al guardar el vocabulario desde la app o desde Configuración del panel, y al crear la
+   organización con palabras distintas de las del tipo (el usuario ya eligió en "Tu club").
 
-1. la organización tiene al menos una disciplina deportiva (`Templates::sports()`: los deportes de equipo que se
-   arman por edad — Fútbol, Futsal, Básquet, Vóley, Handball, Hockey, Rugby —; se compara sin mayúsculas ni tildes
-   y por la primera palabra, así "Fútbol 7" o "Futbol infantil" también cuentan);
-2. alguna de las palabras `group`, `instructor`, `space` sigue siendo la que trae el tipo y es distinta de la de
-   deporte (`Templates::sportTerminology()`: Categoría, Técnico, Cancha). Solo se proponen esas palabras: lo que el
-   usuario ya eligió no se toca;
-3. el vocabulario no se confirmó (`organizations.terminology_confirmed_at`). Se confirma al aceptar o rechazar la
-   propuesta, al guardar el vocabulario desde la app o desde Configuración del panel, y al crear la organización con
-   palabras distintas de las del tipo (el usuario ya eligió en "Tu club").
+### Cómo se propone y se recuerda
 
-Un club nunca la ve (ya tiene esas palabras).
-
-### Cómo se propone
-
-- **App:** al guardar el paso 1, si `GET onboarding` trae `terminology_suggestion`, una hoja "¿Cómo les dicen?"
-  con las palabras propuestas ya elegidas (chips por palabra, con las opciones de siempre y "Otra…") y dos botones:
-  "Usar estas palabras" y "Dejar como estaba (grupo, profesor y sala)". No se cierra tocando afuera: hay que elegir.
-  Después sigue al paso 2.
-- **Panel:** lo mismo al guardar "¿Qué enseñan?" en la guía: un modal con un desplegable por palabra (con las
-  opciones y lo que quiera escribir) y "Dejar como estaba".
+- **App:** al guardar el paso 1, si `GET onboarding` trae `terminology_suggestion`, una hoja "¿Cómo les dicen?" con
+  las palabras propuestas ya elegidas (chips por palabra, con las opciones de siempre y "Otra…") y "Usar estas
+  palabras", "Dejar como estaba (alumno, profesor, grupo y sala)" y "Después". Cerrarla (o "Después") no decide
+  nada: sigue al paso 2 y la tarjeta "Configurá tu academia" del inicio muestra **"Elegí cómo les dicen"** hasta que
+  conteste. Con la guía completa y la propuesta sin contestar queda solo esa tarjeta.
+- **Panel:** lo mismo al guardar "¿Qué enseñan?": un modal con un campo por palabra (con sugerencias y libre),
+  "Usar estas palabras", "Dejar como estaba" y "Después". La guía del Escritorio (completa o achicada) muestra
+  "Elegí cómo les dicen" con el botón que abre el modal; con la guía completa queda solo ese recordatorio
+  (`guideMode()` = `vocabulary`).
 
 ## Cómo se cambia después
 
-- **Panel:** ya existe Configuración → "Vocabulario" (admin). Se mantiene; guardarlo confirma el vocabulario.
-- **App:** no había forma. Se suma "Cómo les dicen" en "Mi cuenta" (solo con `configure_organization`) →
-  `/vocabulario`: una fila de chips por palabra (alumnos, profesores, grupos, lugares) con las opciones de
-  `terminology_options` y "Otra…" para escribirla.
+- **Panel:** Configuración → "Vocabulario" (admin). Muestra las palabras que usan hoy las pantallas, con nombres que
+  se entienden ("A los que aprenden", "A quienes enseñan", "A los responsables de cada alumno"…), ejemplos y
+  sugerencias; vacía = la que se usa en ese tipo ("una academia"), no la de un club. Guardarlo confirma el vocabulario.
+- **App:** "Cómo les dicen" en "Mi cuenta" (solo con `configure_organization`) → `/vocabulario`: una fila de chips
+  por palabra (alumnos, profesores, grupos, lugares) con las opciones de `terminology_options` y "Otra…".
 
 ## Contrato de API
 
 - `GET onboarding` suma `terminology_suggestion`: `null` o
-  `{ "programs": ["Fútbol"], "current": { "group": "Grupo", "instructor": "Profesor", "space": "Sala" },
-  "suggested": { "group": "Categoría", "instructor": "Técnico", "space": "Cancha" } }` (solo las palabras que se
-  proponen cambiar).
+  `{ "programs": ["Fútbol"], "current": { "student": "Alumno", "instructor": "Profesor", "group": "Grupo", "space": "Sala" },
+  "suggested": { "student": "Jugador", "instructor": "Técnico", "group": "Categoría", "space": "Cancha" } }` (solo las
+  palabras que se proponen cambiar; `programs` trae la disciplina que la origina).
 - **Nuevo** `PUT organization/terminology` (permiso `configure_organization`):
   `{ "terminology": { "group": "Categoría", "instructor": "Técnico", "space": "Cancha" } }` →
   `{ "data": { "terminology": { …las seis, combinadas } } }`. Claves `program, group, student, instructor, guardian,
   space`; cada una hasta 30 caracteres; vacía = la del tipo. `{ "terminology": {} }` = "Dejar como estaba" (solo
   confirma). Siempre deja el vocabulario confirmado.
-- `GET onboarding/templates`: sin cambios de forma (el ejemplo del doc se actualiza: ya traía `space`).
+- `GET onboarding/templates`: `terminology_options` suma `program` y `guardian` (el ejemplo del doc ya trae `space`).
 - La descripción del paso 1 dice "… que ofrece el club / la academia / la escuela / la comisión" según el tipo.
+
+## Preguntas abiertas (sin implementar)
+
+- Otras disciplinas con palabras propias posibles: artes marciales (Sensei, Dojo), patín (Pista), gimnasia
+  (Gimnasio), danza (Profesora, Sala). Hoy no se propone nada.
+- Organizaciones de varias disciplinas con palabras distintas (fútbol y natación): una sola palabra por concepto;
+  no hay vocabulario por disciplina.
 
 ## Textos fijos a corregir
 

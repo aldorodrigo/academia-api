@@ -3,13 +3,27 @@
 @php($steps = collect($checklist['steps'])->keyBy('key'))
 @php($percent = $checklist['total'] === 0 ? 0 : (int) round($checklist['done'] * 100 / $checklist['total']))
 
-@if ($compact)
+{{-- La propuesta de vocabulario sin contestar se recuerda hasta que use las palabras o las deje como estaban. --}}
+@php($vocabulary = $checklist['terminology_suggestion'])
+
+@if ($vocabularyOnly ?? false)
+    <x-filament::section icon="heroicon-o-language" icon-color="primary" compact>
+        <x-slot name="heading">Elegí cómo les dicen</x-slot>
+        <x-slot name="description">En {{ mb_strtolower(implode(' y ', $vocabulary['programs'])) }} se suele decir {{ mb_strtolower(\Illuminate\Support\Arr::join(array_values($vocabulary['suggested']), ', ', ' y ')) }}.</x-slot>
+        <x-slot name="afterHeader">{{ $this->terminologyAction }}</x-slot>
+    </x-filament::section>
+@elseif ($compact)
     <x-filament::section icon="heroicon-o-rocket-launch" icon-color="primary" compact>
         <x-slot name="heading">Configurá tu {{ static::typeNoun() }} · {{ $checklist['done'] }} de {{ $checklist['total'] }}</x-slot>
         @if ($checklist['next'])
             <x-slot name="description">Sigue: {{ $steps[$checklist['next']]['title'] }}</x-slot>
         @endif
-        <x-slot name="afterHeader">{{ $this->resumeGuideAction }}</x-slot>
+        <x-slot name="afterHeader">
+            <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
+                @if ($vocabulary) {{ $this->terminologyAction }} @endif
+                {{ $this->resumeGuideAction }}
+            </div>
+        </x-slot>
     </x-filament::section>
 @else
     <x-filament::section icon="heroicon-o-rocket-launch" icon-color="primary">
@@ -23,6 +37,16 @@
             </div>
             <span style="font-weight: 600; white-space: nowrap;">{{ $checklist['done'] }} de {{ $checklist['total'] }}</span>
         </div>
+
+        @if ($vocabulary)
+            <div style="margin-bottom: 1rem;">
+                <x-filament::section icon="heroicon-o-language" icon-color="warning" compact secondary>
+                    <x-slot name="heading">Elegí cómo les dicen</x-slot>
+                    <x-slot name="description">En {{ mb_strtolower(implode(' y ', $vocabulary['programs'])) }} se suele decir {{ mb_strtolower(\Illuminate\Support\Arr::join(array_values($vocabulary['suggested']), ', ', ' y ')) }}.</x-slot>
+                    <x-slot name="afterHeader">{{ $this->terminologyAction }}</x-slot>
+                </x-filament::section>
+            </div>
+        @endif
 
         <div style="display: grid; gap: 0.75rem;">
             @foreach ($steps as $key => $step)

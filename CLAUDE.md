@@ -140,10 +140,11 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms` (fuera del panel usa la
   organización activa). Nada de "jugador", "categoría" o "técnico" fijos en textos: van con `Terms` o `term()`.
-- Vocabulario por deporte (`docs/PLAN_VOCABULARIO.md`): `VocabularySuggestion` propone Categoría/Técnico/Cancha a una
-  academia que enseña un deporte de equipo (`Templates::isSport`) hasta que el vocabulario se confirma
-  (`terminology_confirmed_at`); se cambia con `UpdateTerminology` (app `PUT organization/terminology`, guía del panel)
-  o en Configuración → Vocabulario.
+- Vocabulario por deporte (`docs/PLAN_VOCABULARIO.md`): `VocabularySuggestion` propone las palabras de la primera
+  disciplina elegida que tenga (`Templates::programTerminology`: fútbol Jugador/Técnico/Categoría/Cancha, natación
+  Nivel/Pileta…) hasta que el vocabulario se confirma (`terminology_confirmed_at`); la guía la recuerda ("Elegí cómo
+  les dicen"). Se cambia con `UpdateTerminology` (app `PUT organization/terminology`, guía del panel) o en
+  Configuración → Vocabulario.
 
 ### Finanzas (cargos)
 - `Charge` es inmutable (no se edita ni se borra): se anula con `VoidCharge` (motivo). Estado calculado: `Charge::status()`.

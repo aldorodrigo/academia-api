@@ -8,6 +8,7 @@ use App\Enums\Feature;
 use App\Enums\OrganizationType;
 use App\Filament\Support\Terms;
 use App\Models\Organization;
+use App\Support\Onboarding\Templates;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Repeater;
@@ -39,13 +40,12 @@ class EditOrganizationProfile extends EditTenantProfile
 
     public function form(Schema $schema): Schema
     {
-        $terminology = [
-            'program' => 'Programa',
-            'group' => 'Grupo',
-            'student' => 'Alumno',
-            'instructor' => 'Instructor',
-            'guardian' => 'Tutor',
-            'space' => 'Cancha / sala de un lugar',
+        $tenant = Filament::getTenant();
+        $typeTerms = Templates::terminologyFor($tenant->type ?? OrganizationType::Club);
+        // "A los responsables de cada jugador" (con la palabra de la organización).
+        $questions = [
+            ...Templates::termQuestions(),
+            'guardian' => 'A los responsables de cada '.mb_strtolower($tenant->term('student')),
         ];
 
         return $schema->components([
@@ -59,13 +59,17 @@ class EditOrganizationProfile extends EditTenantProfile
                         ->required(),
                 ]),
             Section::make('Vocabulario')
-                ->description('Cómo se llaman las cosas en esta organización. Vacío = valor por defecto.')
+                ->description('¿Cómo les dicen? Las pantallas de la app y del panel usan estas palabras (en singular). '
+                    .'Vacía = la que se usa en '.(($tenant->type ?? OrganizationType::Club) === OrganizationType::Club ? 'un ' : 'una ')
+                    .($tenant->type ?? OrganizationType::Club)->noun().'.')
                 ->columns(2)
-                ->schema(collect($terminology)->map(
+                ->schema(collect($questions)->map(
                     fn (string $label, string $key) => TextInput::make("terminology.{$key}")
                         ->label($label)
-                        ->placeholder(Organization::DEFAULT_TERMINOLOGY[$key])
-                        ->maxLength(40),
+                        ->placeholder($typeTerms[$key])
+                        ->datalist(collect(Templates::terminologyOptions()[$key] ?? [])->push($typeTerms[$key])->unique()->values()->all())
+                        ->helperText('Ej.: '.collect(Templates::terminologyOptions()[$key] ?? [$typeTerms[$key]])->take(3)->implode(', ').'.')
+                        ->maxLength(30),
                 )->values()->all()),
             Section::make('Cobros')
                 ->description('Vencimiento de las cuotas, orden de los descuentos y mora.')
@@ -136,6 +140,8 @@ class EditOrganizationProfile extends EditTenantProfile
         $data['billing'] = Filament::getTenant()->billing();
         $data['class_reminder_hours'] ??= Filament::getTenant()->class_reminder_hours ?? 3;
         $data['instructor_reminder_hours'] ??= Filament::getTenant()->instructor_reminder_hours ?? 2;
+        // Las palabras que usan hoy las pantallas (lo guardado o el valor por defecto).
+        $data['terminology'] = array_merge(Organization::DEFAULT_TERMINOLOGY, Filament::getTenant()->terminology ?? []);
 
         return $data;
     }
@@ -150,14 +156,17 @@ class EditOrganizationProfile extends EditTenantProfile
             'discount_order' => array_values($billing['discount_order'] ?? Organization::DEFAULT_BILLING['discount_order']),
         ];
 
-        $data['terminology'] = collect($data['terminology'] ?? [])
-            ->map(fn (?string $value) => filled($value) ? trim($value) : null)
-            ->filter()
-            ->all() ?: null;
+        // Vacía = la del tipo elegido.
+        $type = $data['type'] ?? null;
+        $type = $type instanceof OrganizationType ? $type : OrganizationType::tryFrom((string) $type);
+        $typeTerms = Templates::terminologyFor($type ?? $this->tenant->type ?? OrganizationType::Club);
+        $data['terminology'] = collect(UpdateTerminology::KEYS)
+            ->mapWithKeys(fn (string $key) => [$key => filled($data['terminology'][$key] ?? null) ? trim($data['terminology'][$key]) : $typeTerms[$key]])
+            ->all();
 
         // Cambió el vocabulario: ya decidió cómo les dicen (no se le proponen las palabras de deporte).
         $this->terminologyChanged = collect(UpdateTerminology::KEYS)
-            ->contains(fn (string $key) => ($data['terminology'][$key] ?? Organization::DEFAULT_TERMINOLOGY[$key]) !== $this->tenant->term($key));
+            ->contains(fn (string $key) => $data['terminology'][$key] !== $this->tenant->term($key));
 
         return $data;
     }

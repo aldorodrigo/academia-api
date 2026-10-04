@@ -8,10 +8,11 @@ use App\Models\Program;
 use App\Support\Tenancy\CurrentOrganization;
 
 /**
- * Una academia (o escuela, o comisión) que enseña un deporte de equipo: se le proponen las palabras
- * de deporte (Categoría, Técnico, Cancha) en lugar de las de su tipo (Grupo, Profesor, Sala).
- * Solo las palabras que siguen como vinieron con el tipo y mientras no haya decidido nada
- * (`terminology_confirmed_at`). La usan `GET onboarding` y la guía del panel.
+ * Cada deporte con lo suyo: una organización que enseña fútbol recibe la propuesta de decir jugador,
+ * técnico, categoría y cancha; una de natación, alumno, profesor, nivel y pileta
+ * (`Templates::programTerminology`). Manda la primera disciplina elegida que tenga propuesta.
+ * Solo se proponen las palabras que siguen como vinieron con el tipo y mientras no haya decidido
+ * nada (`terminology_confirmed_at`). La usan `GET onboarding` y la guía del panel.
  */
 class VocabularySuggestion
 {
@@ -24,12 +25,13 @@ class VocabularySuggestion
             return null;
         }
 
-        $programs = app(CurrentOrganization::class)->run(
+        // La primera elegida: por orden de alta.
+        $program = app(CurrentOrganization::class)->run(
             $organization,
-            fn () => Program::query()->orderBy('name')->pluck('name'),
-        )->filter(fn (string $name) => Templates::isSport($name))->values()->all();
+            fn () => Program::query()->orderBy('id')->pluck('name'),
+        )->first(fn (string $name) => Templates::programTerminology($name) !== null);
 
-        if ($programs === []) {
+        if ($program === null) {
             return null;
         }
 
@@ -37,7 +39,7 @@ class VocabularySuggestion
         $current = [];
         $suggested = [];
 
-        foreach (Templates::sportTerminology() as $key => $word) {
+        foreach (Templates::programTerminology($program) as $key => $word) {
             $now = $organization->term($key);
 
             if ($now === $typeTerms[$key] && $now !== $word) {
@@ -47,7 +49,7 @@ class VocabularySuggestion
         }
 
         return $suggested === [] ? null : [
-            'programs' => $programs,
+            'programs' => [$program],
             'current' => $current,
             'suggested' => $suggested,
         ];

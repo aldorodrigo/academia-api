@@ -83,7 +83,8 @@ trait SetupGuide
         $checklist = self::checklist();
 
         return match (true) {
-            $checklist['completed'] => null,
+            // Completa pero sin contestar cómo les dicen: queda solo el recordatorio.
+            $checklist['completed'] => $checklist['terminology_suggestion'] !== null ? 'vocabulary' : null,
             $checklist['dismissed'] => 'compact',
             default => 'full',
         };
@@ -217,6 +218,8 @@ trait SetupGuide
         $words = fn (array $items) => self::words(array_map('mb_strtolower', array_values($items)));
 
         return Action::make('terminology')
+            ->label('Elegí cómo les dicen')
+            ->icon(Heroicon::OutlinedLanguage)
             ->modalHeading('¿Cómo les dicen?')
             ->modalDescription(fn () => ($s = $suggestion())
                 ? 'En '.$words($s['programs']).' se suele decir '.$words($s['suggested']).'. Elegí las palabras que usan ustedes: las pantallas van a decir eso.'
@@ -224,17 +227,15 @@ trait SetupGuide
             ->fillForm(fn () => ['terminology' => $suggestion()['suggested'] ?? []])
             ->schema(fn () => collect($suggestion()['suggested'] ?? [])->map(
                 fn (string $word, string $key) => TextInput::make("terminology.{$key}")
-                    ->label(self::TERM_QUESTIONS[$key] ?? $key)
+                    ->label(Templates::termQuestions()[$key] ?? $key)
                     ->datalist(collect(Templates::terminologyOptions()[$key] ?? [])->push($word)->unique()->values()->all())
                     ->helperText('Elegí una o escribí la que usan.')
                     ->required()
                     ->maxLength(30),
             )->values()->all())
             ->modalSubmitActionLabel('Usar estas palabras')
-            ->modalCancelAction(false)
-            ->closeModalByClickingAway(false)
-            ->closeModalByEscaping(false)
-            ->modalCloseButton(false)
+            // Cerrarla sin contestar no decide nada: la guía la sigue recordando.
+            ->modalCancelActionLabel('Después')
             ->extraModalFooterActions(fn () => [
                 Action::make('keepTerminology')
                     ->label('Dejar como estaba ('.$words($suggestion()['current'] ?? []).')')
@@ -242,7 +243,7 @@ trait SetupGuide
                     ->cancelParentActions()
                     ->action(function (UpdateTerminology $update) {
                         $update->handle($this->tenant(), []);
-                        $this->notifyDone('Listo. Ahora, '.$this->plural('group').' y horarios.');
+                        $this->notifyDone('Listo: las palabras quedan como estaban.');
                     }),
             ])
             ->action(function (array $data, UpdateTerminology $update) {
@@ -252,14 +253,6 @@ trait SetupGuide
                 $this->redirect(Dashboard::getUrl());
             });
     }
-
-    /** Qué nombra cada palabra del vocabulario. */
-    private const TERM_QUESTIONS = [
-        'student' => 'A los que aprenden',
-        'instructor' => 'A quienes enseñan',
-        'group' => 'A los grupos',
-        'space' => 'Al lugar de la clase',
-    ];
 
     /**
      * "a, b y c".

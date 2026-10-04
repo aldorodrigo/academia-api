@@ -985,7 +985,9 @@ Lo que la app y el panel ofrecen como sugerencia:
       "student": ["Jugador", "Alumno", "Alumna", "Atleta"],
       "instructor": ["Técnico", "Profesor", "Profesora", "Instructor", "Entrenador"],
       "group": ["Categoría", "Grupo", "Nivel", "Clase"],
-      "space": ["Cancha", "Sala", "Aula", "Espacio", "Pileta"]
+      "space": ["Cancha", "Sala", "Aula", "Espacio", "Pileta"],
+      "program": ["Disciplina", "Actividad", "Deporte", "Taller"],
+      "guardian": ["Tutor", "Responsable", "Encargado"]
     },
     "programs": [
       { "name": "Fútbol", "group_criterion": "birth_year" },
@@ -1056,11 +1058,15 @@ Sin ese permiso, los endpoints de esta sección responden `403`.
 - `dismissed`: la guía se cerró; no se abre sola, pero sigue la tarjeta del inicio hasta completarla.
 - La descripción de `programs` dice "… que ofrece el club / la academia / la escuela / la comisión" según el tipo.
 - `terminology_suggestion` (vocabulario por deporte, ver `PLAN_VOCABULARIO.md`): `null` o
-  `{ "programs": ["Fútbol"], "current": { "group": "Grupo", "instructor": "Profesor", "space": "Sala" },
-  "suggested": { "group": "Categoría", "instructor": "Técnico", "space": "Cancha" } }`. Aparece cuando hay una
-  disciplina deportiva (Fútbol, Futsal, Básquet, Vóley, Handball, Hockey, Rugby; también "Fútbol 7" o "futbol"),
-  solo con las palabras que siguen como vinieron con el tipo y son distintas de las de deporte, y mientras el
-  vocabulario no esté confirmado. La app la muestra al guardar el paso 1 y responde con `PUT organization/terminology`.
+  `{ "programs": ["Fútbol"], "current": { "student": "Alumno", "instructor": "Profesor", "group": "Grupo", "space": "Sala" },
+  "suggested": { "student": "Jugador", "instructor": "Técnico", "group": "Categoría", "space": "Cancha" } }`.
+  Cada deporte con lo suyo: de equipo (Fútbol, Futsal, Básquet, Vóley, Handball, Hockey, Rugby) Jugador, Técnico,
+  Categoría y Cancha; Natación Alumno, Profesor, Nivel y Pileta; Tenis y Pádel Alumno, Profesor, Nivel y Cancha (se
+  compara sin tildes y por la primera palabra: "Fútbol 7"). Manda la primera disciplina elegida que tenga propuesta
+  (`programs` la trae). Solo las palabras que siguen como vinieron con el tipo y son distintas, y mientras el
+  vocabulario no esté confirmado. La app la muestra al guardar el paso 1 y, si se cierra sin contestar, la recuerda
+  en la tarjeta de la guía ("Elegí cómo les dicen", también con la guía completa) hasta que responda con
+  `PUT organization/terminology`.
 
 #### `PUT onboarding`
 
