@@ -46,7 +46,7 @@ class ClassSessionResource extends JsonResource
             'date' => $this->date->toDateString(),
             'starts_at' => Schedule::time($this->starts_at),
             'ends_at' => Schedule::time($this->ends_at),
-            'venue' => $this->venue ? ['name' => $this->venue->name] : null,
+            'venue' => $this->venue ? ['name' => $this->venue->label] : null,
             'group' => [
                 'id' => $group->id,
                 'name' => $group->name,
@@ -103,7 +103,7 @@ class ClassSessionResource extends JsonResource
             'date' => $session->date->toDateString(),
             'starts_at' => Schedule::time($session->starts_at),
             'ends_at' => Schedule::time($session->ends_at),
-            'venue' => $session->venue ? ['name' => $session->venue->name] : null,
+            'venue' => $session->venue ? ['name' => $session->venue->label] : null,
         ];
     }
 }

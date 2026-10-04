@@ -14,7 +14,7 @@ class VenueController extends Controller
     public function index(): JsonResponse
     {
         return response()->json([
-            'data' => Venue::query()->orderBy('name')->get(['id', 'name']),
+            'data' => collect(Venue::options())->map(fn (string $label, int $id) => ['id' => $id, 'name' => $label])->values(),
         ]);
     }
 }

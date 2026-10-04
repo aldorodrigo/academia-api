@@ -20,6 +20,8 @@ class PruneUnverifiedAccounts extends Command
 
         User::query()
             ->pending()
+            // El super admin se crea por consola (make:filament-user), sin código.
+            ->where('is_super_admin', false)
             ->where('created_at', '<', now()->subDay())
             ->chunkById(100, function ($users) use (&$count): void {
                 $users->each->delete();

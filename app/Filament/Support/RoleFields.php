@@ -25,8 +25,14 @@ class RoleFields
         /** @var Organization $organization */
         $organization = Filament::getTenant();
 
+        $user = auth()->user();
+        // Quien no es administrador solo invita o asigna tutores y técnicos: no puede darle a otro
+        // (ni a sí mismo) un cargo o el rol de administrador.
+        $limited = $user !== null && ! $user->is_super_admin && ! $user->isOrganizationAdmin($organization);
+
         return Role::query()
             ->where('organization_id', $organization->id)
+            ->when($limited, fn ($query) => $query->whereIn('name', [OrganizationRole::Guardian->value, OrganizationRole::Instructor->value]))
             ->orderBy('id')
             ->pluck('name')
             ->mapWithKeys(fn (string $name) => [$name => OrganizationRole::labelFor($name, $organization)])

@@ -5,9 +5,11 @@ namespace App\Filament\Resources\Groups\Schemas;
 use App\Enums\GroupCriterion;
 use App\Enums\OrganizationRole;
 use App\Filament\Support\Terms;
+use App\Filament\Support\VenueField;
 use App\Models\Group;
 use App\Models\Program;
 use App\Models\Schedule;
+use App\Support\Scheduling\ScheduleConflicts;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
@@ -54,6 +56,7 @@ class GroupForm
                 TextInput::make('capacity')->label('Cupo')->numeric()->minValue(1),
                 Toggle::make('is_active')->label('Activo')->default(true),
                 Select::make('instructors')
+                    ->live()
                     ->label(ucfirst(Terms::plural('instructor', 'Técnico')))
                     ->relationship('instructors', 'name', fn (Builder $query) => self::instructorsQuery($query))
                     ->multiple()
@@ -65,23 +68,49 @@ class GroupForm
                 Repeater::make('schedules')
                     ->hiddenLabel()
                     ->relationship()
-                    ->columns(4)
+                    ->columns(3)
                     ->defaultItems(0)
                     ->addActionLabel('Agregar horario')
                     ->schema([
-                        Select::make('weekday')->label('Día')->options(Schedule::WEEKDAYS)->required(),
-                        TimePicker::make('starts_at')->label('Desde')->seconds(false)->required(),
-                        TimePicker::make('ends_at')->label('Hasta')->seconds(false)->required()->after('starts_at'),
-                        // Sedes y canchas se crean y editan acá (sin menú propio).
-                        Select::make('venue_id')
-                            ->label('Cancha')
-                            ->relationship('venue', 'name')
-                            ->preload()
-                            ->createOptionForm(self::venueFields())
-                            ->editOptionForm(self::venueFields()),
+                        Select::make('weekday')->label('Día')->options(Schedule::WEEKDAYS)->required()->live(),
+                        TimePicker::make('starts_at')->label('Desde')->seconds(false)->required()->live(onBlur: true),
+                        TimePicker::make('ends_at')->label('Hasta')->seconds(false)->required()->after('starts_at')->live(onBlur: true),
+                        // Lugar y cancha (también se crean acá). En su propia fila: el nombre es largo.
+                        VenueField::make()->live()->columnSpanFull(),
                     ]),
+                // Aviso si otra categoría usa la misma cancha a esa hora o un técnico queda con dos a la vez.
+                VenueField::conflicts(
+                    fn (Get $get, mixed $record) => self::slots($get, $record),
+                    fn (Get $get, mixed $record) => ScheduleConflicts::forGroupInstructors(
+                        $record instanceof Group ? $record->id : null,
+                        (string) ($get('name') ?: 'esta'),
+                        self::slots($get, $record),
+                        array_map('intval', $get('instructors') ?? []),
+                    ),
+                ),
             ]),
         ]);
+    }
+
+    /**
+     * Los horarios del formulario, para revisar choques.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function slots(Get $get, mixed $record): array
+    {
+        return collect($get('schedules') ?? [])
+            ->filter(fn (array $row) => filled($row['weekday'] ?? null) && filled($row['starts_at'] ?? null) && filled($row['ends_at'] ?? null))
+            ->values()
+            ->map(fn (array $row, int $index) => [
+                'key' => (string) $index,
+                'group_id' => $record instanceof Group ? $record->id : null,
+                'group_name' => (string) ($get('name') ?: 'Esta'),
+                'weekday' => (int) $row['weekday'],
+                'starts_at' => substr((string) $row['starts_at'], 0, 5),
+                'ends_at' => substr((string) $row['ends_at'], 0, 5),
+                'venue_id' => filled($row['venue_id'] ?? null) ? (int) $row['venue_id'] : null,
+            ])->all();
     }
 
     private static function criterion(Get $get): ?GroupCriterion
@@ -112,17 +141,6 @@ class GroupForm
                 ->default(GroupCriterion::BirthYear)
                 ->required()
                 ->helperText('Por año de nacimiento (Sub-10, Sub-12…) o por nivel (Inicial, Avanzado…).'),
-        ];
-    }
-
-    /**
-     * @return array<int, mixed>
-     */
-    private static function venueFields(): array
-    {
-        return [
-            TextInput::make('name')->label('Nombre')->placeholder('Cancha 1')->required()->maxLength(255),
-            TextInput::make('address')->label('Dirección')->maxLength(255),
         ];
     }
 

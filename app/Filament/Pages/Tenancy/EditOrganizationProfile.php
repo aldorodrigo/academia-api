@@ -43,6 +43,7 @@ class EditOrganizationProfile extends EditTenantProfile
             'student' => 'Alumno',
             'instructor' => 'Instructor',
             'guardian' => 'Tutor',
+            'space' => 'Cancha / sala de un lugar',
         ];
 
         return $schema->components([

@@ -8,6 +8,7 @@ use App\Filament\Support\EnrollmentForm;
 use App\Filament\Support\Terms;
 use App\Models\Guardian;
 use App\Models\Student;
+use App\Support\Phone;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\DatePicker;
@@ -15,7 +16,6 @@ use Filament\Forms\Components\Repeater;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\TextInput;
-use Filament\Forms\Components\Toggle;
 use Filament\Schemas\Components\Callout;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
@@ -121,7 +121,7 @@ class StudentForm
             Section::make('Inscripción')->visibleOn('create')->columnSpanFull()->columns(4)
                 ->schema(EnrollmentForm::fields(details: false)),
             Section::make(ucfirst(Terms::plural('guardian', 'Tutor')))
-                ->description('Con correo se les puede mandar la invitación a la app: al aceptarla ven a sus hijos.')
+                ->description('Con el celular (WhatsApp) o el correo, después de crear los invitás a la app desde la ficha del jugador: al aceptar ven a sus hijos.')
                 ->visibleOn('create')
                 ->columnSpanFull()
                 ->schema([
@@ -134,25 +134,26 @@ class StudentForm
                         ->minItems(fn (Get $get) => self::isMinor($get('birth_date')) ? 1 : 0)
                         ->validationMessages(['min' => 'El jugador es menor de edad: cargá al menos un tutor.'])
                         ->schema([
+                            TextInput::make('phone')
+                                ->label('Celular (WhatsApp)')
+                                ->tel()
+                                ->maxLength(30)
+                                ->live(onBlur: true)
+                                ->afterStateUpdated(fn (?string $state, Set $set) => self::fillExistingGuardian(self::existingGuardian(phone: $state), $set))
+                                ->helperText(fn (?string $state) => self::existingGuardianNote(self::existingGuardian(phone: $state))),
                             TextInput::make('email')
                                 ->label('Correo')
                                 ->email()
                                 ->live(onBlur: true)
-                                ->afterStateUpdated(fn (?string $state, Set $set) => self::fillExistingGuardian($state, $set))
-                                ->helperText(fn (?string $state) => self::existingGuardianNote($state)),
-                            TextInput::make('first_name')->label('Nombre')->required()->maxLength(255),
-                            TextInput::make('last_name')->label('Apellido')->required()->maxLength(255),
+                                ->afterStateUpdated(fn (?string $state, Set $set) => self::fillExistingGuardian(self::existingGuardian(email: $state), $set))
+                                ->helperText(fn (?string $state) => self::existingGuardianNote(self::existingGuardian(email: $state))),
                             Select::make('relationship')
                                 ->label('Parentesco')
                                 ->options(GuardianRelationship::class)
                                 ->default(GuardianRelationship::Mother->value)
                                 ->required(),
-                            TextInput::make('phone')->label('Celular (WhatsApp)')->tel()->maxLength(30),
-                            Toggle::make('invite')
-                                ->label('Enviar invitación a la app')
-                                ->default(true)
-                                ->inline(false)
-                                ->visible(fn (Get $get) => filled($get('email')) && ! self::existingGuardian($get('email'))?->hasAccount()),
+                            TextInput::make('first_name')->label('Nombre')->required()->maxLength(255),
+                            TextInput::make('last_name')->label('Apellido')->required()->maxLength(255),
                         ]),
                 ]),
         ];
@@ -193,27 +194,42 @@ class StudentForm
         return $birthDate === null || Carbon::parse($birthDate)->age < Student::ADULT_AGE;
     }
 
-    private static function existingGuardian(?string $email): ?Guardian
+    /**
+     * Tutor ya cargado (ej. padre de un hermano), por su celular o su correo.
+     */
+    private static function existingGuardian(?string $phone = null, ?string $email = null): ?Guardian
     {
-        return filled($email) ? Guardian::query()->with('students')->where('email', mb_strtolower(trim($email)))->first() : null;
+        $phone = Phone::normalize($phone);
+        $email = filled($email) ? mb_strtolower(trim($email)) : null;
+
+        return match (true) {
+            $phone !== null => Guardian::query()->with('students')->where('phone', $phone)->first(),
+            $email !== null => Guardian::query()->with('students')->where('email', $email)->first(),
+            default => null,
+        };
     }
 
     /**
-     * Tutor ya cargado (ej. padre de un hermano): se completan sus datos y se reutiliza.
+     * Se completan sus datos y se reutiliza.
      */
-    private static function fillExistingGuardian(?string $email, Set $set): void
+    private static function fillExistingGuardian(?Guardian $guardian, Set $set): void
     {
-        if ($guardian = self::existingGuardian($email)) {
+        if ($guardian) {
             $set('first_name', $guardian->first_name);
             $set('last_name', $guardian->last_name);
-            $set('phone', $guardian->phone_display);
+
+            if (filled($guardian->phone)) {
+                $set('phone', $guardian->phone_display);
+            }
+
+            if (filled($guardian->email)) {
+                $set('email', $guardian->email);
+            }
         }
     }
 
-    private static function existingGuardianNote(?string $email): ?string
+    private static function existingGuardianNote(?Guardian $guardian): ?string
     {
-        $guardian = self::existingGuardian($email);
-
         if ($guardian === null) {
             return null;
         }

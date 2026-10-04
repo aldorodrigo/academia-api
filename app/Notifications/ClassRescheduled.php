@@ -34,7 +34,7 @@ class ClassRescheduled extends Notification implements ShouldQueue
             return;
         }
 
-        $venue = $makeup->venue ? " ({$makeup->venue->name})" : '';
+        $venue = $makeup->venue ? " ({$makeup->venue->label})" : '';
         $reason = filled($session->suspension_reason) ? " por {$session->suspension_reason}" : '';
         $when = $makeup->date->isSameDay($session->date) ? $makeupTime : 'al '.self::day($makeup->date)." {$makeupTime}";
         $this->body = "{$class}{$reason} pasa {$when}{$venue}.";

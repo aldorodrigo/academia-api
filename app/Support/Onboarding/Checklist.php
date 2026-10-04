@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\Program;
 use App\Models\Season;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 
 /**
  * Guía "Primeros pasos": cada paso está hecho si existe lo que pide (aunque se haya hecho
@@ -70,6 +71,8 @@ class Checklist
 
         $programs = Program::query()->orderBy('name')->pluck('name');
         $groups = Group::query()->where('is_active', true)->whereHas('schedules')->count();
+        $withoutSchedule = Group::query()->where('is_active', true)->whereDoesntHave('schedules')->count();
+        $groupWord = fn (int $count) => $count === 1 ? mb_strtolower($organization->term('group')) : $group;
         $seasons = Season::query()->open()->orderBy('starts_on')->get();
         $instructors = Team::instructors($organization);
         $invitations = Team::invitations($organization, $instructors);
@@ -85,10 +88,12 @@ class Checklist
             ],
             'groups' => [
                 'title' => ucfirst($group).' y horarios',
-                'description' => 'Las familias eligen la '.mb_strtolower($organization->term('group')).' al inscribirse.',
+                'description' => 'Las familias eligen '.Vocabulary::gendered($organization->term('group'), 'el', 'la').' '.mb_strtolower($organization->term('group')).' al inscribirse.',
                 'done' => $groups > 0,
                 'blocked_by' => $programs->isEmpty() ? 'programs' : null,
-                'summary' => $groups > 0 ? $groups.' '.($groups === 1 ? mb_strtolower($organization->term('group')) : $group) : null,
+                'summary' => $groups > 0
+                    ? ($groups + $withoutSchedule).' '.$groupWord($groups + $withoutSchedule).($withoutSchedule > 0 ? " · {$withoutSchedule} sin horario" : '')
+                    : null,
                 'minutes' => 3,
             ],
             'season' => [
@@ -102,7 +107,7 @@ class Checklist
             ],
             'instructors' => [
                 'title' => ucfirst($instructor),
-                'description' => 'Invitalos para que tomen asistencia desde la app.',
+                'description' => Vocabulary::gendered($organization->term('instructor'), 'Invitalos', 'Invitalas').' para que tomen asistencia desde la app.',
                 'done' => $instructors->isNotEmpty() || $invitations->isNotEmpty(),
                 'blocked_by' => $groups === 0 ? 'groups' : null,
                 'summary' => $this->teamSummary($instructors->count(), $invitations->count(), $instructor),

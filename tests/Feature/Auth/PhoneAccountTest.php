@@ -126,6 +126,7 @@ describe('cuenta con el celular', function () {
         $pending = User::factory()->unverified()->create(['phone' => '+595981123456', 'email' => null]);
         $recent = User::factory()->unverified()->create();
         $verified = User::factory()->create();
+        $superAdmin = User::factory()->unverified()->create(['is_super_admin' => true]);
         $this->travel(25)->hours();
         $recent->forceFill(['created_at' => now()->subHour()])->save();
 
@@ -133,7 +134,8 @@ describe('cuenta con el celular', function () {
 
         expect(User::query()->find($pending->id))->toBeNull()
             ->and(User::query()->find($recent->id))->not->toBeNull()
-            ->and(User::query()->find($verified->id))->not->toBeNull();
+            ->and(User::query()->find($verified->id))->not->toBeNull()
+            ->and(User::query()->find($superAdmin->id))->not->toBeNull();
     });
 
     it('reenviar por correo, si la cuenta lo tiene', function () {

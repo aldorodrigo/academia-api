@@ -4,7 +4,7 @@ namespace App\Filament\Pages\Tenancy;
 
 use App\Actions\Organizations\RegisterOrganization as RegisterOrganizationAction;
 use App\Enums\OrganizationType;
-use App\Filament\Pages\Onboarding;
+use App\Filament\Pages\Dashboard;
 use App\Support\Onboarding\Templates;
 use App\Support\Organizations\Slug;
 use Filament\Forms\Components\Radio;
@@ -109,6 +109,6 @@ class RegisterOrganization extends RegisterTenant
 
     protected function getRedirectUrl(): ?string
     {
-        return Onboarding::getUrl(tenant: $this->tenant);
+        return Dashboard::getUrl(tenant: $this->tenant);
     }
 }

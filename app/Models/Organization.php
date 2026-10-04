@@ -36,6 +36,8 @@ class Organization extends Model
         'student' => 'Jugador',
         'instructor' => 'Técnico',
         'guardian' => 'Tutor',
+        // Cancha, sala o aula de un lugar.
+        'space' => 'Cancha',
     ];
 
     /**

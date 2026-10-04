@@ -11,6 +11,7 @@ use App\Enums\AttendanceStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\ClassSessionResource;
 use App\Models\ClassSession;
+use App\Support\Scheduling\ScheduleConflicts;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -96,9 +97,11 @@ class ClassController extends Controller
             'reason' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $reschedule->handle($session, $data, $request->user());
+        $makeup = $reschedule->handle($session, $data, $request->user());
+        $response = $this->respond($request, $session->refresh());
 
-        return $this->respond($request, $session->refresh());
+        // Si ese día otra categoría usa la cancha a esa hora, se avisa (la clase se reprograma igual).
+        return $response->setData([...$response->getData(true), 'warnings' => ScheduleConflicts::forClass($makeup)]);
     }
 
     public function cancelReschedule(Request $request, int $class, RescheduleClass $reschedule): JsonResponse

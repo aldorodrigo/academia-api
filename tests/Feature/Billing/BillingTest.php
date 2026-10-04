@@ -196,8 +196,10 @@ describe('descuentos y becas', function () {
         app(RoleAssigner::class)->assign($this->jakare, $treasurer, OrganizationRole::Treasurer, endsOn: now()->addYear());
         $scholarship = $decision->request($this->enrollSofia, 50, 'Situación económica', now(), null, $treasurer);
 
-        // Sin el permiso no puede aprobar.
-        expect(fn () => $decision->approve($scholarship, $treasurer))->toThrow(AuthorizationException::class);
+        // Sin el permiso (el tesorero lo trae por defecto; el administrador se lo puede quitar) no puede aprobar.
+        $role = Role::query()->where('organization_id', $this->jakare->id)->where('name', 'tesorero')->sole();
+        $role->revokePermissionTo('Approve:Scholarship');
+        expect(fn () => $decision->approve($scholarship, $treasurer->fresh()))->toThrow(AuthorizationException::class);
 
         Permission::findOrCreate('Approve:Scholarship');
         Role::query()->where('organization_id', $this->jakare->id)->where('name', 'tesorero')->sole()->givePermissionTo('Approve:Scholarship');

@@ -18,9 +18,10 @@ class Templates
     public static function terminologyFor(OrganizationType $type): array
     {
         return match ($type) {
-            OrganizationType::Club => ['program' => 'Disciplina', 'group' => 'Categoría', 'student' => 'Jugador', 'instructor' => 'Técnico', 'guardian' => 'Tutor'],
-            OrganizationType::Academy, OrganizationType::School => ['program' => 'Disciplina', 'group' => 'Grupo', 'student' => 'Alumno', 'instructor' => 'Profesor', 'guardian' => 'Tutor'],
-            OrganizationType::ParentsAssociation => ['program' => 'Actividad', 'group' => 'Grupo', 'student' => 'Alumno', 'instructor' => 'Profesor', 'guardian' => 'Tutor'],
+            OrganizationType::Club => ['program' => 'Disciplina', 'group' => 'Categoría', 'student' => 'Jugador', 'instructor' => 'Técnico', 'guardian' => 'Tutor', 'space' => 'Cancha'],
+            OrganizationType::Academy => ['program' => 'Disciplina', 'group' => 'Grupo', 'student' => 'Alumno', 'instructor' => 'Profesor', 'guardian' => 'Tutor', 'space' => 'Sala'],
+            OrganizationType::School => ['program' => 'Disciplina', 'group' => 'Grupo', 'student' => 'Alumno', 'instructor' => 'Profesor', 'guardian' => 'Tutor', 'space' => 'Aula'],
+            OrganizationType::ParentsAssociation => ['program' => 'Actividad', 'group' => 'Grupo', 'student' => 'Alumno', 'instructor' => 'Profesor', 'guardian' => 'Tutor', 'space' => 'Espacio'],
         };
     }
 
@@ -55,6 +56,7 @@ class Templates
             'student' => ['Jugador', 'Alumno', 'Alumna', 'Atleta'],
             'instructor' => ['Técnico', 'Profesor', 'Profesora', 'Instructor', 'Entrenador'],
             'group' => ['Categoría', 'Grupo', 'Nivel', 'Clase'],
+            'space' => ['Cancha', 'Sala', 'Aula', 'Espacio', 'Pileta'],
         ];
     }
 

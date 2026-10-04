@@ -8,11 +8,13 @@ use App\Actions\Attendance\ResolveClassSessions;
 use App\Actions\Attendance\SuspendClass;
 use App\Enums\AttendanceStatus;
 use App\Enums\GuardianResponse;
+use App\Filament\Support\Terms;
 use App\Models\Attendance;
 use App\Models\ClassSession;
 use App\Models\Schedule;
 use App\Models\Student;
 use App\Models\Venue;
+use App\Support\Scheduling\ScheduleConflicts;
 use Closure;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Checkbox;
@@ -117,8 +119,7 @@ class ClassSessionsRelationManager extends RelationManager
                         $reason = $data['reason'] === 'Otro' ? $data['other'] : $data['reason'];
 
                         if ($data['then'] === 'reschedule') {
-                            $reschedule->handle($record, [...self::rescheduleData($data), 'reason' => $reason], auth()->user());
-                            Notification::make()->title('Clase reprogramada')->body('Se avisó a los tutores.')->success()->send();
+                            self::rescheduled($reschedule->handle($record, [...self::rescheduleData($data), 'reason' => $reason], auth()->user()));
 
                             return;
                         }
@@ -133,8 +134,7 @@ class ClassSessionsRelationManager extends RelationManager
                     ->schema(fn (ClassSession $record) => self::rescheduleFields($record))
                     ->modalDescription('Se avisa por push a los tutores del grupo.')
                     ->action(function (ClassSession $record, array $data, RescheduleClass $reschedule) {
-                        $reschedule->handle($record, [...self::rescheduleData($data), 'reason' => $record->suspension_reason], auth()->user());
-                        Notification::make()->title('Clase reprogramada')->body('Se avisó a los tutores.')->success()->send();
+                        self::rescheduled($reschedule->handle($record, [...self::rescheduleData($data), 'reason' => $record->suspension_reason], auth()->user()));
                     }),
                 Action::make('resume')
                     ->label('Volver a programar')
@@ -161,6 +161,19 @@ class ClassSessionsRelationManager extends RelationManager
      *
      * @return list<mixed>
      */
+    /**
+     * Aviso de clase reprogramada; si choca con otra categoría en la cancha, también eso.
+     */
+    private static function rescheduled(ClassSession $makeup): void
+    {
+        Notification::make()->title('Clase reprogramada')->body('Se avisó a los tutores.')->success()->send();
+
+        $warnings = ScheduleConflicts::forClass($makeup);
+        if ($warnings !== []) {
+            Notification::make()->warning()->persistent()->title('Ojo, se superponen')->body(implode("\n", $warnings))->send();
+        }
+    }
+
     private static function rescheduleFields(ClassSession $session, ?Closure $visible = null): array
     {
         $fields = [
@@ -169,7 +182,7 @@ class ClassSessionsRelationManager extends RelationManager
                 ->minDate(filament()->getTenant()->today()->toDateString())->required(),
             TimePicker::make('starts_at')->label('Empieza')->seconds(false)->default(Schedule::time($session->starts_at))->required(),
             TimePicker::make('ends_at')->label('Termina')->seconds(false)->default(Schedule::time($session->ends_at))->required(),
-            Select::make('venue_id')->label('Cancha')->options(fn () => Venue::query()->orderBy('name')->pluck('name', 'id'))
+            Select::make('venue_id')->label(Terms::label('space', 'Cancha'))->options(fn () => Venue::options())
                 ->default($session->venue_id),
         ];
 
