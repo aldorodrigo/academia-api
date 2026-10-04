@@ -6,7 +6,7 @@
     $panelUrl = fn (string $route) => rtrim(config('app.url'), '/').route($route, absolute: false);
     $register = $panelUrl('filament.admin.auth.register');
     $panel = $panelUrl('filament.admin.auth.login');
-    $app = config('app.frontend_url');
+    $app = config('tuku.app_url');
     $whatsapp = config('tuku.whatsapp')
         ? 'https://wa.me/'.config('tuku.whatsapp').'?text='.rawurlencode('Hola, quiero saber más de Tuku.')
         : null;
@@ -33,7 +33,9 @@
         ['¿Tengo que pagar algo ahora?', "No. Tuku es gratis hasta el {$gratisHasta} y no te pedimos tarjeta para crear la cuenta."],
         ["¿Qué pasa después del {$gratisHasta}?", "Desde {$cobraDesde} elegís el plan que va con tu organización: Instructores, Academias o Clubes, organizaciones y escuelas. Los precios ya están en esta página."],
         ['¿Las familias y los profes pagan?', 'No. El plan lo paga la organización. Familias, técnicos y profesores usan Tuku sin costo.'],
-        ['¿Hay que instalar algo?', 'Hoy Tuku se usa desde el navegador del celular o de la computadora. Las apps para Android y iPhone están en camino.'],
+        ['¿Hay que instalar algo?', $app
+            ? 'Hoy Tuku se usa desde el navegador del celular o de la computadora. Las apps para Android y iPhone están en camino.'
+            : 'No. El panel de la organización funciona desde el navegador. La app para familias y profes está por salir, y después llegan las de Android y iPhone.'],
         ['¿Sirve para mi organización?', 'Sí, si tenés alumnos, grupos y cuotas: academias de deporte, danza, música o idiomas, escuelas de formación, clubes, colonias de vacaciones, profesores particulares y comisiones de padres. Las palabras se adaptan: "categoría" o "grupo", "técnico" o "profesora".'],
         ['¿Qué pasa si en la cancha no hay señal?', 'El técnico toma la asistencia igual. Queda guardada en el celular y se envía sola cuando vuelve la conexión.'],
     ];
@@ -69,10 +71,12 @@
                         <span class="block font-bold">Panel de tu organización</span>
                         <span class="block text-sm text-ink-muted">Para la dirección, la comisión y la secretaría.</span>
                     </a>
-                    <a href="{{ $app }}" class="block rounded-md px-3 py-2.5 hover:bg-brote">
-                        <span class="block font-bold">App de Tuku</span>
-                        <span class="block text-sm text-ink-muted">Para familias, técnicos y profesores.</span>
-                    </a>
+                    @if ($app)
+                        <a href="{{ $app }}" class="block rounded-md px-3 py-2.5 hover:bg-brote">
+                            <span class="block font-bold">App de Tuku</span>
+                            <span class="block text-sm text-ink-muted">Para familias, técnicos y profesores.</span>
+                        </a>
+                    @endif
                 </div>
             </details>
             <x-site.button :href="$register" size="sm" class="hidden sm:inline-flex">Creá tu cuenta</x-site.button>
@@ -164,9 +168,14 @@
                         </ul>
                     </div>
                     <div class="rounded-lg bg-surface-raised p-6 shadow-card">
-                        <p class="font-bold">¿Tu club o tu academia ya usa Tuku?</p>
-                        <p class="mt-1 text-ink-muted">Entrá con el celular o el correo que les diste.</p>
-                        <x-site.button :href="$app" variant="primary" icon="login" class="mt-4 w-full">Abrir la app</x-site.button>
+                        @if ($app)
+                            <p class="font-bold">¿Tu club o tu academia ya usa Tuku?</p>
+                            <p class="mt-1 text-ink-muted">Entrá con el celular o el correo que les diste.</p>
+                            <x-site.button :href="$app" variant="primary" icon="login" class="mt-4 w-full">Abrir la app</x-site.button>
+                        @else
+                            <p class="font-bold">La app para familias y profes está por salir</p>
+                            <p class="mt-1 text-ink-muted">Cuando tu club o tu academia la active, te llega una invitación por link o con un código QR.</p>
+                        @endif
                     </div>
                 </div>
             </div>
@@ -322,7 +331,12 @@
         <div class="border-t border-line">
             <div class="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-6 text-sm text-ink-muted sm:flex-row sm:justify-between sm:px-6">
                 <p>© {{ now()->year }} Tuku · tukuha.app</p>
-                <p><a href="{{ $panel }}" class="hover:text-ink">Panel</a> · <a href="{{ $app }}" class="hover:text-ink">App</a></p>
+                <p>
+                    <a href="{{ $panel }}" class="hover:text-ink">Panel</a>
+                    @if ($app)
+                        · <a href="{{ $app }}" class="hover:text-ink">App</a>
+                    @endif
+                </p>
             </div>
         </div>
     </footer>

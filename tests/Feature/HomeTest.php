@@ -27,6 +27,20 @@ it('el botón de WhatsApp aparece solo si hay número', function () {
     $this->get('/')->assertSee('https://wa.me/595981123456', escape: false);
 });
 
+it('los links a la app aparecen solo si la app web está publicada', function () {
+    config(['tuku.app_url' => null]);
+
+    $this->get('/')
+        ->assertDontSee('Abrir la app')
+        ->assertSee('La app para familias y profes está por salir');
+
+    config(['tuku.app_url' => 'https://app.tukuha.app']);
+
+    $this->get('/')
+        ->assertSee('Abrir la app')
+        ->assertSee('href="https://app.tukuha.app"', escape: false);
+});
+
 it('el healthcheck responde', function () {
     $this->get('/up')->assertOk();
 });

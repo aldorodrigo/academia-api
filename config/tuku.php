@@ -21,6 +21,10 @@ return [
 
     'email' => env('TUKU_EMAIL', 'hola@tukuha.app'),
 
+    // App web para familias y profes (la misma APP_FRONTEND_URL de los links de invitación).
+    // Sin valor, la landing no muestra los links a la app.
+    'app_url' => env('APP_FRONTEND_URL'),
+
     'social' => [
         'Instagram' => 'https://www.instagram.com/tukuha.app',
         'Facebook' => 'https://www.facebook.com/tukuha.app',
