@@ -93,7 +93,7 @@ class DiscountRuleResource extends Resource
                 ->required(),
             // Por defecto desde el inicio de la temporada: así cuenta también para la cuota del mes en curso.
             DatePicker::make('valid_from')->label('Vigente desde')
-                ->default(fn () => (Season::currentOrNull()?->starts_on ?? filament()->getTenant()->today()->startOfMonth())->toDateString())
+                ->default(fn () => (Season::defaultFor()?->starts_on ?? filament()->getTenant()->today()->startOfMonth())->toDateString())
                 ->helperText('Rige para las cuotas de ese mes en adelante. Las ya generadas no cambian.')
                 ->required(),
             DatePicker::make('valid_to')->label('Hasta')->afterOrEqual('valid_from'),

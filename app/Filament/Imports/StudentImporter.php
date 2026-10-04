@@ -33,6 +33,7 @@ class StudentImporter extends Importer
             ImportColumn::make('position')->label('Posición')->exampleHeader('posicion')->guess(['posicion', 'posición'])->example('Arquero'),
             ImportColumn::make('program')->label('Programa')->exampleHeader('programa')->guess(['programa', 'disciplina', 'deporte'])->example('Fútbol'),
             ImportColumn::make('group')->label('Grupo')->exampleHeader('grupo')->guess(['grupo', 'categoria', 'categoría'])->example('Sub-10'),
+            ImportColumn::make('season')->label('Temporada')->exampleHeader('temporada')->guess(['temporada'])->example(''),
             ImportColumn::make('status')->label('Estado')->exampleHeader('estado')->example('activo'),
             ...self::guardianColumns(1, ['Ana', 'Benítez', 'ana@example.com', '0981 123 456', 'madre']),
             ...self::guardianColumns(2, ['Luis', 'Benítez', '', '', 'padre']),
@@ -82,6 +83,7 @@ class StudentImporter extends Importer
                 'position' => $data['position'] ?? null,
                 'program' => $data['program'] ?? null,
                 'group' => $data['group'] ?? null,
+                'season' => isset($data['season']) ? (string) $data['season'] : null,
                 'status' => $data['status'] ?? null,
                 'guardians' => collect([1, 2])->map(fn (int $n) => [
                     'first_name' => $data["guardian{$n}_first_name"] ?? null,

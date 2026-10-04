@@ -5,6 +5,7 @@ namespace App\Filament\Platform\Resources\Organizations\Schemas;
 use App\Enums\Feature;
 use App\Enums\OrganizationType;
 use App\Models\Organization;
+use App\Support\Organizations\Slug;
 use DateTimeZone;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Select;
@@ -49,6 +50,8 @@ class OrganizationForm
                         ->alphaDash()
                         ->maxLength(60)
                         ->unique(Organization::class, 'slug', ignoreRecord: true)
+                        ->notIn(Slug::RESERVED)
+                        ->validationMessages(['not_in' => 'Ese identificador no se puede usar.'])
                         ->disabled(fn (?Organization $record) => $record !== null)
                         ->dehydrated(fn (?Organization $record) => $record === null),
                     Select::make('type')

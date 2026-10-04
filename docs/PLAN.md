@@ -2,6 +2,7 @@
 
 > Plan único. Reemplaza a `PLAN_JAKARE.md` (funcionalidades) y `PLAN_IMPLEMENTACION.md` (stack y hoja de ruta).
 > Las reglas ya implementadas viven en `business-logic.md`, que es el documento maestro: si difiere de este plan, manda `business-logic.md`.
+> Planes por funcionalidad: `PLAN_ACTIVIDADES.md` (actividades para tus hijos), `PLAN_PRIMEROS_PASOS.md` (alta autoservicio y guía del administrador).
 
 - **Nombre:** pendiente. Finalistas: Crecemy, Cantemy, Nidemy, Cluppy, Crecy, Retoño, Acompaño. Mientras tanto se usa el nombre en clave `academia`.
 - **Piloto:** Club Jakare (fútbol infantil, Paraguay). Moneda ₲, zona horaria `America/Asuncion`.
@@ -53,13 +54,16 @@ Cada organización es un inquilino, con datos, usuarios, finanzas y comunicacion
 
 ### 3.1 Plataforma SaaS
 - Alta de organización: nombre, tipo, logo, colores, moneda, país, zona horaria, vocabulario y módulos.
-- Invitación de usuarios por email, link o código QR. No hay registro abierto.
-- Onboarding con un asistente inicial: crear grupos, cuentas y cuota base.
+- Invitación de usuarios por email, link o código QR (para roles: comisión, técnicos, tutores de alumnos cargados por el club).
+- Alta autoservicio: el administrador crea su cuenta (con código por email) y su club; registro abierto también para
+  las familias que llegan por el link de inscripción *(sprints 5d y 5e)*.
+- Guía "Primeros pasos" que se abre sola, en el panel y en la app: disciplinas, categorías y horarios, temporada y
+  cuotas, profesores, link de inscripción. Detalle en `PLAN_PRIMEROS_PASOS.md`.
 - Planes de suscripción por cantidad de alumnos o por módulos *(Fase 4)*.
 
 ### 3.2 Organización e institucional
 - Datos de la organización, sedes y canchas (propias o alquiladas).
-- Temporadas (ej. 2026), con una sola temporada `actual`. Todo se agrupa por temporada.
+- Temporadas (ej. 2026, colonia de verano) de una o varias disciplinas, vigentes según sus fechas (puede haber varias a la vez), con su plan de cobro. Todo se agrupa por temporada.
 - Documentos: estatuto, reglamento interno y otros archivos.
 
 ### 3.3 Estructura académica
@@ -73,7 +77,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - **Familia:** agrupa alumnos y tutores. Un tutor puede tener varios hijos y un hijo varios tutores.
 - **Inscripción** = alumno + grupo + temporada. Un alumno puede tener varias, y cada una genera sus propios cargos.
   - Estados: `pendiente`, `activo`, `becado`, `suspendido`, `baja`.
-  - MVP: la carga la hace el club, también por importación Excel. *(Fase 2: solicitud online del padre → revisión → aprobación → cargo de inscripción.)*
+  - MVP: la carga la hace el club, también por importación Excel. *(Fase 2: solicitud online del padre desde las actividades publicadas → revisión → aprobación → cargo de inscripción; ver §3.13.)*
 - **Pase automático de grupo** al abrir una nueva temporada, cuando el criterio es el año de nacimiento.
 
 ### 3.4 Entrenamientos y asistencia *(Fase 2)*
@@ -139,6 +143,12 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Búsqueda global.
 - Datos de menores con acceso mínimo por rol.
 
+### 3.13 Actividades para tus hijos *(Fase 2 y Fase 4)*
+Detalle en `PLAN_ACTIVIDADES.md`.
+- Panel en la app del tutor con las actividades que sus hijos pueden hacer (filtradas por edad), cada una de una organización: días, sede, costo y cupo.
+- "Quiero inscribirlo" → solicitud → la organización aprueba en el panel → alumno, inscripción y cuotas con el circuito de siempre.
+- Primero dentro de las organizaciones del tutor (Fase 2); después, catálogo entre organizaciones del SaaS (Fase 4).
+
 ## 4. Reglas de negocio clave
 
 1. **Aislamiento total por organización** (`organization_id`). Nadie ve datos de otra organización.
@@ -147,7 +157,7 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 4. **Libro mayor inmutable:** un movimiento no se edita ni se borra; se anula con un contra-movimiento, con motivo y auditoría.
 5. **Saldo = suma de movimientos.** Nunca se edita a mano.
 6. **Tarifas:** un cambio no altera los cargos ya emitidos; rige desde su vigencia. Opcionalmente queda vinculada a la resolución que la aprobó.
-7. **Cuota mensual automática** para inscripciones `activo` (no para `becado` total ni `baja`). Es idempotente: lock en Redis + índice único (inscripción + concepto + período).
+7. **Cuota automática según el plan de la temporada** (mensual, quincenal, semanal o por día) para inscripciones `activo` (no para `becado` total ni `baja`), al empezar cada período o todas al inscribir. La baja anula las futuras sin pagar. Es idempotente: lock en Redis + índice único (inscripción + concepto + período).
 8. **Cargos:** todo cargo pertenece a un alumno y a su inscripción, y guarda el monto base, los ajustes y el monto final. Nunca queda negativo.
 9. **Descuentos:**
    - Tipos: hermanos, beca, convenio, pronto pago u otro; por porcentaje o monto fijo; con conceptos a los que aplica y vigencia.
@@ -191,6 +201,8 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 ### Entidades
 Organization, Membership, Season, Program, Group, Schedule, Session, Attendance, Student, Guardian, Family, MedicalRecord, Enrollment, Account, LedgerEntry, FeeConcept, Tariff, Charge, ChargeAdjustment, DiscountRule, Scholarship, LateFeePolicy, Payment, PaymentAllocation, PaymentProof, Expense, Supplier, Approval, Announcement, AnnouncementRead, DeviceToken, Invitation, BoardPosition (cargo con mandato).
 
+Actividades: Offering, EnrollmentRequest; en el catálogo, hijo a nivel usuario y perfil público de la organización.
+
 Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundraiser, RaffleBook, RaffleNumber, ApparelCampaign, ApparelOrder.
 
 ## 7. Hoja de ruta
@@ -207,16 +219,21 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 | **3. Finanzas** ✅ | Estado de cuenta por hijo y consolidado por familia (cargos con detalle de ajustes) | Tarifario, cuota mensual automática, descuentos, becas, vencimientos y configuración de mora, cargos manuales, endpoints de cuenta corriente |
 | **4a. Cobros** ✅ | Pagos y recibos PDF en el estado de cuenta, saldo a favor | Cuentas (caja, banco, billetera) y libro mayor, pagos con imputación, pronto pago, saldo a favor, anulación, recibo PDF |
 | **4b. Gastos e informes** ✅ | Informes para la comisión (balance, saldos, morosos; PDF/Excel) | Gastos (sueltos y recurrentes), proveedores, transferencias entre cuentas, informes (balance, saldos, morosos; PDF/Excel) |
-| **5. Avisos** | Avisos con lectura, push (firebase_messaging), registro del dispositivo | Avisos segmentados con lectura, push por lotes vía Horizon, recordatorios de cuotas, documentación OpenAPI |
+| **4c. Temporadas con plan de cobro** | "A pagar ahora" y "Próximas cuotas", temporada en cada cuota, temporadas próximas en la ficha | Temporadas por disciplina vigentes por fechas, asistente de temporada (duración, frecuencia, montos, cuándo se crean), generador diario, mitad de período, baja anula futuras, pase al crear |
+| **5. Avisos y asistencia** | Asistencia del técnico, "¿Lo llevás?" y aviso de días de clase para el tutor, push (firebase_messaging), registro del dispositivo; después avisos con lectura | Clases y asistencia, suspensión con push, aviso de días de clase, cobro por clase asistida, push por lotes vía Horizon; después avisos segmentados con lectura, recordatorios de cuotas, documentación OpenAPI |
+| **5d. Alta autoservicio y primeros pasos** ✅ | Crear cuenta y club, guía "Primeros pasos" (disciplinas, categorías y horarios, temporada, profesores), apertura automática | Registro con código, alta de club, checklist, plantillas, endpoints de configuración, guía en el panel (`PLAN_PRIMEROS_PASOS.md`) |
+| **5e. Inscripciones por link** | Página pública del club, solicitud con creación de cuenta, solicitudes para el admin | Actividades, link público con QR y afiche, solicitudes con aprobación (etapas A y B de `PLAN_ACTIVIDADES.md`) |
+| **5f. Opcionales de la guía** | Alumnos que ya tenés, comisión, cuentas | Progreso de la configuración en `/plataforma` |
 | **6. Publicación** | Pulido, builds: web + Android (interno) + iOS (TestFlight) | Ajustes de rendimiento y seguridad; backups verificados |
 | **7. Piloto Jakare** | Correcciones del uso real | Carga de datos reales, capacitación, invitación a padres |
 
 ### Fase 2 — Institucional y deportiva
 - Comisión: reuniones, actas y resoluciones (PDF, votación, publicación a grupos que notifica y genera cargos).
-- Asistencia desde la app del instructor y suspensión de prácticas con aviso.
+- ~~Asistencia desde la app del instructor y suspensión de prácticas con aviso~~ (adelantado al Sprint 5).
 - Eventos y torneos con confirmación de los padres.
-- Comprobante de pago subido por el padre + validación del tesorero.
-- Solicitud de inscripción online, calendario, encuestas y preferencias de notificación.
+- ~~Comprobante de pago subido por el padre + validación del tesorero~~ (hecho: «Comprobantes de transferencia», §10).
+- Actividades para tus hijos, etapas A y B (`PLAN_ACTIVIDADES.md`): actividades publicadas por la organización y solicitud de inscripción online.
+- Calendario, encuestas y preferencias de notificación.
 
 ### Fase 3 — Recaudación e informes
 - Rifas e indumentaria.
@@ -224,8 +241,9 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - Presupuesto.
 
 ### Fase 4 — SaaS comercial
-- Alta autoservicio, planes y suscripciones.
+- ~~Alta autoservicio~~ (adelantada al Sprint 5d), planes y suscripciones.
 - Marca por organización y landing.
+- Catálogo de actividades entre organizaciones (etapa C de `PLAN_ACTIVIDADES.md`).
 - Pagos online (Bancard vPOS/QR, Pagopar).
 - SIFEN, WhatsApp, conciliación bancaria y estadísticas.
 
@@ -251,6 +269,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - ✅ Dos repos.
 - ✅ Solo español.
 - ✅ Prioridad de la app en cada sprint, con contrato de API primero.
+- ✅ Alta autoservicio inmediata y guía del administrador en el panel y en la app; el link de inscripción crea una solicitud que el club aprueba y la familia crea su cuenta al inscribirse (03/10/2026).
 
 ### Pendientes
 - ⏳ Nombre del producto.
@@ -258,6 +277,8 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - ⏳ Datos de Jakare: cantidad de jugadores, categorías y técnicos.
 - ⏳ ¿Los técnicos cobran del club? Si es así, se agrega "pagos a técnicos" como gasto recurrente.
 - ⏳ ¿El alquiler de cancha es mensual fijo o por hora/uso?
+- ⏳ Actividades para tus hijos: ver las decisiones de `PLAN_ACTIVIDADES.md` §8.
+- ⏳ Primeros pasos: términos y política de datos, dominio para el link de inscripción (`PLAN_PRIMEROS_PASOS.md` §9).
 
 ## 10. Estado
 
@@ -379,4 +400,143 @@ Repos: `aldorodrigo/academia-api` y `aldorodrigo/academia-app`, rama `main`.
 - **Probado de punta a punta** con capturas (panel y app como tesorera y como tutor).
 - Encontrado al probar: los jugadores sin familia quedaban fuera de saldos y morosos; la app no mostraba "Otros movimientos" y el balance no cerraba a la vista.
 
-### Próximo: Sprint 5 — avisos y push
+### Sprint 4c — temporadas con plan de cobro
+- **Pedido del club:** menos pasos para cobrar una temporada; temporadas de disciplinas distintas y colonias al mismo tiempo; cuotas quincenales, semanales o por día.
+- **Contrato:** `season` con fechas y disciplinas en las inscripciones (vigentes o próximas); en cada cargo `season`, `period_start/end`, `quantity × unit_amount`, `is_upcoming`; `due_now` y `upcoming` en la cuenta; `upcoming` en saldos.
+- **App:** "A pagar ahora" separado de "Próximas cuotas" (plegadas), cuota con temporada y "5 × ₲ 20.000", ficha con fechas de la temporada y "Empieza el …".
+- **API y panel:**
+  - Temporada vigente por fechas (sin "actual"), con disciplinas; varias a la vez.
+  - Asistente "Nueva temporada": temporada (copiar otra con % de aumento, disciplinas, duración, fechas y nombre sugeridos) → cuotas (frecuencia, por día: base y agrupación, montos generales y por categoría, vencimiento con ejemplo) → cuándo se crean (al empezar cada período / todas al inscribir) → revisar (resumen en palabras y primeras cuotas). Al crear, "Pasar jugadores".
+  - Permisos: sin "crear tarifas" no se ven los pasos de cobro (la temporada queda "Sin plan de cobro" y se completa con "Configurar cobro"); "todas al inscribir" pide permiso de cuotas.
+  - Generador diario (`charges:generate`), "Generar cuotas" por temporada (hasta hoy / toda), mitad de período en la inscripción con el efecto en vivo, baja o suspensión anula futuras, "Volver a emitirla" al anular, aviso al aprobar una beca con cuotas ya emitidas, pase en segundo plano con aviso.
+
+### Sprint 5a — asistencia, "¿Lo llevás?" y push
+- **Pedido:** que al técnico le cueste lo menos posible tomar asistencia y que el tutor reciba "hoy hay clase, ¿lo llevás?".
+- **Decisiones del usuario:** junto con el push del Sprint 5; la lista arranca con todos presentes; "No va" del tutor =
+  justificado; el aviso es opt-in (se pregunta una vez por hijo) y sale N horas antes (el club lo configura, 3 por defecto).
+- **Contrato:** sección Sprint 5 de `API_V1.md` (clases, asistencia, suspensión, grupos, agenda, respuesta, asistencia
+  del alumno, aviso de días de clase, dispositivos, permiso `take_attendance`).
+- **App:** tarjeta "Hoy" del técnico, planilla (un toque = ausente, ⋮ = justificar con motivo, guardado único con
+  reintento, suspender), mis grupos con % por alumno; para el tutor, "Próxima clase" con "¿Lo llevás?" y la pregunta
+  del aviso, asistencia del mes e interruptor en la ficha; push con firebase_messaging por `--dart-define` (sin push en web).
+- **API y panel:**
+  - Clases creadas a partir de los horarios al consultarlas (solo dentro de temporadas vigentes), asistencia por
+    alumno con la respuesta del tutor; el técnico corrige hasta 3 días después, el panel siempre.
+  - Suspensión con push a los tutores del grupo; `classes:remind` cada 15 minutos (de noche se adelanta a las 20:00
+    del día anterior; uno por clase; no si ya respondió).
+  - Canal `push` propio (FCM con kreait si hay `FIREBASE_CREDENTIALS`; si no, al log) que borra tokens inválidos.
+  - Cobro por clase asistida: la cuota se crea al cerrar el período + 3 días, con la cantidad de presentes.
+  - Panel: "Clases y asistencia" en cada grupo (tomar/corregir, suspender), "Asistencia" en la ficha del jugador,
+    "Aviso de día de clase" en Configuración, permiso "Tomar asistencia en cualquier grupo".
+- **Pendiente para publicar:** proyecto de Firebase (app Android/iOS, credenciales del servidor y los `--dart-define`).
+- **Pasó al Sprint 5a+:** descontar clases suspendidas del cobro por día de entrenamiento, modo sin conexión con cola,
+  botones de respuesta dentro de la notificación.
+
+### Sprint 5a+ — clases suspendidas, reprogramación, sin conexión, respuesta desde la notificación y avisos configurables ✅
+Plan aprobado e implementado el 2026-09-27 (contrato en `API_V1.md` "Sprint 5a+"). Probado de punta a punta con Sail +
+web (reprogramar como técnico, recuperación en la agenda del tutor, avisos configurables, asistencia sin conexión que
+se envía al volver la señal, link firmado del push). Notas:
+- Un cargo emitido nunca se modifica (2026-10-03, se quitó la excepción `Charge::withSuspendedClassAdjustment`): la
+  cuota impaga se anula y se reemite sin el día; la ya pagada deja un descuento pendiente (`charge_waivers`) que entra
+  como ajuste al emitir (o reemitir, si está impaga) la próxima cuota del alumno. Si no hay más cuotas queda pendiente
+  (no se genera saldo a favor, para no crear movimientos de dinero). Nuevo cobro **por clase dictada**: la cuota sale
+  al cerrar el período con las clases que se dieron. En el panel, cada cargo tiene "Historial" (emisión, pagos,
+  anulación con motivo y quién, y la cuota que la reemplazó).
+- Los links firmados usan `APP_URL`: en producción tiene que ser la URL pública de la API.
+- Los botones del push en Android/iOS y el APNs quedan por probar en un dispositivo cuando exista el proyecto Firebase.
+
+1. **Clases suspendidas sin cobrar** (solo temporadas *por día de entrenamiento*): al suspender, casilla "No cobrar
+   esta clase" (marcada por defecto). Cuota no emitida → cuenta un día menos (`SeasonPeriods`). Cuota emitida e impaga →
+   ajuste `clase_suspendida` en esa cuota; ya pagada (aunque sea en parte) → ajuste en la próxima cuota de la
+   inscripción (pendiente hasta que se emita; si no hay más, saldo a favor). Nunca se rehace lo emitido. Volver a
+   programar la clase quita el ajuste si la cuota sigue impaga.
+2. **Reprogramar o cancelar** (cualquier temporada; en cuota mensual/quincenal/semanal fija **nunca se descuenta**):
+   al suspender se elige "Cancelar la clase" o "Reprogramar" (fecha, horas, cancha); también "Cambiar día u horario".
+   La recuperación es una clase más (Hoy, agenda, avisos, asistencia); la original queda "Reprogramada". Push a todos
+   los tutores del grupo. En por día de entrenamiento, reprogramar no descuenta. Se puede cancelar la reprogramación.
+   API: `POST/DELETE classes/{id}/reschedule`, `GET venues`, estado `reprogramada`, `rescheduled_to/from`, `is_makeup`.
+3. **Asistencia del técnico sin conexión** (solo eso; suspender/reprogramar requiere conexión): caché de las clases
+   de hoy y sus listas, cola por clase (`shared_preferences` + `connectivity_plus`), envío automático al volver la
+   señal, "Enviar ahora" y rechazos visibles.
+4. **Responder desde la notificación**: [Sí, va] [No va] en el push del tutor (Android: data + `flutter_local_notifications`;
+   iOS: categoría `CLASS_REMINDER`), con links firmados que vencen al empezar la clase (sin token).
+5. **Aviso al técnico y avisos configurables**: push "Hoy tenés clase con Sub-10 a las 17:00 · 15 van, 2 no van" con
+   "Tomar asistencia" (activado por defecto, 2 h antes). Cada técnico y tutor elige hasta 3 avisos por clase
+   (día anterior 20:00, 6/3/2/1 h, 30 min) en `/notificaciones`; los siguientes al primero del tutor solo si no
+   respondió; regla nocturna 22–7 → 20:00 del día anterior. API: `GET/PUT me/notification-settings`,
+   `notification_settings` y `class_reminder_logs` (reemplaza `attendances.reminded_at`).
+
+### Sprint 5c — clases particulares: reservas, clase suelta y paquetes ✅
+Plan aprobado e implementado el 2026-10-03 (contrato en `API_V1.md` "Sprint 5c"). Módulo `private_lessons` por
+organización (sirve para un profesor solo o una academia con varios). Decisiones: la reserva se confirma sola dentro
+de la disponibilidad que cargó el profesor; la ausencia no se cobra ni descuenta; los paquetes vencen (15/30/60 días,
+personalizado o sin vencimiento, contado desde que se pagan) y el profesor los puede extender; reservan alumnos
+adultos y tutores.
+- **Reserva** (`bookings`, modelo propio, no `ClassSession`): `slot_key` única evita la doble reserva. Cancelar
+  (alumno o profesor) hasta que empieza, sin costo, con aviso a la otra parte. "Cambiar" = cancelar y reservar.
+- **Clase suelta**: el cargo "Clase particular" se emite al marcar **Vino** (nunca hay que corregir un cargo). El
+  cobro antes de la clase queda como saldo a favor y se aplica solo. Corregir a "No vino" anula el cargo si no tiene
+  pagos; si ya tiene, se anula el pago desde el panel.
+- **Paquete** (`class_packs`, cantidad de clases, no plata): cargo "Paquete 4 clases" pendiente; se activa cuando
+  queda pagado (hook en `RegisterPayment` y `ApplyCredit` → `ActivatePaidPacks`). Al reservar se usa si tiene clases
+  libres y la fecha es hasta el vencimiento; si no, es suelta. `packs:expire` (08:00) vence y avisa 7 y 1 días antes.
+- **Cobro desde la app** (`POST teacher/payments`): entra en la cuenta del perfil del profesor (o la primera activa).
+- **Avisos**: reserva y cancelación al profesor; recordatorio al alumno o tutor con sus momentos de tutor; resumen del
+  día al profesor con sus momentos de técnico (`classes:remind`, `lesson_reminder_logs`); "te queda 1 clase" y
+  "vence pronto".
+- **Panel**: grupo "Clases particulares" (reservas con cancelar, paquetes con extender, profesores con precios,
+  paquetes y disponibilidad), solo con el módulo activo.
+- Pendiente: anular un pago no desactiva un paquete ya activado; lista de espera; pago online.
+
+### Sprint 5d — alta autoservicio y guía "Primeros pasos" ✅
+Plan aprobado e implementado el 03/10/2026 (`PLAN_PRIMEROS_PASOS.md`, etapa 1; contrato en `API_V1.md` "Sprint 5d").
+**Decisiones del usuario:** guía completa en el panel y en la app; alta autoservicio inmediata con verificación
+(código por WhatsApp o correo); el link de inscripción (5e) crea una solicitud que el club aprueba y la familia crea su cuenta al inscribirse.
+- **Cuenta:** registro abierto (`POST auth/register`, términos con versión) con celular o correo, código de 6 dígitos
+  por WhatsApp o correo (15 min, 5 intentos). Panel: `/admin/register` → código → `/admin/new`.
+- **"Tu club":** nombre, tipo (club, academia, escuela, comisión de padres) y vocabulario sugerido por tipo; slug
+  sugerido y libre (palabras reservadas). El creador queda admin; módulos siguen siendo de la plataforma.
+- **Guía:** checklist calculado desde los datos (disciplinas → categorías con horario → temporada → técnicos,
+  omitible), plantillas compartidas (disciplinas con criterio, categorías por edad alineadas con la más grande o
+  por nivel). App: un paso por pantalla, se abre sola una vez por sesión, tarjeta en el inicio, "¡Todo listo!".
+  Panel: página "Primeros pasos" con paneles laterales; el Escritorio lleva ahí; la temporada usa el asistente de
+  siempre (`?guia=1` vuelve a la guía).
+- **Técnicos:** invitación con nombre y categorías (asignadas al aceptar), "Yo también doy clases", reenviar y
+  borrar; link para WhatsApp (también en el modal de invitación del panel).
+- **Probado de punta a punta** (web :5050 + panel :8080, Playwright): cuenta → código desde Mailpit → club →
+  4 pasos → "¡Todo listo!" → inicio con "Hoy" e "Informes"; y lo mismo en el panel.
+- Encontrado al probar: "¡Listo!" no aparecía si la guía se completaba antes de tocar "Seguir" (se compara con el
+  estado al entrar al paso); concordancia "¿Alguna grupo…?" (ahora "¿Hay grupos que pagan distinto?", también en el
+  panel); la primera temporada de la guía se sugiere para todas las disciplinas; el super admin que entra a dar
+  soporte no cae en la guía.
+- **Cuenta con el celular (WhatsApp)** (pedido del 03/10/2026, dentro del 5d): la cuenta se crea y se verifica con
+  el número de WhatsApp; el correo es el camino alternativo (para quien no tiene WhatsApp). Se entra con el celular o
+  el correo y la contraseña (app y panel); el código solo al crear la cuenta y en "Olvidé mi contraseña" (nuevo, app y
+  panel). La WhatsApp Cloud API de Meta se usa **solo para códigos** (plantilla de autenticación, ~USD 0,0113 c/u en
+  Paraguay; ~USD 2,50 por club al darlo de alta y ~USD 1 por año); los avisos siguen por push. Invitaciones a un
+  correo o a un celular (link `wa.me` al número). Protección contra bots y abuso (`CodeGuard`): Turnstile, campo
+  trampa, países permitidos, límites por número/IP/cuenta, cuentas sin verificar que no ocupan el número, tope diario
+  y corte automático por % verificado con aviso al super admin y widget en el panel de plataforma. Tareas del
+  usuario: Meta Business verificado, número dedicado, plantilla aprobada, token permanente y tarjeta virtual de
+  límite bajo; cuenta de Cloudflare para Turnstile.
+- Pendiente: texto de términos y política de datos; cambiar o agregar celular/correo desde "Mi cuenta"; etapa 2
+  (5e, link de inscripción) y etapa 3 (5f).
+
+### Comprobantes de transferencia ✅
+- **Pedido (2026-10-03):** que funcionen de punta a punta tres casos de uso: el administrador gestiona las cuotas
+  (panel), el técnico la asistencia (Sprint 5) y el tutor recibe avisos de horario, marca asistencia ("¿Lo llevás?") y
+  **registra el pago de la cuota por transferencia adjuntando el comprobante**. Lo único que faltaba era esto último.
+- **Contrato:** sección «Comprobantes de transferencia» de `API_V1.md`.
+- **App:** "Informar transferencia" en el estado de cuenta (datos para transferir con botón copiar, cuotas elegidas
+  de la más vieja a la más nueva con el monto sugerido, fecha, cuenta, N° de operación y foto o PDF hasta 5 MB);
+  comprobantes en revisión o rechazados arriba de los pagos (ver, retirar). Quien valida (`review_payment_reports`)
+  tiene tarjeta en el inicio y `/comprobantes` (aprobar con cuenta, fecha y monto; rechazar con motivo).
+- **API y panel:** `payment_reports` (archivo en disco privado, link firmado de 30 min). Aprobar registra el pago por
+  transferencia con recibo, imputado a las cuotas elegidas que sigan pendientes (lo que sobra, saldo a favor);
+  rechazar guarda el motivo. Push a quienes validan y al tutor. Validan el tesorero y el protesorero por su cargo, el
+  admin y quien tenga el permiso "Validar comprobantes de pago". Panel: Finanzas → Comprobantes (con contador) y
+  "Datos para transferir" en las cuentas bancarias y billeteras.
+- Probado de punta a punta en la web (tutor informa, tesorera aprueba desde la app, recibo en el estado de cuenta;
+  técnico toma asistencia; admin ve cargos y rechaza desde el panel).
+
+### Después: Sprint 5b — avisos segmentados con lectura

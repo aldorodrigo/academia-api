@@ -7,7 +7,6 @@ use App\Enums\OrganizationRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\AcceptInvitationRequest;
 use App\Models\Invitation;
-use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 
@@ -28,11 +27,13 @@ class InvitationController extends Controller
             'data' => [
                 'organization' => ['slug' => $organization->slug, 'name' => $organization->name],
                 'email' => $invitation->email,
+                'phone' => $invitation->phone,
+                'name' => $invitation->name,
                 'roles' => collect($invitation->roles)->map(fn (array $role) => [
                     'name' => $role['role'],
                     'label' => OrganizationRole::labelFor($role['role'], $organization),
                 ])->values(),
-                'user_exists' => User::query()->where('email', $invitation->email)->exists(),
+                'user_exists' => $invitation->existingUser() !== null,
                 'expires_at' => $invitation->expires_at->toIso8601ZuluString(),
             ],
         ]);

@@ -37,7 +37,7 @@ beforeEach(function () {
     $this->admin = memberOf($this->jakare);
     app(RoleAssigner::class)->assign($this->jakare, $this->admin, OrganizationRole::Admin);
 
-    Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true]);
+    Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31']);
     $this->program = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
 });
 
@@ -155,7 +155,7 @@ it('las páginas del módulo académico cargan', function (string $path) {
         ->assertOk();
 })->with([
     'grupos', 'grupos/create', 'grupos/{group}/edit', 'alumnos', 'alumnos/create',
-    'alumnos/{student}/edit', 'tutores', 'inscripciones', 'seasons',
+    'alumnos/{student}/edit', 'tutores', 'inscripciones', 'temporadas',
 ]);
 
 it('los relation managers del alumno muestran inscripciones y tutores', function () {
@@ -172,10 +172,29 @@ it('los relation managers del alumno muestran inscripciones y tutores', function
     Livewire::test(GuardiansRelationManager::class, ['ownerRecord' => $student, 'pageClass' => EditStudent::class])
         ->assertOk()
         ->assertSee('Madre')
-        ->callTableAction('invite', $guardian);
+        ->callTableAction('invite', $guardian)
+        ->assertActionMounted('showLink');
 
     Mail::assertQueued(InvitationMail::class, fn ($mail) => $mail->hasTo('ana@test.com'));
     expect($guardian->invitations()->sole()->guardian_id)->toBe($guardian->id);
+});
+
+it('un tutor con solo celular se invita por WhatsApp desde la ficha', function () {
+    inPanel($this->admin, $this->jakare);
+    $student = Student::factory()->for($this->jakare)->create();
+    $guardian = Guardian::factory()->for($this->jakare)->create(['first_name' => 'Ana', 'email' => null, 'phone' => '0981 123 456']);
+    $student->guardians()->attach($guardian, ['relationship' => 'madre']);
+
+    Livewire::test(GuardiansRelationManager::class, ['ownerRecord' => $student, 'pageClass' => EditStudent::class])
+        ->callTableAction('invite', $guardian)
+        ->assertActionMounted('showLink')
+        ->assertSet('mountedActions.0.arguments.phone', '+595981123456')
+        ->assertSet('mountedActions.0.arguments.email', null);
+
+    Mail::assertNothingQueued();
+    expect($guardian->invitations()->sole())
+        ->phone->toBe('+595981123456')
+        ->guardian_id->toBe($guardian->id);
 });
 
 it('se inscribe solo desde la ficha del jugador y no permite duplicados', function () {
@@ -190,7 +209,7 @@ it('se inscribe solo desde la ficha del jugador y no permite duplicados', functi
 
     $enrollment = Enrollment::query()->sole();
     expect($enrollment->student_id)->toBe($student->id)
-        ->and($enrollment->season_id)->toBe(Season::currentOrNull()->id)
+        ->and($enrollment->season_id)->toBe(Season::query()->orderBy('starts_on')->first()->id)
         ->and($enrollment->status)->toBe(EnrollmentStatus::Active);
 
     $manager()
@@ -220,30 +239,32 @@ it('los menús de familias, sedes y disciplinas ya no existen', function (string
     $this->actingAs($this->admin)->get("/admin/jakare/{$path}")->assertNotFound();
 })->with(['familias', 'sedes', 'programas']);
 
-it('nuevo jugador: datos, categoría sugerida, tutores e invitación en un paso', function () {
+it('nuevo jugador: datos, categoría sugerida y tutores en un paso (la invitación va desde la ficha)', function () {
     inPanel($this->admin, $this->jakare);
     $sub10 = Group::factory()->for($this->program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id, 'min_age' => 9, 'max_age' => 10]);
     Group::factory()->for($this->program)->create(['name' => 'Sub-12', 'organization_id' => $this->jakare->id, 'min_age' => 11, 'max_age' => 12]);
-    $year = Season::currentOrNull()->starts_on->year;
+    $year = Season::query()->orderBy('starts_on')->first()->starts_on->year;
 
     $page = Livewire::test(CreateStudent::class)
         ->fillForm(['first_name' => 'Mateo', 'last_name' => 'Benítez', 'document' => '6123456'])
         ->set('data.birth_date', ($year - 10).'-03-14')
-        ->assertSchemaStateSet(['group_id' => $sub10->id, 'season_id' => Season::currentOrNull()->id, 'status' => 'activo']);
+        ->assertSchemaStateSet(['group_id' => $sub10->id, 'season_id' => Season::query()->orderBy('starts_on')->first()->id, 'status' => 'activo']);
 
     $guardians = array_keys($page->get('data.guardians'));
     $page->set("data.guardians.{$guardians[0]}", [
-        'email' => 'ana@test.com', 'first_name' => 'Ana', 'last_name' => 'Benítez', 'relationship' => 'madre', 'phone' => null, 'invite' => true,
+        'phone' => '0981 123 456', 'email' => 'ana@test.com', 'first_name' => 'Ana', 'last_name' => 'Benítez', 'relationship' => 'madre',
     ])
+        ->assertDontSee('Enviar invitación a la app')
         ->call('create')
         ->assertHasNoFormErrors()
-        ->assertNotified('Jugador inscripto. Invitaciones enviadas: 1.');
+        ->assertNotified('Jugador inscripto.');
 
     $student = Student::query()->where('document', '6123456')->sole();
     expect($student->currentEnrollments()->sole()->group_id)->toBe($sub10->id)
         ->and($student->guardians()->sole()->email)->toBe('ana@test.com')
+        ->and($student->guardians()->sole()->phone)->toBe('+595981123456')
         ->and($student->family_id)->not->toBeNull();
-    Mail::assertQueued(InvitationMail::class, fn ($mail) => $mail->hasTo('ana@test.com'));
+    Mail::assertNothingQueued();
 });
 
 it('un menor sin tutores no se puede crear', function () {
@@ -288,6 +309,19 @@ it('un correo de tutor ya cargado completa sus datos', function () {
         ->assertSet("data.guardians.{$item}.first_name", 'Ana')
         ->assertSet("data.guardians.{$item}.last_name", 'Benítez')
         ->assertSet("data.guardians.{$item}.phone", $guardian->phone);
+});
+
+it('un celular de tutor ya cargado completa sus datos', function () {
+    inPanel($this->admin, $this->jakare);
+    Guardian::factory()->for($this->jakare)->create(['first_name' => 'Ana', 'last_name' => 'Benítez', 'email' => 'ana@test.com', 'phone' => '0981 123 456']);
+
+    $page = Livewire::test(CreateStudent::class);
+    $item = array_key_first($page->get('data.guardians'));
+
+    $page->set("data.guardians.{$item}.phone", '0981123456')
+        ->assertSet("data.guardians.{$item}.first_name", 'Ana')
+        ->assertSet("data.guardians.{$item}.email", 'ana@test.com')
+        ->assertSee('Ya está cargado.');
 });
 
 it('con una sola disciplina no se pregunta en el formulario de categoría', function () {

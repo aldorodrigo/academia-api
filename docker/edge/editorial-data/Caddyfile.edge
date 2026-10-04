@@ -1,0 +1,45 @@
+{
+	admin off
+
+	# Detrás del proxy de entrada (/srv/edge): se conserva la IP del cliente y el esquema.
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers X-Forwarded-For
+	}
+}
+
+http://editorialdata.org, http://www.editorialdata.org {
+	@www host www.editorialdata.org
+	redir @www https://editorialdata.org{uri} permanent
+
+	root * /var/www/html/public
+	encode zstd gzip
+
+	@hidden {
+		path */.*
+		not path /.well-known/*
+	}
+	respond @hidden 404
+
+	php_fastcgi app:9000 {
+		capture_stderr
+	}
+	file_server
+
+	@immutable path /build/*
+	header @immutable Cache-Control "public, max-age=31536000, immutable"
+
+	header {
+		-Server
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "SAMEORIGIN"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+	}
+
+	log {
+		output stdout
+		format json
+	}
+}

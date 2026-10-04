@@ -12,13 +12,13 @@ use Illuminate\Console\Attributes\Signature;
 use Illuminate\Console\Command;
 
 #[Signature('organizations:sync-roles')]
-#[Description('Crea los roles base, los conceptos de cobro, la caja y las categorías de gasto que falten en cada organización')]
+#[Description('Crea los roles base (con permisos por defecto en los que no tienen ninguno), los conceptos de cobro, la caja y las categorías de gasto que falten en cada organización')]
 class SyncOrganizationRoles extends Command
 {
     public function handle(EnsureOrganizationRoles $ensureRoles, EnsureFeeConcepts $ensureConcepts, EnsureMoneyAccounts $ensureAccounts, EnsureExpenseCategories $ensureCategories): int
     {
         Organization::query()->each(function (Organization $organization) use ($ensureRoles, $ensureConcepts, $ensureAccounts, $ensureCategories) {
-            $ensureRoles->handle($organization);
+            $ensureRoles->handle($organization, fillEmpty: true);
             $ensureConcepts->handle($organization);
             $ensureAccounts->handle($organization);
             $ensureCategories->handle($organization);

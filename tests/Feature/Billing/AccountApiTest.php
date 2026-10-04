@@ -1,6 +1,5 @@
 <?php
 
-use App\Actions\Billing\GenerateMonthlyCharges;
 use App\Actions\Billing\RegisterPayment;
 use App\Actions\Billing\VoidCharge;
 use App\Enums\PaymentMethod;
@@ -28,7 +27,7 @@ beforeEach(function () {
     $this->ajena = Organization::factory()->create(['slug' => 'ajena']);
     app(CurrentOrganization::class)->set($this->jakare);
 
-    $season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30', 'is_current' => true]);
+    $season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30']);
     $futbol = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $sub10 = Group::factory()->for($futbol)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id]);
     $sub8 = Group::factory()->for($futbol)->create(['name' => 'Sub-8', 'organization_id' => $this->jakare->id]);
@@ -46,9 +45,8 @@ beforeEach(function () {
     $sofiaEnrollment = Enrollment::factory()->create(['student_id' => $this->sofia->id, 'group_id' => $sub8->id, 'season_id' => $season->id]);
     Scholarship::factory()->approved()->create(['enrollment_id' => $sofiaEnrollment->id, 'percent' => 50]);
 
-    $generate = app(GenerateMonthlyCharges::class);
-    $generate->handle($this->jakare, CarbonImmutable::parse('2026-08-01'));
-    $generate->handle($this->jakare, CarbonImmutable::parse('2026-09-01'));
+    issueMonth($this->jakare, '2026-08');
+    issueMonth($this->jakare, '2026-09');
 });
 
 function accountApi(User $user, string $uri, string $organization = 'jakare')
@@ -69,7 +67,7 @@ it('consolidado de la familia con saldos, vencidos y detalle de cada cargo', fun
         ->assertJsonPath('data.charges.0.due_on', '2026-09-10')
         ->assertJsonPath('data.charges.0.status', 'pendiente')
         ->assertJsonPath('data.charges.0.period', '2026-09')
-        ->assertJsonPath('data.charges.0.concept', 'Cuota mensual')
+        ->assertJsonPath('data.charges.0.concept', 'Cuota')
         ->assertJsonPath('data.charges.3.status', 'vencido')
         ->assertJsonPath('data.charges.3.status_label', 'Vencido');
 

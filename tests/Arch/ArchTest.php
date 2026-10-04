@@ -1,8 +1,10 @@
 <?php
 
 use App\Models\Concerns\BelongsToOrganization;
+use App\Models\DeviceToken;
 use App\Models\Membership;
 use App\Models\Organization;
+use App\Models\PlatformSetting;
 use App\Models\Role;
 use App\Models\User;
 
@@ -16,6 +18,9 @@ arch('los modelos de dominio pertenecen a una organización')
         Organization::class,
         Membership::class,
         User::class,
+        PlatformSetting::class,
+        // Dispositivos para push: son del usuario, no de una organización.
+        DeviceToken::class,
         // spatie/permission filtra por equipo (organization_id).
         Role::class,
         'App\Models\Concerns',

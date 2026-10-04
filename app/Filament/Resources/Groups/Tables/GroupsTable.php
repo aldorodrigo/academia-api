@@ -24,7 +24,7 @@ class GroupsTable
                 ->with(['program', 'schedules', 'instructors'])
                 ->withCount(['enrollments as students_count' => fn (Builder $enrollments) => $enrollments
                     ->where('status', '!=', EnrollmentStatus::Withdrawn)
-                    ->whereHas('season', fn (Builder $season) => $season->where('is_current', true))]))
+                    ->whereHas('season', fn (Builder $season) => $season->active())]))
             ->columns([
                 TextColumn::make('program.name')->label(Terms::label('program', 'Disciplina'))->sortable()
                     ->visible(fn () => GroupForm::onlyProgram() === null),

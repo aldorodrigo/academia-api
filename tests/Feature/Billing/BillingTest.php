@@ -1,7 +1,7 @@
 <?php
 
 use App\Actions\Billing\CreateManualCharges;
-use App\Actions\Billing\GenerateMonthlyCharges;
+use App\Actions\Billing\GenerateSeasonCharges;
 use App\Actions\Billing\ScholarshipDecision;
 use App\Actions\Billing\VoidCharge;
 use App\Enums\DiscountType;
@@ -34,7 +34,7 @@ beforeEach(function () {
     $this->jakare = Organization::factory()->create(['slug' => 'jakare']);
     app(CurrentOrganization::class)->set($this->jakare);
 
-    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30', 'is_current' => true]);
+    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30']);
     $futbol = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $this->sub10 = Group::factory()->for($futbol)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id]);
     $this->sub8 = Group::factory()->for($futbol)->create(['name' => 'Sub-8', 'organization_id' => $this->jakare->id]);
@@ -44,13 +44,14 @@ beforeEach(function () {
     $family = Family::factory()->for($this->jakare)->create();
     $this->mateo = Student::factory()->for($this->jakare)->create(['first_name' => 'Mateo', 'birth_date' => '2016-03-14', 'family_id' => $family->id]);
     $this->sofia = Student::factory()->for($this->jakare)->create(['first_name' => 'Sofía', 'birth_date' => '2018-07-02', 'family_id' => $family->id]);
-    $this->enrollMateo = Enrollment::factory()->create(['student_id' => $this->mateo->id, 'group_id' => $this->sub10->id, 'season_id' => $this->season->id]);
-    $this->enrollSofia = Enrollment::factory()->create(['student_id' => $this->sofia->id, 'group_id' => $this->sub8->id, 'season_id' => $this->season->id]);
+    // Inscriptos el 1 de septiembre: el generador emite desde ese mes.
+    $this->enrollMateo = Enrollment::factory()->create(['student_id' => $this->mateo->id, 'group_id' => $this->sub10->id, 'season_id' => $this->season->id, 'enrolled_on' => '2026-09-01']);
+    $this->enrollSofia = Enrollment::factory()->create(['student_id' => $this->sofia->id, 'group_id' => $this->sub8->id, 'season_id' => $this->season->id, 'enrolled_on' => '2026-09-01']);
 });
 
 function generate(string $period = '2026-09', bool $dryRun = false): array
 {
-    return app(GenerateMonthlyCharges::class)->handle(test()->jakare, CarbonImmutable::parse("{$period}-01"), $dryRun);
+    return issueMonth(test()->jakare, $period, $dryRun);
 }
 
 function siblingsRule(int $position = 2, int $percent = 20): DiscountRule
@@ -94,11 +95,12 @@ describe('cuota mensual automática', function () {
     it('es idempotente y respeta el lock', function () {
         generate('2026-09');
         expect(generate('2026-09'))->toMatchArray(['created' => 0, 'existing' => 2])
+            ->and(app(GenerateSeasonCharges::class)->handle($this->jakare))->toMatchArray(['created' => 0, 'existing' => 2])
             ->and(Charge::query()->count())->toBe(2);
 
-        $lock = Cache::lock("charges:{$this->jakare->id}:2026-10", 60);
+        $lock = Cache::lock("charges:{$this->jakare->id}:2026-09-15", 60);
         $lock->get();
-        expect(fn () => generate('2026-10'))->toThrow(RuntimeException::class, 'Ya se están generando');
+        expect(fn () => app(GenerateSeasonCharges::class)->handle($this->jakare))->toThrow(RuntimeException::class, 'Ya se están generando');
         $lock->release();
     });
 
@@ -112,11 +114,12 @@ describe('cuota mensual automática', function () {
         Tariff::factory()->create(['fee_concept_id' => $this->monthly->id, 'season_id' => $this->season->id, 'group_id' => $this->sub10->id, 'amount' => 1, 'valid_from' => '2026-02-01']);
         Enrollment::factory()->create(['student_id' => Student::factory()->for($this->jakare)->create()->id, 'group_id' => $sub12->id, 'season_id' => $this->season->id]);
 
-        expect(generate('2026-09'))->toMatchArray(['created' => 0, 'full_scholarship' => 1, 'without_tariff' => ['Sub-12']]);
+        expect(generate('2026-09'))->toMatchArray(['created' => 0, 'full_scholarship' => 1, 'without_tariff' => true])
+            ->and(app(GenerateSeasonCharges::class)->handle($this->jakare, dryRun: true)['without_tariff'])->toBe(['Sub-12']);
     });
 
     it('fuera de la temporada no genera', function () {
-        expect(generate('2026-12'))->toMatchArray(['created' => 0, 'out_of_season' => true]);
+        expect(generate('2026-12'))->toMatchArray(['created' => 0]);
     });
 
     it('la vista previa no crea nada', function () {
@@ -124,12 +127,13 @@ describe('cuota mensual automática', function () {
             ->and(Charge::query()->count())->toBe(0);
     });
 
-    it('vence el último día en meses cortos', function () {
-        $this->jakare->update(['billing' => ['due_day' => 31]]);
-
+    it('vence los días del plan después de empezar el período', function () {
         generate('2026-02');
+        $this->season->update(['due_days' => 4]);
+        generate('2026-03');
 
-        expect(Charge::query()->first()->due_on->toDateString())->toBe('2026-02-28');
+        expect(Charge::query()->orderBy('due_on')->pluck('due_on')->map->toDateString()->unique()->values()->all())
+            ->toBe(['2026-02-10', '2026-03-05']);
     });
 });
 
@@ -192,8 +196,10 @@ describe('descuentos y becas', function () {
         app(RoleAssigner::class)->assign($this->jakare, $treasurer, OrganizationRole::Treasurer, endsOn: now()->addYear());
         $scholarship = $decision->request($this->enrollSofia, 50, 'Situación económica', now(), null, $treasurer);
 
-        // Sin el permiso no puede aprobar.
-        expect(fn () => $decision->approve($scholarship, $treasurer))->toThrow(AuthorizationException::class);
+        // Sin el permiso (el tesorero lo trae por defecto; el administrador se lo puede quitar) no puede aprobar.
+        $role = Role::query()->where('organization_id', $this->jakare->id)->where('name', 'tesorero')->sole();
+        $role->revokePermissionTo('Approve:Scholarship');
+        expect(fn () => $decision->approve($scholarship, $treasurer->fresh()))->toThrow(AuthorizationException::class);
 
         Permission::findOrCreate('Approve:Scholarship');
         Role::query()->where('organization_id', $this->jakare->id)->where('name', 'tesorero')->sole()->givePermissionTo('Approve:Scholarship');
@@ -265,7 +271,9 @@ describe('cargos', function () {
 });
 
 it('el comando genera por organización', function () {
-    $this->artisan('charges:generate', ['--organization' => 'jakare', '--period' => '2026-09'])
+    $this->season->update(['fee_frequency' => 'mensual']);
+
+    $this->artisan('charges:generate', ['--organization' => 'jakare', '--date' => '2026-09-15'])
         ->expectsOutputToContain('2 creadas')
         ->assertSuccessful();
 

@@ -19,7 +19,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
 
 /**
- * Configuración de la organización: datos, vocabulario, cobros y módulos.
+ * Configuración de la organización: datos, vocabulario, cobros, asistencia y módulos.
  */
 class EditOrganizationProfile extends EditTenantProfile
 {
@@ -43,6 +43,7 @@ class EditOrganizationProfile extends EditTenantProfile
             'student' => 'Alumno',
             'instructor' => 'Instructor',
             'guardian' => 'Tutor',
+            'space' => 'Cancha / sala de un lugar',
         ];
 
         return $schema->components([
@@ -103,6 +104,18 @@ class EditOrganizationProfile extends EditTenantProfile
                                 ->visible(fn (Get $get) => $get('billing.late_fee.enabled')),
                         ]),
                 ]),
+            Section::make('Asistencia')
+                ->schema([
+                    TextInput::make('class_reminder_hours')
+                        ->label('Aviso de día de clase')
+                        ->helperText('Horas antes de cada clase en que sale el aviso "¿Lo llevás?" a los tutores que lo pidieron. Si cae de noche, sale a las 20:00 del día anterior.')
+                        ->numeric()->integer()->minValue(1)->maxValue(24)->suffix('horas antes')->required(),
+                    TextInput::make('instructor_reminder_hours')
+                        ->label('Aviso al técnico')
+                        ->helperText('Horas antes de cada clase en que el técnico recibe "Hoy tenés clase…" con cuántos van. Cada usuario puede elegir sus propios avisos en la app.')
+                        ->numeric()->integer()->minValue(1)->maxValue(24)->suffix('horas antes')->required(),
+                ])
+                ->columns(2),
             Section::make('Módulos')
                 ->schema([
                     // Los módulos los habilita la plataforma (super admin); el admin solo los ve.
@@ -119,6 +132,8 @@ class EditOrganizationProfile extends EditTenantProfile
     protected function mutateFormDataBeforeFill(array $data): array
     {
         $data['billing'] = Filament::getTenant()->billing();
+        $data['class_reminder_hours'] ??= Filament::getTenant()->class_reminder_hours ?? 3;
+        $data['instructor_reminder_hours'] ??= Filament::getTenant()->instructor_reminder_hours ?? 2;
 
         return $data;
     }

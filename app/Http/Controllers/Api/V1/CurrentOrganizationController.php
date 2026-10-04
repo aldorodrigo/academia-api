@@ -2,7 +2,12 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Attendance\AttendanceAccess;
+use App\Actions\Billing\PaymentReportAccess;
+use App\Enums\Feature;
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\EnsureCanConfigureOrganization;
+use App\Models\LessonProfile;
 use App\Models\RoleAssignment;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
@@ -46,6 +51,16 @@ class CurrentOrganizationController extends Controller
                     'permissions' => collect(['view_reports' => 'View:Reports'])
                         ->filter(fn (string $permission) => $user->can($permission))
                         ->keys()
+                        ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
+                        ->when(PaymentReportAccess::canReview($user, $organization), fn ($permissions) => $permissions->push('review_payment_reports'))
+                        ->when(
+                            $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
+                            fn ($permissions) => $permissions->push('teach_lessons'),
+                        )
+                        ->when(
+                            EnsureCanConfigureOrganization::allows($request, $current),
+                            fn ($permissions) => $permissions->push('configure_organization'),
+                        )
                         ->values(),
                 ],
             ],

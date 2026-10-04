@@ -1,6 +1,5 @@
 <?php
 
-use App\Actions\Billing\GenerateMonthlyCharges;
 use App\Actions\Billing\RegisterPayment;
 use App\Actions\Billing\VoidPayment;
 use App\Enums\DiscountType;
@@ -31,7 +30,7 @@ beforeEach(function () {
     $this->jakare = Organization::factory()->create(['slug' => 'jakare']);
     app(CurrentOrganization::class)->set($this->jakare);
 
-    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30', 'is_current' => true]);
+    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30']);
     $futbol = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $group = Group::factory()->for($futbol)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id]);
     $this->monthly = FeeConcept::monthlyFee($this->jakare);
@@ -47,7 +46,7 @@ beforeEach(function () {
     }
 
     foreach (['2026-08-01', '2026-09-01'] as $period) {
-        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse($period));
+        issueMonth($this->jakare, substr($period, 0, 7));
     }
 
     $this->bank = MoneyAccount::factory()->for($this->jakare)->create(['name' => 'Banco Itaú']);
@@ -100,7 +99,7 @@ describe('registrar pago', function () {
         pay(700000);
         expect($this->family->credit())->toBe(100000);
 
-        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-01'));
+        issueMonth($this->jakare, '2026-10');
 
         expect(chargeOf($this->mateo, '2026-10-01')->pendingAmount())->toBe(50000)
             ->and($this->family->credit())->toBe(0);
@@ -108,7 +107,7 @@ describe('registrar pago', function () {
 
     it('el recibo no cambia cuando el saldo a favor se aplica después', function () {
         $payment = pay(700000);
-        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-01'));
+        issueMonth($this->jakare, '2026-10');
 
         $payment = $payment->fresh('allocations');
         expect($payment->creditGenerated())->toBe(100000)
@@ -174,7 +173,7 @@ describe('pronto pago', function () {
 describe('anular pago', function () {
     it('los cargos vuelven a pendientes, contra-movimiento y se revierte el saldo a favor aplicado', function () {
         $payment = pay(700000);
-        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-10-01'));
+        issueMonth($this->jakare, '2026-10');
 
         app(VoidPayment::class)->handle($payment, 'Transferencia rechazada', memberOf($this->jakare));
 

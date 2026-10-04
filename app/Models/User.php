@@ -2,15 +2,19 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
+use App\Actions\Auth\SendVerificationCode;
 use App\Enums\MembershipStatus;
 use App\Enums\OrganizationRole;
+use App\Support\Phone;
 use Database\Factories\UserFactory;
 use Filament\Models\Contracts\FilamentUser;
 use Filament\Models\Contracts\HasTenants;
 use Filament\Panel;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -22,9 +26,9 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'password'])]
+#[Fillable(['name', 'email', 'phone', 'password', 'terms_accepted_at', 'terms_version'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
-class User extends Authenticatable implements FilamentUser, HasTenants
+class User extends Authenticatable implements FilamentUser, HasTenants, MustVerifyEmail
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasRoles, Notifiable, TwoFactorAuthenticatable;
@@ -38,9 +42,120 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     {
         return [
             'email_verified_at' => 'datetime',
+            'phone_verified_at' => 'datetime',
+            'terms_accepted_at' => 'datetime',
             'password' => 'hashed',
             'is_super_admin' => 'boolean',
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::saving(function (User $user): void {
+            $user->email = filled($user->email) ? mb_strtolower(trim($user->email)) : null;
+            $user->phone = filled($user->phone) ? (Phone::normalize($user->phone) ?? trim($user->phone)) : null;
+        });
+    }
+
+    /**
+     * La cuenta se busca por celular o por correo (lo que se ingresa para entrar).
+     */
+    public static function findByLogin(string $login): ?self
+    {
+        $login = trim($login);
+
+        if (Phone::looksLikeEmail($login)) {
+            return static::query()->where('email', mb_strtolower($login))->first();
+        }
+
+        $phone = Phone::normalize($login);
+
+        return $phone === null ? null : static::query()->where('phone', $phone)->first();
+    }
+
+    /**
+     * Confirmó el celular o el correo con el código (o entró por una invitación).
+     */
+    public function isVerified(): bool
+    {
+        return $this->phone_verified_at !== null || $this->email_verified_at !== null;
+    }
+
+    /**
+     * Para Filament (`emailVerification()`) la "verificación" es la de la cuenta: celular o correo.
+     */
+    public function hasVerifiedEmail(): bool
+    {
+        return $this->isVerified();
+    }
+
+    /**
+     * Cuentas que todavía no ingresaron el código: no ocupan el número ni el correo.
+     *
+     * @param  Builder<User>  $query
+     */
+    #[Scope]
+    protected function pending(Builder $query): void
+    {
+        $query->whereNull('phone_verified_at')->whereNull('email_verified_at')->whereDoesntHave('memberships');
+    }
+
+    /**
+     * La cuenta a la que pertenece ese celular o correo: solo si está verificado (un dato sin verificar no
+     * ocupa el número ni el correo de nadie). Las cuentas sin nada verificado que ya son de una organización
+     * (anteriores a la verificación) también cuentan.
+     *
+     * @param  Builder<User>  $query
+     * @param  'phone'|'email'  $column
+     */
+    #[Scope]
+    protected function owning(Builder $query, string $column, string $value): void
+    {
+        $query->where($column, $value)->where(fn (Builder $query) => $query
+            ->whereNotNull("{$column}_verified_at")
+            ->orWhere(fn (Builder $query) => $query
+                ->whereNull('phone_verified_at')
+                ->whereNull('email_verified_at')
+                ->whereHas('memberships')));
+    }
+
+    /**
+     * Libera un celular o un correo sin verificar para una cuenta nueva: borra las cuentas pendientes que lo
+     * tienen y se lo saca a las otras (que siguen con el dato que sí verificaron).
+     */
+    public static function releaseContacts(?string $phone, ?string $email): void
+    {
+        foreach (array_filter(['phone' => $phone, 'email' => $email]) as $column => $value) {
+            static::query()->pending()->where($column, $value)->get()->each->delete();
+            static::query()->where($column, $value)->whereNull("{$column}_verified_at")
+                ->whereNot(fn (Builder $query) => $query->owning($column, $value))
+                ->update([$column => null]);
+        }
+    }
+
+    /**
+     * Correo al que van las copias de los avisos y de los códigos: el verificado o, si la cuenta no tiene
+     * celular, el correo con el que se creó.
+     */
+    public function mailableEmail(): ?string
+    {
+        return filled($this->email) && ($this->email_verified_at !== null || blank($this->phone)) ? $this->email : null;
+    }
+
+    /**
+     * El código se manda por WhatsApp (o por correo), no con un link.
+     */
+    public function sendEmailVerificationNotification(): void
+    {
+        app(SendVerificationCode::class)->handle($this);
+    }
+
+    /**
+     * Celular o correo, para mostrar.
+     */
+    public function contact(): string
+    {
+        return Phone::display($this->phone) ?? (string) $this->email;
     }
 
     /**
@@ -120,6 +235,36 @@ class User extends Authenticatable implements FilamentUser, HasTenants
     }
 
     /**
+     * Sus fichas de tutor (una por organización).
+     *
+     * @return HasMany<Guardian, $this>
+     */
+    public function guardians(): HasMany
+    {
+        return $this->hasMany(Guardian::class);
+    }
+
+    /**
+     * Dispositivos registrados para push.
+     *
+     * @return HasMany<DeviceToken, $this>
+     */
+    public function deviceTokens(): HasMany
+    {
+        return $this->hasMany(DeviceToken::class);
+    }
+
+    /**
+     * Tokens de FCM para el canal de push.
+     *
+     * @return list<string>
+     */
+    public function routeNotificationForPush(): array
+    {
+        return $this->deviceTokens()->pluck('token')->all();
+    }
+
+    /**
      * Grupos que dirige como instructor.
      *
      * @return BelongsToMany<Group, $this>
@@ -134,7 +279,8 @@ class User extends Authenticatable implements FilamentUser, HasTenants
         return match ($panel->getId()) {
             // Panel de la plataforma: solo super admins.
             'platform' => (bool) $this->is_super_admin,
-            default => $this->is_super_admin || $this->activeOrganizations()->exists(),
+            // Una cuenta recién creada (sin ninguna membresía) entra para verificar su cuenta y crear su club.
+            default => $this->is_super_admin || $this->activeOrganizations()->exists() || $this->memberships()->doesntExist(),
         };
     }
 

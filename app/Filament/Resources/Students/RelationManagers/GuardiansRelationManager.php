@@ -3,11 +3,14 @@
 namespace App\Filament\Resources\Students\RelationManagers;
 
 use App\Enums\GuardianRelationship;
+use App\Filament\Actions\ShowInvitationLinkAction;
 use App\Filament\Resources\Guardians\GuardianResource;
 use App\Filament\Resources\Guardians\Tables\GuardiansTable;
 use App\Filament\Support\Terms;
 use App\Models\Family;
 use App\Models\Guardian;
+use App\Support\Phone;
+use Filament\Actions\Action;
 use Filament\Actions\AttachAction;
 use Filament\Actions\CreateAction;
 use Filament\Actions\DetachAction;
@@ -48,7 +51,7 @@ class GuardiansRelationManager extends RelationManager
                 TextColumn::make('pivot.relationship')->label('Parentesco')
                     ->formatStateUsing(fn (?string $state) => GuardianRelationship::parse($state)->label()),
                 TextColumn::make('email')->label('Correo'),
-                TextColumn::make('phone')->label('Teléfono'),
+                TextColumn::make('phone')->label('Celular')->formatStateUsing(fn (?string $state) => Phone::display($state) ?? $state),
                 IconColumn::make('user_id')->label('Usa la app')->boolean()->state(fn (Guardian $record) => $record->hasAccount()),
             ])
             ->headerActions([
@@ -73,5 +76,13 @@ class GuardiansRelationManager extends RelationManager
             ->options(GuardianRelationship::class)
             ->default(GuardianRelationship::Guardian->value)
             ->required();
+    }
+
+    /**
+     * Link de la invitación de un tutor que solo tiene celular (para mandarlo por WhatsApp).
+     */
+    public function showLinkAction(): Action
+    {
+        return ShowInvitationLinkAction::make();
     }
 }

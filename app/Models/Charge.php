@@ -21,7 +21,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * Cargo de la cuenta corriente de un alumno. Inmutable: no se edita ni se borra;
  * se anula con motivo (VoidCharge) y, si hace falta, se carga uno nuevo.
  */
-#[Fillable(['organization_id', 'student_id', 'enrollment_id', 'group_id', 'fee_concept_id', 'tariff_id', 'period', 'description', 'base_amount', 'final_amount', 'issued_on', 'due_on', 'unique_key', 'voided_at', 'void_reason', 'voided_by', 'created_by'])]
+#[Fillable(['organization_id', 'student_id', 'enrollment_id', 'group_id', 'season_id', 'fee_concept_id', 'tariff_id', 'period', 'period_start', 'period_end', 'description', 'base_amount', 'quantity', 'unit_amount', 'final_amount', 'issued_on', 'due_on', 'unique_key', 'voided_at', 'void_reason', 'voided_by', 'created_by'])]
 class Charge extends Model
 {
     /** @use HasFactory<ChargeFactory> */
@@ -33,7 +33,13 @@ class Charge extends Model
     protected static function booted(): void
     {
         static::updating(function (Charge $charge): void {
-            if (array_diff(array_keys($charge->getDirty()), self::VOID_FIELDS) !== []) {
+            // Al anular se puede liberar la clave para volver a emitir el período.
+            $allowed = match (true) {
+                $charge->isDirty('voided_at') => [...self::VOID_FIELDS, 'unique_key'],
+                default => self::VOID_FIELDS,
+            };
+
+            if (array_diff(array_keys($charge->getDirty()), $allowed) !== []) {
                 throw new LogicException('Un cargo no se modifica: anulalo y cargá uno nuevo.');
             }
         });
@@ -47,6 +53,10 @@ class Charge extends Model
     {
         return [
             'period' => 'date',
+            'period_start' => 'immutable_date',
+            'period_end' => 'immutable_date',
+            'quantity' => 'integer',
+            'unit_amount' => 'integer',
             'base_amount' => 'integer',
             'final_amount' => 'integer',
             'issued_on' => 'date',
@@ -80,7 +90,8 @@ class Charge extends Model
         $organization = $this->organization;
         $graceDays = (int) $organization->billing('grace_days');
 
-        return $organization->today()->gt($this->due_on->copy()->addDays($graceDays))
+        // Fechas como texto: `due_on` no tiene zona horaria y hoy es la fecha local de la organización.
+        return $organization->today()->toDateString() > $this->due_on->copy()->addDays($graceDays)->toDateString()
             ? ChargeStatus::Overdue
             : ChargeStatus::Pending;
     }
@@ -159,6 +170,30 @@ class Charge extends Model
     }
 
     /**
+     * Próxima: falta pagar algo y su período todavía no empezó (cuotas creadas por
+     * adelantado) o, si no tiene período (inscripción), su temporada todavía no empezó.
+     */
+    public function isUpcoming(): bool
+    {
+        if ($this->voided_at !== null) {
+            return false;
+        }
+
+        $today = $this->organization->today();
+        $startsOn = $this->period_start ?? $this->season?->starts_on;
+
+        return $startsOn !== null && $startsOn->gt($today) && $this->pendingAmount() > 0;
+    }
+
+    /**
+     * @return BelongsTo<Season, $this>
+     */
+    public function season(): BelongsTo
+    {
+        return $this->belongsTo(Season::class);
+    }
+
+    /**
      * @return BelongsTo<FeeConcept, $this>
      */
     public function feeConcept(): BelongsTo
@@ -172,6 +207,26 @@ class Charge extends Model
     public function tariff(): BelongsTo
     {
         return $this->belongsTo(Tariff::class);
+    }
+
+    /**
+     * Reservas de clases particulares sueltas cobradas con este cargo.
+     *
+     * @return HasMany<Booking, $this>
+     */
+    public function bookings(): HasMany
+    {
+        return $this->hasMany(Booking::class);
+    }
+
+    /**
+     * Paquetes de clases que se pagan con este cargo.
+     *
+     * @return HasMany<ClassPack, $this>
+     */
+    public function classPacks(): HasMany
+    {
+        return $this->hasMany(ClassPack::class);
     }
 
     /**

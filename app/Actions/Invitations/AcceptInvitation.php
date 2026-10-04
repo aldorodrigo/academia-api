@@ -3,6 +3,8 @@
 namespace App\Actions\Invitations;
 
 use App\Enums\MembershipStatus;
+use App\Mail\ConfirmEmailMail;
+use App\Models\Group;
 use App\Models\Guardian;
 use App\Models\Invitation;
 use App\Models\Role;
@@ -12,6 +14,7 @@ use App\Support\Roles\RoleAssigner;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -33,15 +36,27 @@ class AcceptInvitation
 
             abort_unless($invitation->canBeAccepted(), 404, 'La invitación no es válida o ya venció.');
 
-            $user = User::query()->where('email', $invitation->email)->first();
+            $user = $invitation->existingUser();
 
             if ($user === null) {
+                // Un celular o correo sin verificar de otra cuenta se libera.
+                User::releaseContacts($invitation->phone, $invitation->email);
+
                 $user = User::query()->create([
                     'name' => $data['name'],
                     'email' => $invitation->email,
+                    'phone' => $invitation->phone,
                     'password' => $data['password'],
                 ]);
-                $user->forceFill(['email_verified_at' => now()])->save();
+                // El link llegó a ese WhatsApp o a ese correo: queda verificado. Con los dos, el celular; el
+                // correo se confirma con el link que le mandamos (hasta entonces no recibe copias).
+                $user->forceFill(filled($invitation->phone)
+                    ? ['phone_verified_at' => now()]
+                    : ['email_verified_at' => now()])->save();
+
+                if (filled($invitation->phone) && filled($invitation->email)) {
+                    Mail::to($invitation->email)->queue((new ConfirmEmailMail($user))->afterCommit());
+                }
             } elseif (! Hash::check($data['password'], $user->password)) {
                 throw ValidationException::withMessages(['password' => 'La contraseña no es correcta.']);
             }
@@ -71,6 +86,7 @@ class AcceptInvitation
             }
 
             $this->linkGuardian($invitation, $user);
+            $this->assignGroups($invitation, $user);
 
             $invitation->update(['accepted_at' => now(), 'accepted_user_id' => $user->id]);
 
@@ -101,6 +117,23 @@ class AcceptInvitation
         if (! $alreadyLinked) {
             $guardian->update(['user_id' => $user->id]);
         }
+    }
+
+    /**
+     * Técnico invitado con sus categorías: queda asignado a las que siguen existiendo.
+     */
+    private function assignGroups(Invitation $invitation, User $user): void
+    {
+        if (empty($invitation->group_ids)) {
+            return;
+        }
+
+        $groups = Group::query()->withoutGlobalScopes()
+            ->where('organization_id', $invitation->organization_id)
+            ->whereKey($invitation->group_ids)
+            ->pluck('id');
+
+        $user->instructedGroups()->syncWithoutDetaching($groups->all());
     }
 
     private function alreadyHas(User $user, Role $role): bool

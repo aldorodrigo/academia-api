@@ -1,0 +1,123 @@
+/* Sitio público de Tuku (landing y, más adelante, la página de cada organización). */
+@import 'tailwindcss' source(none);
+
+@source '../views/site';
+@source '../views/components/site';
+
+/* Tokens del sistema de diseño de Tuku. Solo los colores de la marca: sin azul ni rojo de marca. */
+@theme {
+    --color-*: initial;
+    --color-white: #ffffff;
+    --color-transparent: transparent;
+    --color-surface: #f6f9f3;
+    --color-surface-raised: #ffffff;
+    --color-line: #dce6d5;
+    --color-line-strong: #7c8f81;
+    --color-ink: #14231a;
+    --color-ink-muted: #4d5e53;
+    --color-verde: #167a3a;
+    --color-on-verde: #ffffff;
+    --color-brote: #e4f5d9;
+    --color-sol: #ffc83a;
+    --color-on-sol: #14231a;
+    --color-aviso: #9a5200;
+    --color-aviso-soft: #fff0d6;
+    --color-error: #b3261e;
+    --color-error-soft: #fde7e4;
+    --color-info: #1f6696;
+    --color-info-soft: #e2f0fa;
+    --color-focus-ring: #0e6b33;
+    /* Marco de los celulares de muestra (igual en los dos temas). */
+    --color-marco: #0b120e;
+    /* Bloques de marca que no cambian con el tema (banda final, pie). */
+    --color-marca: #167a3a;
+    --color-on-marca: #ffffff;
+
+    --font-sans: 'Nunito Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    --font-display: 'Baloo 2', 'Nunito Sans', system-ui, sans-serif;
+
+    --radius-sm: 8px;
+    --radius-md: 14px;
+    --radius-lg: 20px;
+    --radius-xl: 28px;
+
+    --shadow-card: 0 1px 2px rgba(20, 35, 26, 0.06), 0 6px 16px rgba(20, 35, 26, 0.06);
+    --shadow-phone: 0 2px 6px rgba(20, 35, 26, 0.08), 0 24px 48px rgba(20, 35, 26, 0.14);
+}
+
+/* El tema oscuro no invierte la marca: el verde se aclara y el texto sobre él pasa a oscuro. */
+@media (prefers-color-scheme: dark) {
+    :root {
+        --color-surface: #0e1611;
+        --color-surface-raised: #16211a;
+        --color-line: #2a3b30;
+        --color-line-strong: #6b8273;
+        --color-ink: #e9f2eb;
+        --color-ink-muted: #a7b9ac;
+        --color-verde: #5fd07f;
+        --color-on-verde: #0e1611;
+        --color-brote: #173622;
+        --color-aviso: #ffc46b;
+        --color-aviso-soft: #3a2a10;
+        --color-error: #ff8a80;
+        --color-error-soft: #3b1513;
+        --color-info: #8cc8f0;
+        --color-info-soft: #10283a;
+        --color-focus-ring: #8be3a3;
+        --color-marco: #2a3b30;
+        --color-marca: #173622;
+        --color-on-marca: #e9f2eb;
+        --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.5);
+        --shadow-phone: 0 24px 48px rgba(0, 0, 0, 0.5);
+        color-scheme: dark;
+    }
+}
+
+@layer base {
+    html {
+        scroll-behavior: smooth;
+        scroll-padding-top: 5rem;
+    }
+
+    body {
+        background: var(--color-surface);
+        color: var(--color-ink);
+        font-family: var(--font-sans);
+        -webkit-font-smoothing: antialiased;
+    }
+
+    :focus-visible {
+        outline: 2px solid var(--color-focus-ring);
+        outline-offset: 2px;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        html {
+            scroll-behavior: auto;
+        }
+    }
+}
+
+@utility tabular {
+    font-variant-numeric: tabular-nums;
+}
+
+/* Íconos Material Symbols redondeados, como en la app. */
+@utility icon {
+    font-family: 'Material Symbols Rounded';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 1.5rem;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    font-feature-settings: 'liga';
+    user-select: none;
+}
+
+@utility icon-fill {
+    font-variation-settings: 'FILL' 1;
+}

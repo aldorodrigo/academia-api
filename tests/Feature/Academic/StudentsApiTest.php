@@ -24,7 +24,7 @@ beforeEach(function () {
     $this->jakare = Organization::factory()->create(['slug' => 'jakare']);
     $this->ajena = Organization::factory()->create(['slug' => 'ajena']);
 
-    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true]);
+    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31']);
     $this->program = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $this->group = Group::factory()->for($this->program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id]);
     $venue = Venue::factory()->for($this->jakare)->create(['name' => 'Cancha 1']);
@@ -62,9 +62,9 @@ function assignRole(Organization $organization, User $user, OrganizationRole $ro
     );
 }
 
-it('lista solo los hijos del tutor con sus inscripciones de la temporada actual', function () {
+it('lista solo los hijos del tutor con sus inscripciones vigentes', function () {
     Student::factory()->for($this->jakare)->create(['first_name' => 'Ajeno']);
-    $old = Season::factory()->for($this->jakare)->create(['name' => '2025']);
+    $old = Season::factory()->for($this->jakare)->create(['name' => '2025', 'starts_on' => '2025-01-01', 'ends_on' => '2025-12-31']);
     Enrollment::factory()->create(['student_id' => $this->mateo->id, 'group_id' => $this->group->id, 'season_id' => $old->id]);
 
     studentsApi($this->user, 'students')
@@ -177,13 +177,21 @@ it('medical es null si no se cargó la ficha', function () {
         ->assertJsonPath('data.permissions.view_medical', true);
 });
 
-it('una sola temporada actual por organización', function () {
-    $new = Season::factory()->for($this->jakare)->create(['name' => '2027', 'is_current' => true]);
-    $foreign = Season::factory()->for($this->ajena)->create(['is_current' => true]);
+it('muestra las inscripciones de temporadas vigentes y próximas, con sus fechas', function () {
+    $colonia = Season::factory()->for($this->jakare)->create(['name' => 'Colonia 2027', 'starts_on' => '2027-01-04', 'ends_on' => '2027-01-17']);
+    $vieja = Season::factory()->for($this->jakare)->create(['name' => '2025', 'starts_on' => '2025-01-01', 'ends_on' => '2025-12-31']);
+    $colonia->programs()->attach($this->group->program_id);
+    Enrollment::factory()->create(['student_id' => $this->mateo->id, 'group_id' => $this->group->id, 'season_id' => $colonia->id]);
+    Enrollment::factory()->create(['student_id' => $this->mateo->id, 'group_id' => $this->group->id, 'season_id' => $vieja->id]);
 
-    expect($this->season->fresh()->is_current)->toBeFalse()
-        ->and($new->fresh()->is_current)->toBeTrue()
-        ->and($foreign->fresh()->is_current)->toBeTrue();
+    $enrollments = collect(studentsApi($this->user, "students/{$this->mateo->id}")->json('data.enrollments'));
+
+    expect($enrollments->pluck('season.name')->all())->toEqualCanonicalizing(['2026', 'Colonia 2027'])
+        ->and($enrollments->firstWhere('season.name', 'Colonia 2027')['season'])->toMatchArray([
+            'starts_on' => '2027-01-04',
+            'ends_on' => '2027-01-17',
+            'programs' => [['id' => $this->group->program_id, 'name' => $this->group->program->name]],
+        ]);
 });
 
 it('la ficha médica se guarda cifrada', function () {

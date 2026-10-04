@@ -5,12 +5,12 @@ namespace App\Filament\Resources\Invitations\Pages;
 use App\Actions\Invitations\CreateInvitation;
 use App\Filament\Actions\ShowInvitationLinkAction;
 use App\Filament\Resources\Invitations\InvitationResource;
+use App\Filament\Support\ContactField;
 use App\Filament\Support\RoleFields;
 use App\Models\Invitation;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\Repeater;
-use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\ListRecords;
 use Filament\Support\Icons\Heroicon;
 
@@ -26,13 +26,10 @@ class ListInvitations extends ListRecords
                 ->icon(Heroicon::OutlinedUserPlus)
                 ->authorize('create', Invitation::class)
                 ->modalHeading('Invitar a una persona')
-                ->modalDescription('Le llega un correo con el link y el QR. El link vence en '.Invitation::VALID_DAYS.' días y sirve una sola vez.')
+                ->modalDescription('Con el celular, le mandás el link por WhatsApp; con el correo, le llega por email. El link vence en '.Invitation::VALID_DAYS.' días y sirve una sola vez.')
                 ->modalSubmitActionLabel('Crear invitación')
                 ->schema([
-                    TextInput::make('email')
-                        ->label('Correo electrónico')
-                        ->email()
-                        ->required(),
+                    ContactField::make(),
                     Repeater::make('roles')
                         ->label('Roles')
                         ->schema(RoleFields::make())
@@ -42,14 +39,17 @@ class ListInvitations extends ListRecords
                         ->columns(3),
                 ])
                 ->action(function (array $data) {
-                    [, $token] = app(CreateInvitation::class)->handle(
+                    $contact = ContactField::split($data['contact']);
+
+                    [$invitation, $token] = app(CreateInvitation::class)->handle(
                         Filament::getTenant(),
-                        $data['email'],
+                        $contact['email'],
                         array_values($data['roles']),
                         auth()->user(),
+                        phone: $contact['phone'],
                     );
 
-                    $this->replaceMountedAction('showLink', ['token' => $token]);
+                    $this->replaceMountedAction('showLink', ['token' => $token, 'phone' => $invitation->phone]);
                 }),
         ];
     }

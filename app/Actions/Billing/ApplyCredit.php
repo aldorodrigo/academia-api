@@ -2,6 +2,7 @@
 
 namespace App\Actions\Billing;
 
+use App\Actions\Lessons\ActivatePaidPacks;
 use App\Models\Family;
 use App\Models\Payment;
 use Illuminate\Support\Facades\DB;
@@ -12,14 +13,17 @@ use Illuminate\Support\Facades\DB;
  */
 class ApplyCredit
 {
-    public function __construct(private RegisterPayment $register) {}
+    public function __construct(
+        private RegisterPayment $register,
+        private ActivatePaidPacks $activatePacks,
+    ) {}
 
     /**
      * @return int monto aplicado
      */
     public function forFamily(Family $family): int
     {
-        return DB::transaction(function () use ($family) {
+        $applied = DB::transaction(function () use ($family) {
             $applied = 0;
             $payments = Payment::query()->withoutGlobalScopes()
                 ->where('family_id', $family->id)
@@ -53,5 +57,11 @@ class ApplyCredit
 
             return $applied;
         });
+
+        if ($applied > 0) {
+            $this->activatePacks->forFamily($family);
+        }
+
+        return $applied;
     }
 }

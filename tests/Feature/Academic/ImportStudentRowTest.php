@@ -17,7 +17,7 @@ use Illuminate\Support\Facades\Mail;
 beforeEach(function () {
     Mail::fake();
     $this->jakare = Organization::factory()->create(['slug' => 'jakare']);
-    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true]);
+    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31']);
     $program = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $this->group = Group::factory()->for($program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id]);
 });
@@ -84,11 +84,11 @@ it('informa errores de la fila', function (array $overrides, string $message) {
     'email inválido' => [['guardians' => [['first_name' => 'Ana', 'email' => 'no-es-email']]], 'Email de tutor inválido'],
 ]);
 
-it('sin temporada actual no importa', function () {
-    $this->season->update(['is_current' => false]);
+it('sin temporada vigente ni próxima no importa', function () {
+    $this->season->update(['starts_on' => '2020-01-01', 'ends_on' => '2020-12-31']);
 
     importRow($this->jakare);
-})->throws(ImportRowException::class, 'No hay una temporada actual.');
+})->throws(ImportRowException::class, 'No hay una temporada vigente o próxima.');
 
 it('opcionalmente invita a los tutores con email, una sola vez', function () {
     importRow($this->jakare, invite: true);
@@ -100,7 +100,7 @@ it('opcionalmente invita a los tutores con email, una sola vez', function () {
 
 it('no usa grupos de otra organización', function () {
     $ajena = Organization::factory()->create();
-    Season::factory()->for($ajena)->create(['is_current' => true]);
+    Season::factory()->for($ajena)->create();
 
     importRow($ajena);
 })->throws(ImportRowException::class, 'No existe Disciplina "fútbol".');

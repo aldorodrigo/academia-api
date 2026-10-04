@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Guardians\Tables;
 use App\Actions\Invitations\CreateInvitation;
 use App\Models\Guardian;
 use App\Models\Invitation;
+use App\Support\Phone;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Actions\DeleteAction;
@@ -17,6 +18,7 @@ use Filament\Tables\Filters\TernaryFilter;
 use Filament\Tables\Table;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Livewire\Component;
 
 class GuardiansTable
 {
@@ -28,7 +30,11 @@ class GuardiansTable
                 TextColumn::make('last_name')->label('Apellido')->searchable()->sortable(),
                 TextColumn::make('first_name')->label('Nombre')->searchable(),
                 TextColumn::make('email')->label('Correo')->searchable(),
-                TextColumn::make('phone')->label('Teléfono'),
+                TextColumn::make('phone')->label('Celular')
+                    ->formatStateUsing(fn (?string $state) => Phone::display($state) ?? $state)
+                    ->searchable(query: fn (Builder $query, string $search) => filled(Phone::searchFragment($search))
+                        ? $query->where('phone', 'like', '%'.Phone::searchFragment($search).'%')
+                        : $query),
                 TextColumn::make('students.first_name')->label('Hijos')->badge(),
                 IconColumn::make('has_account')->label('Usa la app')->boolean()
                     ->state(fn (Guardian $record) => $record->hasAccount()),
@@ -48,7 +54,7 @@ class GuardiansTable
                     ->label('Invitar a la app')
                     ->icon(Heroicon::OutlinedEnvelope)
                     ->requiresConfirmation()
-                    ->modalDescription('Se envía la invitación a los seleccionados que tienen correo y todavía no usan la app.')
+                    ->modalDescription('Se envía la invitación por correo a los seleccionados que lo tienen y todavía no usan la app. A los que solo tienen celular, invitalos uno por uno para mandarles el link por WhatsApp.')
                     ->authorize('create', Invitation::class)
                     ->action(function (Collection $records): void {
                         $sent = $records
@@ -62,21 +68,42 @@ class GuardiansTable
     }
 
     /**
-     * Invitación como tutor: al aceptarla ve a sus hijos en la app.
+     * Invitación como tutor: al aceptarla ve a sus hijos en la app. Como al técnico: con correo
+     * se manda por email y, con celular, el modal del link trae el botón de WhatsApp a ese número.
      */
     public static function inviteAction(): Action
     {
         return Action::make('invite')
             ->label(fn (Guardian $record) => $record->invitations()->exists() ? 'Reenviar invitación' : 'Invitar a la app')
             ->icon(Heroicon::OutlinedEnvelope)
-            ->visible(fn (Guardian $record) => filled($record->email) && ! $record->hasAccount())
+            ->button()
+            ->visible(fn (Guardian $record) => (filled($record->email) || Phone::mobile($record->phone) !== null) && ! $record->hasAccount())
             ->authorize('create', Invitation::class)
             ->requiresConfirmation()
-            ->modalDescription(fn (Guardian $record) => "Se envía la invitación a {$record->email}.")
-            ->action(function (Guardian $record): void {
-                app(CreateInvitation::class)->forGuardian($record, auth()->user());
+            ->modalIcon(Heroicon::OutlinedEnvelope)
+            ->modalHeading(fn (Guardian $record) => "Invitar a {$record->full_name}")
+            ->modalDescription(fn (Guardian $record) => self::inviteChannels($record))
+            ->modalSubmitActionLabel('Crear invitación')
+            ->action(function (Guardian $record, Component $livewire): void {
+                [$invitation, $token] = app(CreateInvitation::class)->forGuardian($record, auth()->user());
 
-                Notification::make()->success()->title('Invitación enviada.')->send();
+                $livewire->replaceMountedAction('showLink', [
+                    'token' => $token,
+                    'name' => $record->full_name,
+                    'phone' => $invitation->phone ?? Phone::mobile($record->phone),
+                    'email' => $invitation->email,
+                ]);
             });
+    }
+
+    private static function inviteChannels(Guardian $record): string
+    {
+        $phone = Phone::mobile($record->phone);
+
+        return match (true) {
+            filled($record->email) && $phone !== null => "Le llega por correo a {$record->email} y también vas a poder mandársela por WhatsApp al {$record->phone_display}.",
+            filled($record->email) => "Le llega por correo a {$record->email}.",
+            default => "Vas a poder mandarle el link por WhatsApp al {$record->phone_display}.",
+        };
     }
 }

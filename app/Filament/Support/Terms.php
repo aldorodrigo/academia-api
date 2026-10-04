@@ -3,6 +3,7 @@
 namespace App\Filament\Support;
 
 use App\Models\Organization;
+use App\Support\Vocabulary;
 use Filament\Facades\Filament;
 
 /**
@@ -25,6 +26,14 @@ class Terms
     public static function label(string $key, string $default): string
     {
         return ucfirst(self::singular($key, $default));
+    }
+
+    /**
+     * La forma según el género del término del club: gendered('group', 'Categoría', 'otro', 'otra').
+     */
+    public static function gendered(string $key, string $default, string $masculine, string $feminine): string
+    {
+        return Vocabulary::gendered(self::singular($key, $default), $masculine, $feminine);
     }
 
     /**

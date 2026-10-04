@@ -36,7 +36,7 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 ```bash
 ./vendor/bin/sail up -d                  # app, mariadb, redis, mailpit
 ./vendor/bin/sail artisan migrate --seed # super admin + organización Jakare
-./vendor/bin/sail artisan horizon        # procesar colas
+./vendor/bin/sail artisan horizon        # colas con panel (el servicio `queue` ya las procesa)
 ./vendor/bin/sail composer test          # Pest
 ./vendor/bin/sail composer lint          # Pint
 ./vendor/bin/sail artisan queue:restart  # después de composer require o de cambiar jobs/mails
@@ -49,7 +49,13 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 
 - Panel: http://localhost/admin — `admin@academia.test` / `password` (super admin, solo dev).
 - Horizon: http://localhost/horizon (solo super admin).
-- Mailpit: http://localhost:8025
+- Mailpit: http://localhost:8025 — con `WHATSAPP_DEV_DRIVER=mail` también llegan ahí los códigos "de WhatsApp"
+  (correo a `{número}@whatsapp.test`, ej. `595981123456@whatsapp.test`).
+- Colas: el servicio `queue` del `compose.yaml` (contenedor `academia-api-queue-1`) corre `queue:work` siempre;
+  después de cambiar jobs o mails, `sail artisan queue:restart`.
+- Turnstile en local: claves de prueba de Cloudflare `TURNSTILE_SITE_KEY=1x00000000000000000000AA` y
+  `TURNSTILE_SECRET_KEY=1x0000000000000000000000000000000AA` (siempre aprueban); sin claves no se pide captcha.
+- Con `APP_PORT`/`VITE_PORT` en `.env` (ej. 8080/5174) para convivir con otros proyectos Sail; imagen propia `academia-api/app`.
 
 ## Arquitectura
 
@@ -71,6 +77,34 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 ### Paneles
 - **`/admin/{slug}`** (`AdminPanelProvider`): panel de cada organización (tenancy). Recursos en
   `app/Filament/Resources`, páginas en `app/Filament/Pages`.
+- **Cuenta con celular o correo** (Sprint 5d): `users.phone` (E.164, único) o `users.email`; se entra con cualquiera
+  (`User::findByLogin`, `App\Filament\Pages\Auth\Login`). Teléfonos con `App\Support\Phone` (libphonenumber, PY por
+  defecto; `mobile()`, `normalize()`, `display()`). `isVerified()` = celular o correo verificado (`hasVerifiedEmail()`
+  lo devuelve para Filament).
+- **Códigos** (crear cuenta y "Olvidé mi contraseña"): `SendVerificationCode` / `VerifyCode` / `ResetPasswordWithCode`,
+  por WhatsApp (`App\Support\WhatsApp\WhatsAppSender`: Cloud API de Meta con `WHATSAPP_TOKEN`, si no al log; job
+  `SendWhatsAppCode`) o por correo. **Todo envío pasa por `App\Support\Verification\CodeGuard`** (Turnstile, campo
+  trampa, países permitidos, límites por destino/IP/cuenta, tope diario y corte automático; pausa en
+  `platform_settings`). No mandes códigos por fuera de esas acciones.
+- **Lo que sale por WhatsApp sale también por correo** (ver `docs/WHATSAPP.md`): el código lleva una copia con su
+  propio código (verifica el correo), las invitaciones con celular y correo van por los dos lados y los avisos push
+  también van por correo. Correo para copias: `User::mailableEmail()` (el verificado o, sin celular, el de la cuenta).
+  Cada dato se verifica por separado: un celular o correo sin verificar no ocupa el dato (`User::owning()`,
+  `User::releaseContacts()`, regla `ContactAvailable`).
+- **Avisos:** extender `App\Notifications\PushNotification` (push + correo con la marca a partir de `toPush()`;
+  `mailActions()` y `mailPose()` para los botones y la mascota). No crear notificaciones solo push.
+- **Correos con la marca Tuku:** componentes en `resources/views/vendor/mail` (tema `tuku.css`, `mascot`, `buttons`) y
+  `vendor/notifications/email.blade.php` en español. Los links de los correos que cambian algo abren una página
+  (`site.aviso`) con un botón que hace el `POST`: los antivirus de correo abren los links solos.
+- **Alta autoservicio** (Sprint 5d): `/admin/register` (`RegisterAccount`, celular o correo) → código
+  (`VerifyAccount`, `->emailVerification()`) → `/admin/new` "Tu club" (`RegisterOrganization`,
+  `->tenantRegistration()`). Un usuario sin ninguna membresía puede entrar al panel solo para eso. "Olvidé mi
+  contraseña" del panel: `RequestPasswordReset` (código, no link). Invitar: `ContactField` (celular o correo).
+- **Guía "Primeros pasos"** (`App\Filament\Pages\Onboarding`, `/admin/{slug}/primeros-pasos`): checklist de
+  `App\Support\Onboarding\Checklist` (el mismo que `GET onboarding` de la app) con un panel lateral por paso;
+  el `Dashboard` propio redirige ahí mientras esté incompleta y sin cerrar. Las acciones de cada paso
+  (`CreatePrograms`, `SaveGroups`, `Seasons\CreateSeason`, `ManageInstructors`) las usan también los
+  endpoints `setup/*` de la API: no dupliques lógica en el panel ni en los controladores.
 - **`/plataforma`** (`PlatformPanelProvider`): solo super admins, sin tenancy. Organizaciones
   (alta con primer admin, suspender/reactivar, entrar al panel) y usuarios (super admins).
   Recursos en `app/Filament/Platform/Resources`. Sin organización activa los scopes no filtran.
@@ -87,7 +121,9 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Invitación de un tutor cargado: `CreateInvitation::forGuardian()`; al aceptarla, `guardians.user_id` queda vinculado.
 
 ### Académico
-- Programa → Grupo → Horarios; `Enrollment` = alumno + grupo + temporada (`Season::currentOrNull()`, una sola actual).
+- Programa → Grupo → Horarios; `Enrollment` = alumno + grupo + temporada.
+- Temporadas vigentes por fechas (varias a la vez, por disciplina): `Season::active()`, `open()` (vigentes o próximas),
+  `forProgram()` (sin disciplinas = todas), `Season::defaultFor($program)`. No hay "temporada actual".
 - "Mis hijos": `Student::inChargeOf($user)` (tutor vinculado o alumno adulto con `user_id`).
 - Ficha médica: siempre chequear `can('viewMedical', $student)` (`StudentPolicy`); los campos clínicos van cifrados.
 - Alta de jugador: `App\Actions\Students\RegisterStudent` (datos + inscripción + tutores + invitación). La usan
@@ -96,14 +132,20 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Familia: automática e invisible (`Family::syncFor($student)`), sin menú ni campo en el panel.
 - Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season, $program)`.
 - Campos de inscripción (alta, acción "Inscribir", pestaña Inscripciones): `App\Filament\Support\EnrollmentForm`.
-- Inscripciones de temporadas anteriores: finalizadas solas (`Enrollment::isFinished()`); solo generan cuota
-  las de `Enrollment::billable()`. Pase de temporada: `App\Actions\Enrollments\TransferSeason`.
+- Inscripciones de temporadas terminadas: finalizadas solas (`Enrollment::isFinished()`); solo generan cuota
+  las de `Enrollment::billable()`. Pase de temporada: `App\Actions\Enrollments\TransferSeason` (cuotas en cola con
+  `QueueEnrollmentCharges`, avisa al terminar).
+- Nueva temporada: asistente `CreateSeason` (`Seasons\Support\SeasonPlanSteps` y `SeasonPlan`: valores por defecto,
+  copia, resumen, cuotas de ejemplo, tarifas). "Configurar cobro" y "Cambiar monto": `SeasonActions`.
 - Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
 
 ### Finanzas (cargos)
 - `Charge` es inmutable (no se edita ni se borra): se anula con `VoidCharge` (motivo). Estado calculado: `Charge::status()`.
-- Cuota mensual: `App\Actions\Billing\GenerateMonthlyCharges` (lock + `unique_key`), comando `charges:generate`.
+- Cuotas según el plan de la temporada (`Season`: `fee_frequency`, `daily_basis`, `daily_grouping`, `due_days`,
+  `issue_upfront`, `mid_period`): períodos con `SeasonPeriods`; emisión por inscripción con `IssueSeasonCharges`
+  (al crear la inscripción, idempotente por `unique_key` `enr:…:con:…:per:Y-m-d`); `GenerateSeasonCharges` (lock) y
+  comando diario `charges:generate`. Baja o suspensión: `VoidFutureCharges`. `Charge::isUpcoming()` = próxima.
 - Descuentos y becas: `DiscountCalculator`, en el orden de `organizations.billing.discount_order`.
 - Tarifa aplicable: `Tariff::applicable()`. Configuración de cobros: `Organization::billing()`.
 - Becas: `ScholarshipDecision` (permiso `Approve:Scholarship`).

@@ -1,6 +1,13 @@
 {
 	email {$ACME_EMAIL}
 	admin off
+
+	# Detrás del proxy de entrada (compose.edge.yaml) se conservan la IP del
+	# cliente y el esquema que manda; sin él, nadie de la red privada llega acá.
+	servers {
+		trusted_proxies static private_ranges
+		client_ip_headers X-Forwarded-For
+	}
 }
 
 {$APP_DOMAIN} {

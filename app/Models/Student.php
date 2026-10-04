@@ -122,13 +122,13 @@ class Student extends Model implements HasMedia
     }
 
     /**
-     * Inscripciones de la temporada actual.
+     * Inscripciones de temporadas vigentes o próximas.
      *
      * @return HasMany<Enrollment, $this>
      */
     public function currentEnrollments(): HasMany
     {
-        return $this->enrollments()->whereHas('season', fn (Builder $season) => $season->where('is_current', true));
+        return $this->enrollments()->whereHas('season', fn (Builder $season) => $season->open());
     }
 
     /**
@@ -139,13 +139,21 @@ class Student extends Model implements HasMedia
         return $this->hasMany(Charge::class);
     }
 
+    /**
+     * @return HasMany<Attendance, $this>
+     */
+    public function attendances(): HasMany
+    {
+        return $this->hasMany(Attendance::class);
+    }
+
     public function isAdult(): bool
     {
         return $this->birth_date !== null && $this->birth_date->age >= self::ADULT_AGE;
     }
 
     /**
-     * Tiene una inscripción vigente (no dada de baja) en la temporada actual.
+     * Tiene una inscripción (no dada de baja) en una temporada vigente o próxima.
      */
     public function isActive(): bool
     {

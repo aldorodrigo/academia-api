@@ -24,6 +24,9 @@ class FeeConcept extends Model
 
     public const ENROLLMENT_FEE = 'enrollment_fee';
 
+    /** Clase particular suelta y paquetes de clases. */
+    public const PRIVATE_LESSON = 'private_lesson';
+
     protected $attributes = ['kind' => 'one_time'];
 
     protected function casts(): array
@@ -39,6 +42,17 @@ class FeeConcept extends Model
     public static function enrollmentFee(Organization $organization): ?self
     {
         return static::system($organization, self::ENROLLMENT_FEE);
+    }
+
+    /**
+     * Se crea si falta (organizaciones anteriores al módulo).
+     */
+    public static function privateLesson(Organization $organization): self
+    {
+        return static::query()->withoutGlobalScopes()->firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => self::PRIVATE_LESSON],
+            ['name' => 'Clase particular', 'kind' => FeeConceptKind::OneTime],
+        );
     }
 
     private static function system(Organization $organization, string $code): ?self

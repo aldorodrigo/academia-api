@@ -52,7 +52,7 @@ it('invitar desde el panel crea la invitación, envía el email y muestra el lin
 
     $page = Livewire::test(ListInvitations::class)
         ->callAction('invite', data: [
-            'email' => 'Tesorero@Test.com',
+            'contact' => 'Tesorero@Test.com',
             'roles' => [
                 ['role' => 'tutor'],
                 ['role' => 'tesorero', 'starts_on' => '2026-01-01', 'ends_on' => '2027-12-31'],
@@ -72,6 +72,26 @@ it('invitar desde el panel crea la invitación, envía el email y muestra el lin
         ->and($invitation->invited_by)->toBe($this->admin->id);
 
     Mail::assertQueued(InvitationMail::class);
+});
+
+it('invitar por celular desde el panel muestra el link para WhatsApp sin mandar correo', function () {
+    actingInPanel($this->admin, $this->jakare);
+
+    $page = Livewire::test(ListInvitations::class)
+        ->callAction('invite', data: [
+            'contact' => '0981 555 444',
+            'roles' => [['role' => 'tutor']],
+        ])
+        ->assertActionMounted('showLink');
+
+    $invitation = Invitation::query()->sole();
+    expect($invitation->phone)->toBe('+595981555444')->and($invitation->email)->toBeNull()
+        ->and($page->get('mountedActions')[0]['arguments']['phone'])->toBe('+595981555444');
+    Mail::assertNothingQueued();
+
+    Livewire::test(ListInvitations::class)
+        ->callAction('invite', data: ['contact' => '021 555 444', 'roles' => [['role' => 'tutor']]])
+        ->assertHasFormErrors(['contact']);
 });
 
 it('un cargo de comisión exige fin de mandato en el formulario', function () {

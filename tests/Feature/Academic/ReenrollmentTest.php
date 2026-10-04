@@ -33,7 +33,7 @@ beforeEach(function () {
     filament()->setTenant($this->jakare);
     app(CurrentOrganization::class)->set($this->jakare);
 
-    $this->s2026 = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true]);
+    $this->s2026 = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31']);
     $this->futbol = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $this->sub10 = Group::factory()->for($this->futbol)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id, 'min_age' => 9, 'max_age' => 10]);
     $this->sub12 = Group::factory()->for($this->futbol)->create(['name' => 'Sub-12', 'organization_id' => $this->jakare->id, 'min_age' => 11, 'max_age' => 12]);
@@ -46,16 +46,17 @@ beforeEach(function () {
 
 function newSeason(): Season
 {
-    return Season::factory()->for(test()->jakare)->create(['name' => '2027', 'starts_on' => '2027-01-01', 'ends_on' => '2027-12-31', 'is_current' => true]);
+    return Season::factory()->for(test()->jakare)->create(['name' => '2027', 'starts_on' => '2027-01-01', 'ends_on' => '2027-12-31']);
 }
 
 describe('inscripciones de temporadas anteriores', function () {
-    it('se cierran solas al cambiar la temporada actual', function () {
+    it('se cierran solas cuando termina su temporada', function () {
         // Activo y becado (la beca parcial se cobra con descuento).
         expect(Enrollment::query()->billable()->count())->toBe(2)
             ->and($this->enrollMateo->fresh()->isFinished())->toBeFalse();
 
         newSeason();
+        $this->travelTo('2027-01-05 12:00:00');
 
         expect(Enrollment::query()->billable()->count())->toBe(0)
             ->and($this->enrollMateo->fresh()->isFinished())->toBeTrue()
@@ -71,6 +72,7 @@ describe('inscripciones de temporadas anteriores', function () {
 
     it('una finalizada no se puede editar', function () {
         newSeason();
+        $this->travelTo('2027-01-05 12:00:00');
 
         Livewire::test(ManageEnrollments::class)
             ->filterTable('season', $this->s2026->id)

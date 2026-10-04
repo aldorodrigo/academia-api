@@ -8,13 +8,16 @@ use App\Models\Guardian;
 use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\User;
+use App\Support\Phone;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Crea (o renueva) una invitación y la envía por email.
+ * Crea (o renueva) una invitación a un celular, a un correo o a los dos. Con correo, la envía por email;
+ * con celular, quien invita la comparte por WhatsApp (link `wa.me` al número, sin costo). Con los dos,
+ * le llega por los dos lados.
  *
  * Devuelve el token en claro: es la única vez que existe, para mostrar el
  * link y el QR en el panel.
@@ -25,19 +28,36 @@ class CreateInvitation
 
     /**
      * Con $guardian, al aceptarla el tutor queda vinculado a la cuenta y ve a sus hijos.
+     * Con $groupIds (técnico), queda asignado a esas categorías.
      *
      * @param  list<array{role: string, starts_on?: ?string, ends_on?: ?string}>  $roles
+     * @param  list<int>  $groupIds
      * @return array{0: Invitation, 1: string}
      */
-    public function handle(Organization $organization, string $email, array $roles, ?User $invitedBy = null, ?Guardian $guardian = null): array
-    {
+    public function handle(
+        Organization $organization,
+        ?string $email,
+        array $roles,
+        ?User $invitedBy = null,
+        ?Guardian $guardian = null,
+        ?string $name = null,
+        array $groupIds = [],
+        ?string $phone = null,
+    ): array {
         $roles = $this->normalizeRoles($roles);
-        $email = mb_strtolower(trim($email));
+        $phone = filled($phone) ? Phone::mobile($phone) : null;
+        $email = filled($email) ? mb_strtolower(trim($email)) : null;
 
-        return $this->current->run($organization, function (Organization $organization) use ($email, $roles, $invitedBy, $guardian) {
+        if ($phone === null && $email === null) {
+            throw ValidationException::withMessages(['email' => 'Ingresá el celular o el correo.']);
+        }
+
+        return $this->current->run($organization, function (Organization $organization) use ($email, $phone, $roles, $invitedBy, $guardian, $name, $groupIds) {
             // Una sola invitación pendiente por persona: la nueva reemplaza a las anteriores.
             Invitation::query()
-                ->where('email', $email)
+                ->where(fn ($query) => $query
+                    ->when($phone, fn ($query) => $query->orWhere('phone', $phone))
+                    ->when($email, fn ($query) => $query->orWhere('email', $email)))
                 ->whereNull('accepted_at')
                 ->whereNull('revoked_at')
                 ->each(fn (Invitation $old) => $old->update(['revoked_at' => now()]));
@@ -47,14 +67,19 @@ class CreateInvitation
             $invitation = Invitation::query()->create([
                 'organization_id' => $organization->id,
                 'email' => $email,
+                'phone' => $phone,
+                'name' => filled($name) ? trim($name) : null,
                 'roles' => $roles,
+                'group_ids' => $groupIds === [] ? null : array_values(array_map('intval', $groupIds)),
                 'guardian_id' => $guardian?->id,
                 'token_hash' => Invitation::hashToken($token),
                 'invited_by' => $invitedBy?->id,
                 'expires_at' => now()->addDays(Invitation::VALID_DAYS),
             ]);
 
-            Mail::to($email)->queue(new InvitationMail($invitation, $token));
+            if ($email !== null) {
+                Mail::to($email)->queue(new InvitationMail($invitation, $token));
+            }
 
             return [$invitation, $token];
         });
@@ -65,7 +90,16 @@ class CreateInvitation
      */
     public function resend(Invitation $invitation): string
     {
-        [, $token] = $this->handle($invitation->organization, $invitation->email, $invitation->roles, $invitation->invitedBy, $invitation->guardian);
+        [, $token] = $this->handle(
+            $invitation->organization,
+            $invitation->email,
+            $invitation->roles,
+            $invitation->invitedBy,
+            $invitation->guardian,
+            $invitation->name,
+            $invitation->group_ids ?? [],
+            $invitation->phone,
+        );
 
         return $token;
     }
@@ -77,16 +111,21 @@ class CreateInvitation
      */
     public function forGuardian(Guardian $guardian, ?User $invitedBy = null): array
     {
-        if (blank($guardian->email)) {
-            throw ValidationException::withMessages(['email' => 'El tutor no tiene email.']);
+        $phone = Phone::mobile($guardian->phone);
+
+        if ($phone === null && blank($guardian->email)) {
+            throw ValidationException::withMessages(['email' => 'El tutor no tiene celular ni correo.']);
         }
 
+        // Con correo se le manda por email; con celular, se comparte por WhatsApp (con los dos, por los dos).
         return $this->handle(
             $guardian->organization,
             $guardian->email,
             [['role' => OrganizationRole::Guardian->value]],
             $invitedBy,
             $guardian,
+            $guardian->full_name,
+            phone: $phone,
         );
     }
 

@@ -1,6 +1,5 @@
 <?php
 
-use App\Actions\Billing\GenerateMonthlyCharges;
 use App\Enums\OrganizationRole;
 use App\Filament\Resources\Charges\Pages\ManageCharges;
 use App\Filament\Resources\DiscountRules\Pages\ManageDiscountRules;
@@ -20,7 +19,6 @@ use App\Models\Student;
 use App\Models\Tariff;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
-use Carbon\CarbonImmutable;
 use Livewire\Livewire;
 
 beforeEach(function () {
@@ -32,9 +30,9 @@ beforeEach(function () {
     filament()->setTenant($this->jakare);
     app(CurrentOrganization::class)->set($this->jakare);
 
-    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30', 'is_current' => true]);
+    $this->season = Season::factory()->for($this->jakare)->create(['name' => '2026', 'starts_on' => '2026-02-01', 'ends_on' => '2026-11-30']);
     Tariff::factory()->create(['fee_concept_id' => FeeConcept::monthlyFee($this->jakare)->id, 'season_id' => $this->season->id, 'valid_from' => '2026-02-01']);
-    $this->enrollment = Enrollment::factory()->create(['student_id' => Student::factory()->for($this->jakare)->create()->id, 'season_id' => $this->season->id]);
+    $this->enrollment = Enrollment::factory()->create(['student_id' => Student::factory()->for($this->jakare)->create()->id, 'season_id' => $this->season->id, 'enrolled_on' => '2026-09-01']);
 });
 
 it('las páginas de finanzas cargan', function (string $path) {
@@ -43,18 +41,26 @@ it('las páginas de finanzas cargan', function (string $path) {
     $this->get("/admin/jakare/{$path}")->assertOk();
 })->with(['cargos', 'tarifas', 'descuentos', 'becas', 'profile']);
 
-it('generar cuotas propone el mes actual y es idempotente', function () {
+it('generar cuotas propone la temporada vigente, emite hasta hoy o toda la temporada y es idempotente', function () {
+    $this->season->update(['fee_frequency' => 'mensual']);
+
     Livewire::test(ManageCharges::class)
         ->mountAction('generate')
-        ->assertSet('mountedActions.0.data.period', '2026-09-01')
+        ->assertSet('mountedActions.0.data.season_id', $this->season->id)
+        ->assertSet('mountedActions.0.data.scope', 'today')
         ->callMountedAction()
         ->assertNotified('Cuotas generadas: 1.');
 
     Livewire::test(ManageCharges::class)
-        ->callAction('generate', data: ['period' => '2026-09-01'])
+        ->callAction('generate', data: ['season_id' => $this->season->id, 'scope' => 'today'])
         ->assertNotified('Cuotas generadas: 0.');
 
-    expect(Charge::query()->count())->toBe(1);
+    // Septiembre ya estaba; toda la temporada suma octubre y noviembre.
+    Livewire::test(ManageCharges::class)
+        ->callAction('generate', data: ['season_id' => $this->season->id, 'scope' => 'season'])
+        ->assertNotified('Cuotas generadas: 2.');
+
+    expect(Charge::query()->count())->toBe(3);
 });
 
 it('anular pide motivo', function () {
@@ -101,8 +107,8 @@ describe('cobros', function () {
     beforeEach(function () {
         $this->family = Family::factory()->for($this->jakare)->create(['name' => 'Familia Benítez']);
         $this->enrollment->student->update(['family_id' => $this->family->id]);
-        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-08-01'));
-        app(GenerateMonthlyCharges::class)->handle($this->jakare, CarbonImmutable::parse('2026-09-01'));
+        issueMonth($this->jakare, '2026-08');
+        issueMonth($this->jakare, '2026-09');
     });
 
     it('las páginas de cobros cargan', function () {

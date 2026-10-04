@@ -13,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Caja, banco o billetera. El saldo es la suma de sus movimientos (nunca se edita).
  */
-#[Fillable(['organization_id', 'name', 'type', 'is_active'])]
+#[Fillable(['organization_id', 'name', 'type', 'transfer_details', 'is_active'])]
 class MoneyAccount extends Model
 {
     /** @use HasFactory<MoneyAccountFactory> */

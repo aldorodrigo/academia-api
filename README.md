@@ -24,6 +24,9 @@ docker run --rm -v "$(pwd):/var/www/html" -w /var/www/html laravelsail/php84-com
 ```
 
 Si el puerto 80 está ocupado (ej. Apache en WSL), usá `APP_PORT=8080` y `APP_URL=http://localhost:8080` en `.env`.
+Para correrlo junto a otro proyecto Sail, cambiá en `.env` los puertos que choquen (`APP_PORT`, `VITE_PORT`,
+`FORWARD_DB_PORT`, `FORWARD_REDIS_PORT`, `FORWARD_MAILPIT_PORT`, `FORWARD_MAILPIT_DASHBOARD_PORT`); la imagen es
+`academia-api/app` para no pisar la `sail-8.5/app` de otros proyectos.
 Después de `composer require` o de cambiar código de jobs/mails, reiniciá los workers: `sail artisan queue:restart`.
 
 - Panel: http://localhost/admin (`admin@academia.test` / `password`, solo desarrollo)
@@ -50,5 +53,10 @@ openssl rand -base64 32 > secrets/db_root_password
 openssl rand -base64 32 > secrets/redis_password
 docker compose -f compose.production.yaml up -d --build
 docker compose -f compose.production.yaml exec app php artisan migrate --force
-docker compose -f compose.production.yaml exec app php artisan shield:generate --all --panel=admin
+# la imagen es de solo lectura: las policies ya están en el repo, solo se cargan los permisos
+docker compose -f compose.production.yaml exec app php artisan shield:generate --all --panel=admin --option=permissions
 ```
+
+`APP_DOMAIN` y `ACME_EMAIL` son variables de compose: van en `.env` (no en `.env.production`). Los límites de
+memoria, el buffer pool de MariaDB y los procesos de Horizon se ajustan con `DB_BUFFER_POOL_SIZE`, `*_MEM_LIMIT`
+y `HORIZON_MAX_PROCESSES`. Para compartir el servidor con otros sitios, ver [`docker/edge/README.md`](docker/edge/README.md).

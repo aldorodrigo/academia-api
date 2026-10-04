@@ -18,7 +18,7 @@ beforeEach(function () {
     Mail::fake();
     $this->jakare = Organization::factory()->create(['slug' => 'jakare']);
     $this->season = Season::factory()->for($this->jakare)->create([
-        'name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true,
+        'name' => '2026', 'starts_on' => '2026-01-01', 'ends_on' => '2026-12-31',
     ]);
     $this->program = Program::factory()->for($this->jakare)->create(['name' => 'Fútbol']);
     $this->sub10 = Group::factory()->for($this->program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id, 'min_age' => 9, 'max_age' => 10]);
@@ -53,6 +53,15 @@ it('reutiliza el tutor por correo y los hermanos comparten familia', function ()
     expect(Guardian::query()->count())->toBe(1)
         ->and($sofia->fresh()->family_id)->toBe($mateo->fresh()->family_id)
         ->and(Guardian::query()->sole()->family_id)->toBe($mateo->fresh()->family_id);
+});
+
+it('reconoce al tutor por el celular aunque esté escrito distinto', function () {
+    register([], [['first_name' => 'Ana', 'last_name' => 'Benítez', 'phone' => '0981 123 456']]);
+    register(['first_name' => 'Sofía', 'birth_date' => '2017-07-02'], [['first_name' => 'Ana', 'last_name' => 'B.', 'phone' => '+595 981 123456']]);
+
+    app(CurrentOrganization::class)->set($this->jakare);
+    expect(Guardian::query()->count())->toBe(1)
+        ->and(Guardian::query()->sole()->phone)->toBe('+595981123456');
 });
 
 it('invita solo a quien lo pidió, tiene correo y no usa la app', function () {

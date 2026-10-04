@@ -37,9 +37,15 @@ class DatabaseSeeder extends Seeder
 
         $jakare->seasons()->updateOrCreate(
             ['name' => '2026'],
-            ['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31', 'is_current' => true],
+            ['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31'],
         );
 
         app(CurrentOrganization::class)->run($jakare, fn () => $this->call(AcademicSeeder::class));
+
+        // Los usuarios de prueba ya tienen el email verificado y Jakare ya está configurado
+        // (la guía "Primeros pasos" no se abre sola).
+        User::query()->whereNull('email_verified_at')->update(['email_verified_at' => now()]);
+        $jakare->onboarding_dismissed_at ??= now();
+        $jakare->save();
     }
 }

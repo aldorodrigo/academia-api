@@ -1,0 +1,19 @@
+# Para un servidor compartido con otros sitios (por ejemplo, con Editorial Data):
+# el proxy de entrada de docker/edge/ tiene los puertos 80 y 443 y el certificado
+# HTTPS; el Caddy de este proyecto solo atiende HTTP dentro de la red "edge".
+#
+#   docker compose -f compose.production.yaml -f compose.edge.yaml up -d
+#
+# Con APP_DOMAIN=:80 en el .env de compose (ver docker/edge/README.md).
+services:
+    proxy:
+        ports: !reset []
+        networks:
+            public: {}
+            edge:
+                aliases:
+                    - tuku-proxy
+
+networks:
+    edge:
+        external: true
