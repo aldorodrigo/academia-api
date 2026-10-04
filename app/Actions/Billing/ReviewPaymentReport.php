@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Notifications\PaymentReportReviewed;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -50,10 +51,14 @@ class ReviewPaymentReport
                 PaymentMethod::Transfer,
                 $receivedOn,
                 $by,
-                payer: Guardian::query()->where('family_id', $family->id)->where('user_id', $report->user_id)->first(),
+                payer: $report->registered_by_staff
+                    ? $report->guardian
+                    : Guardian::query()->where('family_id', $family->id)->where('user_id', $report->user_id)->first(),
                 allocations: $allocations,
                 reference: $report->reference,
-                notes: 'Comprobante informado desde la app.',
+                notes: $report->registered_by_staff
+                    ? "Transferencia registrada por {$report->user->name} desde la app."
+                    : 'Comprobante informado desde la app.',
             );
 
             $report->update([
@@ -67,7 +72,16 @@ class ReviewPaymentReport
             return $report;
         });
 
-        $report->user->notify(new PaymentReportReviewed($report->load('payment')));
+        $report->load(['payment', 'family']);
+        if ($report->registered_by_staff) {
+            // La familia recibe el recibo; quien la registró se entera si la aprobó otro.
+            Notification::send(CollectCashPayment::familyUsers($report->family), new PaymentReportReviewed($report));
+            if (! $report->user->is($by)) {
+                $report->user->notify(new PaymentReportReviewed($report, registrant: true));
+            }
+        } else {
+            $report->user->notify(new PaymentReportReviewed($report));
+        }
 
         return $report;
     }
@@ -86,7 +100,8 @@ class ReviewPaymentReport
             return $report;
         });
 
-        $report->user->notify(new PaymentReportReviewed($report));
+        // Si la registró el club, el motivo le llega a quien la registró (la familia no la informó).
+        $report->user->notify(new PaymentReportReviewed($report->load('family'), registrant: $report->registered_by_staff));
 
         return $report;
     }
@@ -96,7 +111,7 @@ class ReviewPaymentReport
      */
     private function lockPending(PaymentReport $report): PaymentReport
     {
-        $report = PaymentReport::query()->withoutGlobalScopes()->with(['family', 'user'])->lockForUpdate()->findOrFail($report->id);
+        $report = PaymentReport::query()->withoutGlobalScopes()->with(['family', 'user', 'guardian'])->lockForUpdate()->findOrFail($report->id);
 
         if (! $report->isPending()) {
             throw ValidationException::withMessages(['status' => 'Este comprobante ya fue revisado.']);
@@ -106,11 +121,12 @@ class ReviewPaymentReport
     }
 
     /**
-     * La cuenta informada por el tutor (si sigue activa), si no la primera bancaria, si no cualquiera activa.
+     * La cuenta informada (si sigue activa y es del club), si no la primera bancaria, si no cualquiera activa del club.
      */
     private function defaultAccount(PaymentReport $report): MoneyAccount
     {
-        $accounts = MoneyAccount::query()->withoutGlobalScopes()
+        // Sin las cajas personales: una transferencia no entra en la caja de un técnico.
+        $accounts = MoneyAccount::query()->withoutGlobalScopes()->club()
             ->where('organization_id', $report->organization_id)
             ->where('is_active', true)
             ->orderBy('id')

@@ -17,8 +17,10 @@ use Spatie\Activitylog\Support\LogOptions;
  * Pago por transferencia informado por el tutor con su comprobante. Queda
  * pendiente hasta que alguien con "Validar comprobantes" lo aprueba (se registra
  * el pago con su recibo) o lo rechaza con motivo (business-logic.md regla 13).
+ * También lo registra el club en nombre de la familia (`registered_by_staff`: la
+ * captura que llegó por WhatsApp); ahí `user_id` es quien lo registró.
  */
-#[Fillable(['organization_id', 'family_id', 'user_id', 'money_account_id', 'amount', 'paid_on', 'reference', 'notes', 'charge_ids', 'proof_path', 'proof_name', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'payment_id'])]
+#[Fillable(['organization_id', 'family_id', 'user_id', 'registered_by_staff', 'guardian_id', 'money_account_id', 'amount', 'paid_on', 'reference', 'notes', 'charge_ids', 'proof_path', 'proof_name', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'payment_id'])]
 class PaymentReport extends Model
 {
     use BelongsToOrganization, LogsActivity;
@@ -33,6 +35,7 @@ class PaymentReport extends Model
             'charge_ids' => 'array',
             'status' => PaymentReportStatus::class,
             'reviewed_at' => 'datetime',
+            'registered_by_staff' => 'boolean',
         ];
     }
 
@@ -83,7 +86,17 @@ class PaymentReport extends Model
     }
 
     /**
-     * Quien lo informó.
+     * Tutor que mandó la transferencia (cuando la registra el club).
+     *
+     * @return BelongsTo<Guardian, $this>
+     */
+    public function guardian(): BelongsTo
+    {
+        return $this->belongsTo(Guardian::class);
+    }
+
+    /**
+     * Quien lo informó (el tutor) o lo registró (el club).
      *
      * @return BelongsTo<User, $this>
      */

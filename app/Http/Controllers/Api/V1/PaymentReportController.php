@@ -8,7 +8,6 @@ use App\Actions\Billing\SubmitPaymentReport;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\PaymentReportResource;
 use App\Http\Resources\Api\V1\ReviewPaymentReportResource;
-use App\Models\MoneyAccount;
 use App\Models\PaymentReport;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
@@ -109,7 +108,7 @@ class PaymentReportController extends Controller
 
         $account = null;
         if (isset($data['money_account_id'])) {
-            $account = MoneyAccount::query()->where('is_active', true)->find($data['money_account_id']);
+            $account = PaymentReportAccess::paymentAccounts()->firstWhere('id', (int) $data['money_account_id']);
             if ($account === null) {
                 throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta activa.']);
             }

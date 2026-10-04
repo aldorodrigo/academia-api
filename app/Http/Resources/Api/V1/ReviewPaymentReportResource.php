@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\RegisterPayment;
 use App\Models\Charge;
 use App\Models\MoneyAccount;
@@ -31,7 +32,7 @@ class ReviewPaymentReportResource extends PaymentReportResource
             'reported_by' => $this->user->name,
             'pending_balance' => (int) app(RegisterPayment::class)->pendingCharges($this->family)
                 ->sum(fn (Charge $charge) => $charge->pendingAmount()),
-            'money_accounts' => MoneyAccount::query()->where('is_active', true)->orderBy('id')->get()
+            'money_accounts' => PaymentReportAccess::paymentAccounts()
                 ->map(fn (MoneyAccount $account) => ['id' => $account->id, 'name' => $account->name])->values(),
         ];
     }

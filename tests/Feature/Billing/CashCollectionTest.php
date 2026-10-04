@@ -5,6 +5,7 @@ use App\Actions\Treasury\TransferFunds;
 use App\Enums\CashDepositStatus;
 use App\Enums\OrganizationRole;
 use App\Enums\PaymentMethod;
+use App\Enums\PaymentReportStatus;
 use App\Filament\Resources\CashDeposits\Pages\ManageCashDeposits;
 use App\Filament\Resources\MoneyAccounts\Pages\ListMoneyAccounts;
 use App\Models\CashDeposit;
@@ -28,9 +29,13 @@ use App\Models\User;
 use App\Notifications\CashDepositReported;
 use App\Notifications\CashDepositReviewed;
 use App\Notifications\PaymentReceived;
+use App\Notifications\PaymentReported;
+use App\Notifications\PaymentReportReviewed;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
 use Spatie\Permission\PermissionRegistrar;
 
@@ -445,5 +450,131 @@ describe('panel', function () {
         $this->actingAs($this->coach, 'web');
 
         $this->get('/admin/jakare/depositos-de-efectivo')->assertForbidden();
+    });
+});
+
+function registerTransfer(User $user, array $data = [])
+{
+    app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+    return test()->actingAs($user, 'sanctum')->post('/api/v1/collections/transfers', [
+        'student_id' => test()->mateo->id,
+        'amount' => 300000,
+        'paid_on' => '2026-09-02',
+        'proof' => UploadedFile::fake()->image('captura-whatsapp.jpg'),
+        'charge_ids' => [cashCharge(test()->mateo, '2026-08')->id, cashCharge(test()->sofia, '2026-08')->id],
+        'money_account_id' => test()->bank->id,
+        'guardian_id' => test()->guardian->id,
+        'reference' => 'Transf. 99812',
+        ...$data,
+    ], ['X-Organization' => 'jakare', 'Accept' => 'application/json']);
+}
+
+describe('transferencia que la familia le mandó al club', function () {
+    beforeEach(function () {
+        Storage::fake('local');
+    });
+
+    it('la ficha de cobro trae las cuentas y si se aprueba al registrarla', function () {
+        $box = MoneyAccount::ensureCashBoxOf($this->coach, $this->jakare);
+
+        cashApi($this->coach, 'GET', "collections/students/{$this->mateo->id}")
+            ->assertJsonPath('data.transfer_accounts', [['id' => $this->bank->id, 'name' => 'Banco Itaú']])
+            ->assertJsonPath('data.approves_transfers', false)
+            ->assertJsonPath('data.cash_box.id', $box->id);
+        cashApi($this->treasurer, 'GET', "collections/students/{$this->mateo->id}")
+            ->assertJsonPath('data.approves_transfers', true);
+    });
+
+    it('el técnico la registra: queda en revisión con la imagen y quién la registró', function () {
+        $response = registerTransfer($this->coach)
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'pendiente')
+            ->assertJsonPath('data.registered_by', 'Juan Pérez')
+            ->assertJsonPath('data.proof_name', 'captura-whatsapp.jpg')
+            ->assertJsonPath('data.receipt_number', null)
+            ->assertJsonPath('message', 'Transferencia registrada. Queda en revisión hasta que la apruebe el tesorero.');
+
+        $report = PaymentReport::query()->sole();
+        expect($report->registered_by_staff)->toBeTrue()
+            ->and($report->user_id)->toBe($this->coach->id)
+            ->and($report->guardian_id)->toBe($this->guardian->id)
+            ->and($report->family_id)->toBe($this->family->id)
+            ->and(Payment::query()->count())->toBe(0);
+        Storage::disk('local')->assertExists($report->proof_path);
+        expect($response->json('data.proof_url'))->toContain('/comprobantes-de-pago/'.$report->id);
+
+        Notification::assertSentTo($this->treasurer, PaymentReported::class, fn (PaymentReported $n) => $n->body === 'Juan Pérez registró una transferencia de ₲ 300.000 (Familia Benítez).');
+
+        // La familia la ve en su estado de cuenta.
+        cashApi($this->tutor, 'GET', 'account')
+            ->assertJsonPath('data.payment_reports.0.registered_by', 'Juan Pérez')
+            ->assertJsonPath('data.pending_reports_amount', 300000);
+
+        // El tesorero la aprueba: pago por transferencia al banco, recibo a la familia y aviso al técnico.
+        cashApi($this->treasurer, 'POST', "payment-reports/{$report->id}/approve")->assertOk()->assertJsonPath('data.status', 'aprobado');
+        $payment = Payment::query()->sole();
+        expect($payment->method)->toBe(PaymentMethod::Transfer)
+            ->and($payment->money_account_id)->toBe($this->bank->id)
+            ->and($payment->guardian_id)->toBe($this->guardian->id)
+            ->and($payment->notes)->toBe('Transferencia registrada por Juan Pérez desde la app.');
+        Notification::assertSentTo($this->tutor, PaymentReportReviewed::class, fn (PaymentReportReviewed $n) => $n->body === 'Aprobamos tu pago de ₲ 300.000. Recibo N° 000001.');
+        Notification::assertSentTo($this->coach, PaymentReportReviewed::class, fn (PaymentReportReviewed $n) => $n->body === 'Aprobamos la transferencia de ₲ 300.000 de la Familia Benítez que registraste. Recibo N° 000001.');
+    });
+
+    it('si el tesorero la rechaza, el motivo le llega a quien la registró', function () {
+        registerTransfer($this->coach)->assertCreated();
+        $report = PaymentReport::query()->sole();
+
+        cashApi($this->treasurer, 'POST', "payment-reports/{$report->id}/reject", ['reason' => 'No está en el banco.'])->assertOk();
+
+        Notification::assertSentTo($this->coach, PaymentReportReviewed::class, fn (PaymentReportReviewed $n) => $n->body === 'No aprobamos la transferencia de ₲ 300.000 de la Familia Benítez que registraste: No está en el banco.');
+        Notification::assertNotSentTo($this->tutor, PaymentReportReviewed::class);
+    });
+
+    it('el tesorero la registra aprobada al instante, con recibo', function () {
+        registerTransfer($this->treasurer, ['money_account_id' => null])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'aprobado')
+            ->assertJsonPath('data.registered_by', 'Laura Gómez')
+            ->assertJsonPath('data.receipt_number', '000001')
+            ->assertJsonPath('message', 'Transferencia registrada. Recibo N° 000001.');
+
+        $report = PaymentReport::query()->sole();
+        expect($report->status)->toBe(PaymentReportStatus::Approved)
+            ->and($report->reviewed_by)->toBe($this->treasurer->id)
+            // Sin cuenta elegida, la primera bancaria del club.
+            ->and($report->payment->money_account_id)->toBe($this->bank->id)
+            ->and(cashCharge($this->mateo, '2026-08')->fresh()->pendingAmount())->toBe(0);
+        Notification::assertNotSentTo($this->treasurer, PaymentReported::class);
+        Notification::assertSentTo($this->tutor, PaymentReportReviewed::class);
+        Notification::assertNotSentTo($this->treasurer, PaymentReportReviewed::class);
+    });
+
+    it('valida comprobante, cuotas, cuenta y permiso', function () {
+        registerTransfer($this->coach, ['proof' => null])->assertUnprocessable()->assertJsonValidationErrors('proof');
+        registerTransfer($this->coach, ['paid_on' => '2026-09-04'])->assertUnprocessable()->assertJsonValidationErrors('paid_on');
+        registerTransfer($this->coach, ['money_account_id' => MoneyAccount::ensureCashBoxOf($this->coach, $this->jakare)->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('money_account_id');
+        registerTransfer($this->coach, ['money_account_id' => $this->cash->id])->assertUnprocessable()->assertJsonValidationErrors('money_account_id');
+        registerTransfer($this->coach, ['student_id' => $this->lucia->id])->assertNotFound();
+        registerTransfer($this->tutor)->assertForbidden();
+
+        registerTransfer($this->coach)->assertCreated();
+        registerTransfer($this->coach, ['charge_ids' => [cashCharge($this->mateo, '2026-08')->id]])
+            ->assertUnprocessable()
+            ->assertJsonPath('errors.charge_ids.0', 'Ya hay una transferencia en revisión para «Cuota agosto 2026».');
+    });
+
+    it('las cajas personales no aparecen al aprobar comprobantes', function () {
+        collectFrom($this->coach)->assertCreated();
+        registerTransfer($this->coach, ['charge_ids' => [cashCharge($this->mateo, '2026-09')->id], 'amount' => 150000])->assertCreated();
+
+        cashApi($this->treasurer, 'GET', 'payment-reports')
+            ->assertJsonPath('data.0.money_accounts', [['id' => $this->cash->id, 'name' => 'Caja'], ['id' => $this->bank->id, 'name' => 'Banco Itaú']]);
+
+        $box = MoneyAccount::cashBoxOf($this->coach, $this->jakare);
+        cashApi($this->treasurer, 'POST', 'payment-reports/'.PaymentReport::query()->sole()->id.'/approve', ['money_account_id' => $box->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('money_account_id');
     });
 });

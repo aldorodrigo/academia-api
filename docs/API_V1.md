@@ -1477,6 +1477,8 @@ vigente o próxima) en sus grupos. `search` opcional (nombre, apellido o documen
   corresponde). `under_review`: está en un comprobante de transferencia en revisión.
 - `family`: `null` si el alumno todavía no tiene cuotas (se crea al cobrar). `credit`: saldo a favor de la familia.
 - `cash_box`: la caja de quien cobra (`null` si todavía no cobró nunca). `active: false` = caja cerrada.
+- `transfer_accounts`: bancos y billeteras activas del club, para registrar una transferencia (`[{ "id", "name" }]`).
+  `approves_transfers`: `true` si quien cobra valida comprobantes (la transferencia queda aprobada al registrarla).
 - Alumno fuera de su alcance → `404`.
 
 #### `POST collections`
@@ -1508,6 +1510,36 @@ vigente o próxima) en sus grupos. `search` opcional (nombre, apellido o documen
   familia. `applied`: lo imputado a cuotas.
 - Caja cerrada → `422` "Tu caja está cerrada. Hablá con el tesorero.". Sin permiso → `403`.
 - Avisa a la familia (push y correo): "Recibimos tu pago de ₲ 285.000 en efectivo (cobró Juan Pérez). Recibo N° 000124.".
+
+#### `POST collections/transfers` (multipart)
+
+La transferencia que la familia le mandó a quien cobra (captura de WhatsApp). Es un comprobante de transferencia
+(«Comprobantes de transferencia») registrado por el club.
+
+| Campo | |
+|---|---|
+| `student_id` | obligatorio, en su alcance |
+| `amount` | entero, obligatorio, > 0 |
+| `paid_on` | fecha, obligatoria, no futura |
+| `proof` | archivo obligatorio: jpg, png, webp, heic o pdf, hasta 5 MB |
+| `charge_ids[]` | opcional: cuotas pendientes de la familia (vacío = pago a cuenta) |
+| `money_account_id` | opcional: una de `transfer_accounts` (sin elegir, la primera bancaria del club) |
+| `guardian_id` | opcional: tutor que la mandó |
+| `reference` | opcional, hasta 100 |
+| `notes` | opcional, hasta 500 |
+
+→ `201` con el comprobante y `message`:
+
+```json
+{ "data": { "…": "comprobante", "status": "aprobado", "receipt_number": "000125", "registered_by": "Laura Gómez" },
+  "message": "Transferencia registrada. Recibo N° 000125." }
+```
+
+- Si quien la registra valida comprobantes (`approves_transfers`), queda **aprobada** con el pago y su recibo; si no,
+  **pendiente** ("Transferencia registrada. Queda en revisión hasta que la apruebe el tesorero.") y avisa a quienes
+  validan: "Juan Pérez registró una transferencia de ₲ 300.000 (Familia Benítez).".
+- Una cuota que ya está en otro comprobante en revisión → `422` "Ya hay una transferencia en revisión para «…».".
+  Cuenta que no es banco o billetera del club → `422`.
 
 ### Mi caja (permiso `collect_payments`)
 
@@ -1593,3 +1625,13 @@ revisado → `422`. Avisa al técnico: "No confirmamos tu depósito de ₲ 300.0
 Con copia por correo. `data`: `{ "type": "payment_received", "route": "/estado-de-cuenta" }` a la familia,
 `{ "type": "cash_deposit", "route": "/efectivo" }` a quienes validan y
 `{ "type": "cash_deposit_reviewed", "route": "/mi-caja" }` al técnico.
+
+### Comprobantes de transferencia (se amplía)
+
+- En el objeto comprobante, `registered_by`: nombre de quien lo registró si lo cargó el club (`null` si lo informó la
+  familia). La familia lo ve en `GET account` como cualquier comprobante.
+- Al aprobar uno registrado por el club, el push "Aprobamos tu pago…" va a la familia (tutores con cuenta y alumnos
+  adultos) y, si lo aprobó otra persona, a quien lo registró: "Aprobamos la transferencia de ₲ 300.000 de la Familia
+  Benítez que registraste. Recibo N° 000125." (`route`: `/cobrar`). Al rechazarlo, el motivo le llega solo a quien lo
+  registró.
+- `money_accounts` (quien valida) y `POST payment-reports/{id}/approve` no incluyen las cajas personales.

@@ -5,10 +5,13 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\CollectCashPayment;
 use App\Actions\Billing\EarlyPaymentDiscount;
+use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\RegisterPayment;
+use App\Actions\Billing\SubmitPaymentReport;
 use App\Enums\ChargeStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\ChargeResource;
+use App\Http\Resources\Api\V1\PaymentReportResource;
 use App\Http\Resources\Api\V1\PaymentResource;
 use App\Models\Charge;
 use App\Models\Guardian;
@@ -18,9 +21,11 @@ use App\Models\Student;
 use App\Models\User;
 use App\Support\Money;
 use App\Support\Tenancy\CurrentOrganization;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Cobro en efectivo desde la app (permiso "Cobrar en efectivo desde la app"): a quién puede
@@ -108,8 +113,69 @@ class CollectionController extends Controller
                     ];
                 })->values(),
                 'cash_box' => $this->box(MoneyAccount::cashBoxOf($user, $this->current->get())),
+                // Para registrar una transferencia que la familia le mandó: a qué cuenta y si queda aprobada al toque.
+                'transfer_accounts' => PaymentReportAccess::clubTransferAccounts()
+                    ->map(fn (MoneyAccount $account) => ['id' => $account->id, 'name' => $account->name])->values(),
+                'approves_transfers' => PaymentReportAccess::canReview($user, $this->current->get()),
             ],
         ]);
+    }
+
+    /**
+     * Registra la transferencia que la familia le mandó (captura o PDF): aprobada con recibo si quien la registra
+     * valida comprobantes; si no, en revisión.
+     */
+    public function transfer(Request $request, SubmitPaymentReport $submit): JsonResponse
+    {
+        $user = $this->authorizeCollect($request);
+        $today = $this->current->get()->today()->toDateString();
+        $data = $request->validate([
+            'student_id' => ['required', 'integer'],
+            'amount' => ['required', 'integer', 'min:1', 'max:1000000000'],
+            'paid_on' => ['required', 'date', "before_or_equal:{$today}"],
+            'proof' => ['required', 'file', 'mimes:jpg,jpeg,png,webp,heic,pdf', 'max:5120'],
+            'charge_ids' => ['nullable', 'array', 'max:50'],
+            'charge_ids.*' => ['integer', 'distinct'],
+            'money_account_id' => ['nullable', 'integer'],
+            'guardian_id' => ['nullable', 'integer'],
+            'reference' => ['nullable', 'string', 'max:100'],
+            'notes' => ['nullable', 'string', 'max:500'],
+        ], [
+            'amount.required' => 'Ingresá el monto de la transferencia.',
+            'amount.min' => 'El monto tiene que ser mayor a cero.',
+            'paid_on.before_or_equal' => 'La fecha de la transferencia no puede ser futura.',
+            'proof.required' => 'Adjuntá la captura o el PDF de la transferencia.',
+            'proof.mimes' => 'El comprobante tiene que ser una foto o un PDF.',
+            'proof.max' => 'El comprobante pesa más de 5 MB.',
+        ]);
+
+        $student = $this->findStudent($user, (int) $data['student_id']);
+        $guardian = isset($data['guardian_id']) ? Guardian::query()->find($data['guardian_id']) : null;
+        if (isset($data['guardian_id']) && $guardian === null) {
+            throw ValidationException::withMessages(['guardian_id' => 'Elegí un tutor de la familia.']);
+        }
+
+        $report = $submit->onBehalf(
+            $user,
+            $student,
+            (int) $data['amount'],
+            CarbonImmutable::parse($data['paid_on']),
+            $request->file('proof'),
+            array_map('intval', $data['charge_ids'] ?? []),
+            isset($data['money_account_id']) ? (int) $data['money_account_id'] : null,
+            $guardian,
+            $data['reference'] ?? null,
+            $data['notes'] ?? null,
+        );
+
+        $report->load(['moneyAccount', 'payment', 'user']);
+
+        return response()->json([
+            'data' => (new PaymentReportResource($report))->toArray($request),
+            'message' => $report->payment !== null
+                ? 'Transferencia registrada. Recibo N° '.$report->payment->receiptLabel().'.'
+                : 'Transferencia registrada. Queda en revisión hasta que la apruebe el tesorero.',
+        ], 201);
     }
 
     public function store(Request $request, CollectCashPayment $collect): JsonResponse

@@ -296,6 +296,12 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   confirmar** y la plata sigue en su caja. Quien valida comprobantes lo confirma (transferencia de su caja a esa
   cuenta, con la fecha del depósito) o lo rechaza con motivo; en los dos casos se le avisa. No se deposita más de lo
   disponible (saldo menos lo que ya está por confirmar). Anular un pago cobrado así saca la plata de su caja.
+- **Transferencia que la familia le mandó al club** (la captura de WhatsApp): quien cobra en efectivo también la
+  registra desde la app como un comprobante de transferencia en nombre de la familia, con la imagen o el PDF y quién lo
+  registró. Si quien la registra valida comprobantes, queda aprobada al instante con su recibo; si es el técnico, queda
+  en revisión. La familia la ve en su estado de cuenta.
+- Las cajas personales no aparecen al elegir dónde entra un pago (registrar pago, aprobar comprobantes); sí en
+  Cuentas, Transferencias y Gastos.
 
 ## 9. Gastos *(Sprint 4b)*
 

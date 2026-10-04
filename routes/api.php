@@ -97,6 +97,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('collections/students', [CollectionController::class, 'students'])->name('collections.students');
             Route::get('collections/students/{student}', [CollectionController::class, 'show'])->whereNumber('student')->name('collections.show');
             Route::post('collections', [CollectionController::class, 'store'])->middleware('throttle:30,1')->name('collections.store');
+            Route::post('collections/transfers', [CollectionController::class, 'transfer'])->middleware('throttle:20,1')->name('collections.transfers');
             Route::get('me/cash-box', [CashBoxController::class, 'show'])->name('cash-box.show');
             Route::post('me/cash-box/deposits', [CashBoxController::class, 'deposit'])->middleware('throttle:10,1')->name('cash-box.deposits.store');
             Route::delete('me/cash-box/deposits/{deposit}', [CashBoxController::class, 'withdraw'])->whereNumber('deposit')->name('cash-box.deposits.destroy');

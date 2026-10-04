@@ -82,7 +82,7 @@ class CollectCashPayment
                 Cache::put($key, $payment->id, now()->addDay());
             }
 
-            Notification::send($this->recipients($family, $student), new PaymentReceived($payment, $by));
+            Notification::send(self::familyUsers($family, $student), new PaymentReceived($payment, $by));
 
             return $payment;
         };
@@ -92,15 +92,15 @@ class CollectCashPayment
     }
 
     /**
-     * Tutores con cuenta y alumnos adultos de la familia.
+     * Tutores con cuenta y alumnos adultos de la familia (a quienes les llega el recibo).
      *
      * @return Collection<int, User>
      */
-    private function recipients(Family $family, Student $student)
+    public static function familyUsers(Family $family, ?Student $student = null): Collection
     {
-        $guardians = Guardian::query()->where('family_id', $family->id)->whereNotNull('user_id')->with('user')->get()->pluck('user');
-        $students = Student::query()->where('family_id', $family->id)->whereNotNull('user_id')->with('user')->get()->pluck('user');
+        $guardians = Guardian::query()->withoutGlobalScopes()->where('family_id', $family->id)->whereNotNull('user_id')->with('user')->get()->pluck('user');
+        $students = Student::query()->withoutGlobalScopes()->where('family_id', $family->id)->whereNotNull('user_id')->with('user')->get()->pluck('user');
 
-        return $guardians->merge($students)->push($student->user)->filter()->unique('id')->values();
+        return $guardians->merge($students)->push($student?->user)->filter()->unique('id')->values();
     }
 }

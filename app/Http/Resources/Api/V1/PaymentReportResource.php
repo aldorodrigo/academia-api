@@ -43,6 +43,8 @@ class PaymentReportResource extends JsonResource
             'reviewed_at' => $this->reviewed_at?->toIso8601String(),
             'receipt_number' => $this->payment?->receiptLabel(),
             'receipt_url' => $this->payment ? ReceiptController::signedUrl($this->payment) : null,
+            // Lo registró el club (la captura que le llegó por WhatsApp): quién.
+            'registered_by' => $this->registered_by_staff ? $this->user->name : null,
         ];
     }
 }

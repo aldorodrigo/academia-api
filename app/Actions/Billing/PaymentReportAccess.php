@@ -42,6 +42,32 @@ class PaymentReportAccess
     }
 
     /**
+     * Cuentas donde puede entrar una transferencia que registra el club: bancos y billeteras activas del club
+     * (sin las cajas personales), tengan o no datos para transferir.
+     *
+     * @return Collection<int, MoneyAccount>
+     */
+    public static function clubTransferAccounts(): Collection
+    {
+        return MoneyAccount::query()->club()
+            ->where('is_active', true)
+            ->whereIn('type', [MoneyAccountType::Bank, MoneyAccountType::Wallet])
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * Cuentas del club donde puede entrar un pago aprobado o registrado en el panel (sin las cajas personales,
+     * que solo reciben los cobros en efectivo desde la app).
+     *
+     * @return Collection<int, MoneyAccount>
+     */
+    public static function paymentAccounts(): Collection
+    {
+        return MoneyAccount::query()->club()->where('is_active', true)->orderBy('id')->get();
+    }
+
+    /**
      * Cuentas que ve el tutor para transferir: bancos y billeteras activas con datos cargados.
      *
      * @return Collection<int, MoneyAccount>

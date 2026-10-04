@@ -47,7 +47,23 @@ notificación y una cuenta para él."
    - **a quienes validan, cuando un técnico informa un depósito:** "Juan Pérez depositó ₲ 450.000 en Banco Itaú.
      Confirmalo." No se avisa a la comisión por cada cobro (sería ruido en un día de cancha): lo ven en "Efectivo".
    - **al técnico, cuando le confirman o rechazan el depósito.**
-8. **Cobrar requiere conexión.** No se encola sin señal (a diferencia de la asistencia): el número de recibo es
+8. **Transferencia que la familia le mandó al club** (segunda ronda, pedido del usuario 2026-10-04): el técnico, el
+   tesorero o el admin registran desde la misma pantalla de "Cobrar" la transferencia que un papá o un alumno les pasó
+   por WhatsApp (la captura). Se **reutiliza el comprobante de transferencia** (`PaymentReport`) cargado en nombre de
+   la familia: familia, cuotas, monto, fecha, cuenta, referencia, la imagen o el PDF guardado, el tutor que la mandó y
+   **quién la registró** (`user_id` + `registered_by_staff`).
+   - Si quien la registra **valida comprobantes** (tesorero, protesorero, admin): queda **aprobada al instante** y se
+     registra el pago por transferencia con su recibo (`ReviewPaymentReport::approve`, el mismo de siempre).
+   - Si es el **técnico**: queda **en revisión** y avisa a quienes validan ("Juan Pérez registró una transferencia de
+     ₲ 300.000 (Familia Benítez)."). Un técnico no mete plata en el banco sin control.
+   - La familia la ve en su estado de cuenta ("Registrado por Juan Pérez") con el comprobante y, aprobada, el recibo.
+     Al aprobarse le llega "Aprobamos tu pago…" y, si la aprobó otro, al técnico "Aprobamos la transferencia … que
+     registraste". Si se rechaza, el motivo le llega a quien la registró (la familia no la informó).
+   - Cuenta: un banco o billetera **del club** (sin las cajas personales); sin elegir, la primera bancaria.
+9. **Cajas personales fuera de los selectores** de cuenta donde entra un pago: "Registrar pago" del panel y aprobar
+   comprobantes (panel y app). Siguen en Cuentas, Transferencias (el tesorero recibe la plata en mano) y Gastos (un
+   faltante de caja se registra como gasto desde la caja del técnico). Las cuentas de clases particulares no cambian.
+10. **Cobrar requiere conexión.** No se encola sin señal (a diferencia de la asistencia): el número de recibo es
    correlativo y lo da la API. Un reintento por mala señal no duplica el cobro (`request_id`, ver §6).
 
 ## 3. Modelo
@@ -55,6 +71,7 @@ notificación y una cuenta para él."
 | Tabla | Cambio |
 |---|---|
 | `money_accounts` | `user_id` nullable (titular de la caja personal), único por organización + usuario |
+| `payment_reports` | `registered_by_staff` (lo registró el club; `user_id` = quién) y `guardian_id` (tutor que la mandó) |
 | `cash_deposits` (nueva) | `organization_id`, `money_account_id` (caja personal), `user_id` (quien deposita), `to_account_id` (cuenta del club), `amount`, `deposited_on`, `reference`, `notes`, `status` (`pendiente`, `confirmado`, `rechazado`), `reviewed_by`, `reviewed_at`, `rejection_reason`, `transfer_id` |
 
 - `CashBox::for($user)` busca o crea la caja personal ("Caja de {nombre}"). `MoneyAccount::clubAccounts()` = activas sin
@@ -73,6 +90,9 @@ notificación y una cuenta para él."
   de hoy elegidas, las próximas aparte y sin elegir, las que tienen una transferencia en revisión marcadas y sin elegir),
   **monto prellenado** con lo que salda las elegidas hoy (con pronto pago), quién pagó (tutor) y nota. "Cobrar ₲ X" →
   recibo: "Cobrado ₲ 150.000 · Recibo N° 000124" con "Ver recibo"; si sobra, "Quedan ₲ 20.000 a favor de la familia".
+- En la misma pantalla, **Efectivo / Transferencia**: con "Transferencia" se adjunta la captura o el PDF (como
+  "Informar transferencia" del tutor), fecha, cuenta del club y N° de operación; el botón dice "Registrar
+  transferencia" y el texto avisa si queda aprobada con recibo o en revisión del tesorero.
 - **"Mi caja"** (`/mi-caja`, botón del inicio con `collect_payments`): "En tu poder: ₲ 585.000", depósitos por
   confirmar, movimientos (cobros, depósitos, anulaciones) y **"Depositar"**: monto (por defecto todo lo disponible),
   dónde (cuentas del club), fecha y N° de boleta opcional.
@@ -93,6 +113,8 @@ notificación y una cuenta para él."
 - **Pago de más / sin cuotas:** lo que sobra queda como saldo a favor de la familia (se aplica solo a la próxima cuota),
   igual que en el panel. Se muestra el saldo a favor que ya tenía.
 - **Pronto pago:** el monto sugerido ya lo descuenta si se paga hoy (lo calcula la API).
+- **Transferencia registrada dos veces:** una cuota no puede estar en dos comprobantes en revisión ("Ya hay una
+  transferencia en revisión para «Cuota agosto 2026»."), sea del tutor o del club.
 - **Cuota con una transferencia en revisión:** se puede cobrar igual (la familia pagó en efectivo); si después se
   aprueba la transferencia, lo que ya no tiene cuota pendiente queda a favor (regla actual de `ReviewPaymentReport`).
 - **Doble toque o reintento:** la app manda un `request_id` por cobro; si llega dos veces, la API devuelve el mismo pago.
@@ -110,13 +132,17 @@ notificación y una cuenta para él."
 
 ## 7. Fuera de alcance
 
-- Cobro por transferencia o billetera hecho por el técnico (la transferencia la informa el tutor con su comprobante).
 - Cobrar sin conexión, anular desde la app, foto de la boleta de depósito.
 - Arqueo o cierre de caja diario, tope de efectivo en poder y recordatorios de "tenés plata sin depositar".
 - Pagos o comisiones a los técnicos.
 - Mandar el recibo por WhatsApp desde la app (la familia lo recibe por push y correo y lo ve en su estado de cuenta).
 
 ## 8. Orden de trabajo
+
+Segunda ronda (2026-10-04): transferencia registrada por el club, cajas fuera de los selectores y decisiones
+confirmadas por el usuario (tesorero y admin cobran en efectivo a su caja igual que el técnico; clases particulares
+sin cambios; a la comisión solo se le avisa de los depósitos; los depósitos los confirman quienes validan
+comprobantes).
 
 1. Contrato en `API_V1.md`.
 2. App contra el contrato (fakes): repositorio, validaciones, pantallas, rutas y botones; tests.

@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Payments\Pages;
 
+use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\RegisterPayment;
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\Payments\PaymentResource;
@@ -71,8 +72,9 @@ class ManagePayments extends ManageRecords
                         ->required()->live()->afterStateUpdated($refresh),
                     Select::make('method')->label('Método')->options(PaymentMethod::class)->default(PaymentMethod::Cash->value)->required(),
                     Select::make('money_account_id')->label('Cuenta')
-                        ->options(fn () => MoneyAccount::query()->where('is_active', true)->pluck('name', 'id'))
-                        ->default(fn () => MoneyAccount::query()->where('is_active', true)->value('id'))
+                        // Sin las cajas personales: solo reciben lo que se cobra en efectivo desde la app.
+                        ->options(fn () => PaymentReportAccess::paymentAccounts()->pluck('name', 'id'))
+                        ->default(fn () => PaymentReportAccess::paymentAccounts()->first()?->id)
                         ->required(),
                     Select::make('guardian_id')->label('Pagó')
                         ->options(fn (Get $get) => Guardian::query()->where('family_id', $get('family_id'))->get()
