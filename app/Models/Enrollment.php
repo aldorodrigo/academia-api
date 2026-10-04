@@ -60,8 +60,13 @@ class Enrollment extends Model
         });
 
         // Cargo de inscripción, si hay tarifa, y las cuotas de la temporada según su plan
-        // (alta, Inscribir, pase de temporada, importación). En el pase se encolan.
+        // (alta, Inscribir, pase de temporada, importación). En el pase se encolan. Una pendiente
+        // (ej. pedida desde la app) va a clases pero no se cobra hasta que se confirma.
         static::created(function (Enrollment $enrollment): void {
+            if ($enrollment->status === EnrollmentStatus::Pending) {
+                return;
+            }
+
             app(GenerateEnrollmentCharge::class)->handle($enrollment);
 
             if (! self::$deferSeasonCharges) {
@@ -78,6 +83,11 @@ class Enrollment extends Model
             if (in_array($enrollment->status, [EnrollmentStatus::Withdrawn, EnrollmentStatus::Suspended], true)) {
                 app(VoidFutureCharges::class)->handle($enrollment);
             } elseif ($enrollment->isBillableStatus()) {
+                // Al confirmar una pendiente: el cargo de inscripción (una sola vez, idempotente).
+                if ($enrollment->getOriginal('status') === EnrollmentStatus::Pending) {
+                    app(GenerateEnrollmentCharge::class)->handle($enrollment);
+                }
+
                 app(IssueSeasonCharges::class)->forEnrollment($enrollment);
             }
         });

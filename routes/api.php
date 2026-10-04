@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\V1\Setup\SeasonController as SetupSeasonController;
 use App\Http\Controllers\Api\V1\Setup\SiteController as SetupSiteController;
 use App\Http\Controllers\Api\V1\StudentAttendanceController;
 use App\Http\Controllers\Api\V1\StudentController;
+use App\Http\Controllers\Api\V1\StudentRegistrationController;
 use App\Http\Controllers\Api\V1\VenueController;
 use Illuminate\Support\Facades\Route;
 
@@ -91,7 +92,9 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::post('payment-reports/{report}/approve', [PaymentReportController::class, 'approve'])->whereNumber('report')->name('payment-reports.approve');
             Route::post('payment-reports/{report}/reject', [PaymentReportController::class, 'reject'])->whereNumber('report')->name('payment-reports.reject');
 
-            // Inscripción desde la app: el tutor la pide, quien tiene permiso la aprueba o rechaza.
+            // Inscripción desde la app: el tutor la pide (entra ya, pendiente) y quien tiene permiso la confirma o rechaza.
+            // "Cargar alumno" (quien puede crear alumnos): alta directa e invitación del tutor.
+            Route::post('students', StudentRegistrationController::class)->middleware('throttle:30,1')->name('students.store');
             Route::get('enrollment-requests/options', [EnrollmentRequestController::class, 'options'])->name('enrollment-requests.options');
             Route::post('enrollment-requests', [EnrollmentRequestController::class, 'store'])->middleware('throttle:10,1')->name('enrollment-requests.store');
             Route::get('enrollment-requests', [EnrollmentRequestController::class, 'index'])->name('enrollment-requests.index');

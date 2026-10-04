@@ -15,7 +15,7 @@ enum EnrollmentRequestStatus: string implements HasColor, HasLabel
     public function label(): string
     {
         return match ($this) {
-            self::Pending => 'En revisión',
+            self::Pending => 'Por confirmar',
             self::Approved => 'Aprobada',
             self::Rejected => 'No aprobada',
             self::Cancelled => 'Cancelada',

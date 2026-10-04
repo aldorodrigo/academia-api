@@ -7,6 +7,7 @@ use App\Enums\MembershipStatus;
 use App\Enums\MidPeriod;
 use App\Filament\Support\MidPeriodPreview;
 use App\Models\Enrollment;
+use App\Models\EnrollmentRequest;
 use App\Models\Group;
 use App\Models\Organization;
 use App\Models\Program;
@@ -14,37 +15,83 @@ use App\Models\Season;
 use App\Models\User;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Validation\ValidationException;
 
 /**
- * Solicitudes de inscripción desde la app: quién las aprueba, dónde se puede pedir lugar (disciplina,
+ * Solicitudes de inscripción desde la app: quién las confirma, dónde se puede pedir lugar (disciplina,
  * temporada y categorías con la sugerida por edad) y el cupo. Lo usan la API y el panel.
  */
 class EnrollmentRequestAccess
 {
+    /** En todas las categorías (secretario y prosecretario por defecto; el admin por Gate::before). */
     public const PERMISSION = 'Manage:EnrollmentRequests';
 
+    /** Solo en las categorías donde es técnico (el técnico, por defecto). */
+    public const GROUP_PERMISSION = 'Confirm:GroupEnrollments';
+
     /**
-     * Aprueba quien tiene "Gestionar solicitudes de inscripción" o puede crear inscripciones
-     * (secretario y prosecretario por defecto). El admin, por Gate::before.
+     * Si confirma alguna: en todas o en al menos una de sus categorías.
      */
-    public static function canReview(User $user): bool
+    public static function canReviewAny(User $user): bool
     {
-        return $user->can(self::PERMISSION) || $user->can('Create:Enrollment');
+        return $user->can(self::PERMISSION)
+            || ($user->can(self::GROUP_PERMISSION) && $user->instructedGroups()->exists());
+    }
+
+    public static function canReviewGroup(User $user, Group|int $group): bool
+    {
+        $groupId = $group instanceof Group ? $group->id : $group;
+
+        return $user->can(self::PERMISSION)
+            || ($user->can(self::GROUP_PERMISSION) && $user->instructedGroups()->where('groups.id', $groupId)->exists());
     }
 
     /**
-     * Miembros activos que reciben el aviso de una solicitud nueva.
+     * Las solicitudes que puede confirmar: todas o las de sus categorías.
+     *
+     * @return Builder<EnrollmentRequest>
+     */
+    public static function reviewable(User $user): Builder
+    {
+        return EnrollmentRequest::query()->unless($user->can(self::PERMISSION), fn (Builder $query) => $user->can(self::GROUP_PERMISSION)
+            ? $query->whereIn('group_id', $user->instructedGroups()->select('groups.id'))
+            : $query->whereRaw('1 = 0'));
+    }
+
+    /**
+     * Miembros activos que reciben el aviso de una solicitud nueva en esa categoría.
      *
      * @return Collection<int, User>
      */
-    public static function reviewers(Organization $organization): Collection
+    public static function reviewers(Organization $organization, Group $group): Collection
     {
         return app(CurrentOrganization::class)->run($organization, fn () => $organization->users()
             ->wherePivot('status', MembershipStatus::Active->value)
             ->get()
-            ->filter(fn (User $user) => self::canReview($user))
+            ->filter(fn (User $user) => self::canReviewGroup($user, $group))
             ->values());
+    }
+
+    /**
+     * Temporada vigente o próxima y categoría activa de una de sus disciplinas (lo que eligió quien inscribe).
+     *
+     * @return array{0: Season, 1: Group}
+     */
+    public static function place(int $seasonId, int $groupId): array
+    {
+        $season = Season::query()->open()->find($seasonId);
+        if ($season === null) {
+            throw ValidationException::withMessages(['season_id' => 'Elegí una temporada vigente o próxima.']);
+        }
+
+        $group = Group::query()->where('is_active', true)->with('program')->find($groupId);
+        if ($group === null || ! Season::query()->whereKey($season->id)->forProgram($group->program_id)->exists()) {
+            throw ValidationException::withMessages(['group_id' => 'Elegí una categoría de la temporada.']);
+        }
+
+        return [$season, $group];
     }
 
     /**
@@ -87,14 +134,14 @@ class EnrollmentRequestAccess
      *
      * @return list<array<string, mixed>>
      */
-    public static function groupOptions(Season $season, Program $program, ?CarbonImmutable $birthDate = null): array
+    public static function groupOptions(Season $season, Program $program, ?CarbonImmutable $birthDate = null, ?int $exceptEnrollmentId = null): array
     {
         $groups = Group::query()->where('program_id', $program->id)->where('is_active', true)
             ->with('schedules')->orderBy('name')->get();
         $suggested = $birthDate ? Group::suggestFor($birthDate, $season, $program)?->id : null;
 
         return $groups->map(fn (Group $group) => [
-            ...self::capacity($group, $season),
+            ...self::capacity($group, $season, $exceptEnrollmentId),
             'id' => $group->id,
             'name' => $group->name,
             'suggested' => $group->id === $suggested,
@@ -111,21 +158,25 @@ class EnrollmentRequestAccess
      *
      * @return array{capacity: ?int, spots_left: ?int, full: bool}
      */
-    public static function capacity(Group $group, Season $season): array
+    public static function capacity(Group $group, Season $season, ?int $exceptEnrollmentId = null): array
     {
         if ($group->capacity === null) {
             return ['capacity' => null, 'spots_left' => null, 'full' => false];
         }
 
-        $left = max(0, $group->capacity - self::occupied($group, $season));
+        $left = max(0, $group->capacity - self::occupied($group, $season, $exceptEnrollmentId));
 
         return ['capacity' => $group->capacity, 'spots_left' => $left, 'full' => $left === 0];
     }
 
-    public static function occupied(Group $group, Season $season): int
+    /**
+     * @param  int|null  $exceptEnrollmentId  la inscripción pendiente de la solicitud que se confirma (ya ocupa lugar)
+     */
+    public static function occupied(Group $group, Season $season, ?int $exceptEnrollmentId = null): int
     {
         return Enrollment::query()
             ->where('group_id', $group->id)
+            ->when($exceptEnrollmentId, fn ($query, $id) => $query->whereKeyNot($id))
             ->where('season_id', $season->id)
             ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Scholarship, EnrollmentStatus::Pending])
             ->count();

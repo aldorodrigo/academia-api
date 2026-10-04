@@ -187,7 +187,12 @@ class ClassSession extends Model
 
         return Enrollment::query()
             ->where('group_id', $this->group_id)
-            ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Scholarship])
+            // Activos, becados y los nuevos que pidieron lugar desde la app y esperan la confirmación del club.
+            ->where(fn (Builder $query) => $query
+                ->whereIn('status', [EnrollmentStatus::Active, EnrollmentStatus::Scholarship])
+                ->orWhere(fn (Builder $pending) => $pending
+                    ->where('status', EnrollmentStatus::Pending)
+                    ->whereIn('id', EnrollmentRequest::query()->pending()->whereNotNull('enrollment_id')->select('enrollment_id'))))
             ->whereHas('season', fn (Builder $season) => $season->active($this->date))
             ->where(fn (Builder $query) => $query->whereNull('enrolled_on')->orWhereDate('enrolled_on', '<=', $date))
             ->where(fn (Builder $query) => $query->whereNull('ended_on')->orWhereDate('ended_on', '>=', $date));

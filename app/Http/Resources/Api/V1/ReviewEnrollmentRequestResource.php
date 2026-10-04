@@ -9,7 +9,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
 
 /**
- * Solicitud para quien aprueba: suma quién la pidió, la edad, si el chico ya está cargado, las categorías
+ * Solicitud para quien confirma: suma quién la pidió, la edad, si el chico ya está cargado, las categorías
  * de la disciplina con su cupo y qué se cobra del período en curso.
  *
  * @mixin EnrollmentRequest
@@ -22,7 +22,7 @@ class ReviewEnrollmentRequestResource extends EnrollmentRequestResource
     public function toArray(Request $request): array
     {
         $today = $this->organization->today();
-        $existing = $this->isPending() ? $this->resource->existingStudent()?->load('guardians') : null;
+        $existing = $this->isPending() ? $this->resource->preexistingStudent() : null;
         $birthDate = CarbonImmutable::parse($this->birth_date);
 
         return [
@@ -36,10 +36,11 @@ class ReviewEnrollmentRequestResource extends EnrollmentRequestResource
             'existing_student' => $existing ? [
                 'id' => $existing->id,
                 'full_name' => $existing->full_name,
-                'guardians' => $existing->guardians->map(fn ($guardian) => $guardian->full_name)->values(),
+                'guardians' => $existing->guardians->reject(fn ($guardian) => $guardian->user_id === $this->user_id)
+                    ->map(fn ($guardian) => $guardian->full_name)->values(),
             ] : null,
             'group_options' => $this->isPending()
-                ? EnrollmentRequestAccess::groupOptions($this->season, $this->group->program, $birthDate)
+                ? EnrollmentRequestAccess::groupOptions($this->season, $this->group->program, $birthDate, $this->enrollment_id)
                 : [],
             'mid_period' => $this->isPending() ? EnrollmentRequestAccess::midPeriod($this->season, $this->group, $today) : null,
         ];

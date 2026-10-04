@@ -8,12 +8,12 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\MidPeriod;
 use App\Enums\OrganizationRole;
 use App\Exceptions\ImportRowException;
+use App\Models\Charge;
+use App\Models\Enrollment;
 use App\Models\EnrollmentRequest;
 use App\Models\Group;
-use App\Models\Guardian;
 use App\Models\MedicalRecord;
 use App\Models\Organization;
-use App\Models\Student;
 use App\Models\User;
 use App\Notifications\EnrollmentRequestReviewed;
 use App\Support\Roles\RoleAssigner;
@@ -22,9 +22,9 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Aprobar una solicitud da de alta al chico con `RegisterStudent` (alumno reutilizado si ya existe, tutor
- * vinculado a la cuenta que la pidió, familia, inscripción activa y cuotas del plan); rechazarla deja el
- * motivo. En los dos casos se avisa al tutor. El tutor la puede cancelar mientras está pendiente.
+ * Confirmar una solicitud pasa la inscripción pendiente a `activo` (se emiten el cargo de inscripción y las
+ * cuotas del plan desde el día en que empezó, con el `MidPeriod` elegido); rechazarla (o que el tutor la
+ * cancele) deshace el alta: el chico sale de la lista. Siempre queda quién la confirmó o la rechazó.
  */
 class ReviewEnrollmentRequest
 {
@@ -52,6 +52,11 @@ class ReviewEnrollmentRequest
             $request = $this->lockPending($request);
             $season = $request->season;
             $group ??= $request->group;
+            $enrollment = $request->enrollment;
+
+            if ($enrollment === null || $request->student === null) {
+                throw ValidationException::withMessages(['status' => 'La inscripción de esta solicitud ya no existe.']);
+            }
 
             if ($season->hasEnded($organization->today())) {
                 throw ValidationException::withMessages(['season_id' => "La temporada {$season->name} ya terminó."]);
@@ -61,17 +66,26 @@ class ReviewEnrollmentRequest
                 throw ValidationException::withMessages(['group_id' => "Elegí una categoría de {$request->group->program->name}."]);
             }
 
-            $capacity = EnrollmentRequestAccess::capacity($group, $season);
-            if ($capacity['full'] && ! $overCapacity) {
+            // La inscripción pendiente ya ocupa su lugar: está completa si no queda lugar sin contarla.
+            if (EnrollmentRequestAccess::capacity($group, $season, $enrollment->id)['full'] && ! $overCapacity) {
                 throw ValidationException::withMessages([
                     'over_capacity' => "{$group->name} está completa ({$group->capacity} de {$group->capacity}). Confirmá para inscribirla igual.",
                 ]);
             }
 
-            $student = $this->register($organization, $request, $group, $by, $midPeriod);
+            if ($enrollment->group_id !== $group->id) {
+                $enrollment->update(['group_id' => $group->id]);
+            }
 
-            if ($request->medical !== null && $student->medicalRecord()->doesntExist()) {
-                MedicalRecord::query()->create([...$request->medical, 'student_id' => $student->id]);
+            if (! $request->guardian_linked) {
+                $this->linkGuardian($organization, $request, $group, $by);
+            }
+
+            // Pendiente → activo: el modelo emite el cargo de inscripción y las cuotas (business-logic.md §5).
+            $enrollment->fill(['status' => EnrollmentStatus::Active, 'mid_period' => $midPeriod ?? $enrollment->mid_period])->save();
+
+            if ($request->medical !== null && $request->student->medicalRecord()->doesntExist()) {
+                MedicalRecord::query()->create([...$request->medical, 'student_id' => $request->student_id]);
             }
 
             if (! $request->user->hasCurrentRole($organization, OrganizationRole::Guardian)) {
@@ -81,7 +95,7 @@ class ReviewEnrollmentRequest
             $request->update([
                 'status' => EnrollmentRequestStatus::Approved,
                 'group_id' => $group->id,
-                'student_id' => $student->id,
+                'guardian_linked' => true,
                 'reviewed_by' => $by->id,
                 'reviewed_at' => now(),
                 // Ya está en la ficha del alumno: no se guarda dos veces.
@@ -91,25 +105,17 @@ class ReviewEnrollmentRequest
             return $request;
         }));
 
-        $request->user->notify(new EnrollmentRequestReviewed($request->load(['group.program', 'season'])));
+        // Se confirmó sola (la pidió quien puede confirmar): no hace falta avisarle.
+        if ($by->id !== $request->user_id) {
+            $request->user->notify(new EnrollmentRequestReviewed($request->load(['group.program', 'season'])));
+        }
 
         return $request;
     }
 
     public function reject(EnrollmentRequest $request, User $by, string $reason): EnrollmentRequest
     {
-        $request = DB::transaction(function () use ($request, $by, $reason) {
-            $request = $this->lockPending($request);
-            $request->update([
-                'status' => EnrollmentRequestStatus::Rejected,
-                'reviewed_by' => $by->id,
-                'reviewed_at' => now(),
-                'rejection_reason' => trim($reason),
-                'medical' => null,
-            ]);
-
-            return $request;
-        });
+        $request = $this->close($request, EnrollmentRequestStatus::Rejected, $by, trim($reason));
 
         $request->user->notify(new EnrollmentRequestReviewed($request->load(['group.program', 'season'])));
 
@@ -117,53 +123,64 @@ class ReviewEnrollmentRequest
     }
 
     /**
-     * El tutor la retira mientras está pendiente (sin aviso).
+     * El tutor la retira mientras está por confirmar (sin aviso).
      */
     public function cancel(EnrollmentRequest $request): EnrollmentRequest
     {
-        return DB::transaction(function () use ($request) {
-            $request = $this->lockPending($request);
-            $request->update(['status' => EnrollmentRequestStatus::Cancelled, 'medical' => null]);
-
-            return $request;
-        });
+        return $this->close($request, EnrollmentRequestStatus::Cancelled, null, null);
     }
 
     /**
-     * Alta con el mismo camino que el panel y la importación. El tutor es la cuenta que la pidió: su ficha de
-     * tutor si ya tiene una (sin pisar sus datos) o una nueva con su nombre y sus datos verificados.
+     * Rechazar o cancelar: el chico sale de la lista. Se borra la inscripción pendiente que creó la solicitud
+     * (o vuelve al estado que tenía, ej. baja) y, si el alumno lo creó la solicitud y no tiene nada más, también.
      */
-    private function register(Organization $organization, EnrollmentRequest $request, Group $group, User $by, ?MidPeriod $midPeriod): Student
+    private function close(EnrollmentRequest $request, EnrollmentRequestStatus $status, ?User $by, ?string $reason): EnrollmentRequest
     {
-        $user = $request->user;
-        $guardian = Guardian::query()->where('user_id', $user->id)->first();
-        [$firstName, $lastName] = $guardian
-            ? [$guardian->first_name, $guardian->last_name]
-            : array_pad(explode(' ', trim($user->name), 2), 2, '');
+        $organization = Organization::query()->findOrFail($request->organization_id);
 
+        return $this->current->run($organization, fn () => DB::transaction(function () use ($request, $status, $by, $reason) {
+            $request = $this->lockPending($request);
+            $enrollment = $request->enrollment;
+            $student = $request->student;
+
+            if ($enrollment !== null && $enrollment->status === EnrollmentStatus::Pending) {
+                $request->previous_enrollment_status === null
+                    ? $enrollment->delete()
+                    : $enrollment->update(['status' => $request->previous_enrollment_status]);
+            }
+
+            $request->update([
+                'status' => $status,
+                'reviewed_by' => $by?->id,
+                'reviewed_at' => $by ? now() : null,
+                'rejection_reason' => $reason,
+                'medical' => null,
+            ]);
+
+            if ($request->student_created && $student !== null
+                && Enrollment::query()->where('student_id', $student->id)->doesntExist()
+                && Charge::query()->where('student_id', $student->id)->doesntExist()) {
+                $student->delete();
+            }
+
+            return $request->refresh();
+        }));
+    }
+
+    /**
+     * Chico de otra familia: el tutor que lo pidió se suma recién ahora, con el mismo alta de siempre.
+     */
+    private function linkGuardian(Organization $organization, EnrollmentRequest $request, Group $group, User $by): void
+    {
         try {
-            return $this->register->handle(
+            $this->register->handle(
                 $organization,
-                [
-                    'first_name' => $request->first_name,
-                    'last_name' => $request->last_name,
-                    'document' => $request->document,
-                    'birth_date' => $request->birth_date,
-                ],
+                SubmitEnrollmentRequest::studentData($request->student),
                 $group,
                 $request->season,
-                EnrollmentStatus::Active,
-                [[
-                    'user_id' => $user->id,
-                    'first_name' => $firstName,
-                    'last_name' => $lastName,
-                    'email' => $guardian ? null : ($user->email_verified_at ? $user->email : null),
-                    'phone' => $guardian ? null : ($user->phone_verified_at ? $user->phone : null),
-                    'relationship' => $request->relationship->value,
-                    'invite' => false,
-                ]],
+                null,
+                [SubmitEnrollmentRequest::guardianRow($request->user, $request->relationship)],
                 $by,
-                midPeriod: $midPeriod,
             );
         } catch (ImportRowException $exception) {
             throw ValidationException::withMessages(['status' => $exception->getMessage()]);
@@ -176,7 +193,7 @@ class ReviewEnrollmentRequest
     private function lockPending(EnrollmentRequest $request): EnrollmentRequest
     {
         $request = EnrollmentRequest::query()->withoutGlobalScopes()
-            ->with(['user', 'season', 'group.program'])
+            ->with(['user', 'season', 'group.program', 'enrollment', 'student'])
             ->lockForUpdate()
             ->findOrFail($request->id);
 

@@ -8,7 +8,8 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // Solicitudes de inscripción que pide un tutor desde la app: el chico no es alumno hasta que se aprueba.
+        // Solicitudes de inscripción que pide un tutor desde la app: el chico entra ya (inscripción pendiente, va a
+        // clases y no se cobra) y el club la confirma o la rechaza.
         Schema::create('enrollment_requests', function (Blueprint $table) {
             $table->id();
             $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
@@ -28,6 +29,12 @@ return new class extends Migration
             $table->timestamp('reviewed_at')->nullable();
             $table->text('rejection_reason')->nullable();
             $table->foreignId('student_id')->nullable()->constrained()->nullOnDelete();
+            $table->foreignId('enrollment_id')->nullable()->constrained()->nullOnDelete();
+            // Para deshacer al rechazar o cancelar: si el alumno y la inscripción los creó la solicitud, el estado
+            // que tenía la inscripción antes (ej. baja) y si el tutor quedó vinculado ya o al confirmar.
+            $table->boolean('student_created')->default(false);
+            $table->string('previous_enrollment_status')->nullable();
+            $table->boolean('guardian_linked')->default(false);
             $table->timestamps();
 
             $table->index(['organization_id', 'status']);

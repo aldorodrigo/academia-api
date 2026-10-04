@@ -31,7 +31,7 @@ class EnrollmentRequestResource extends JsonResource
                 'document' => $this->document,
             ],
             'relationship' => $this->relationship->value,
-            'has_medical' => $this->medical !== null || $this->student?->medicalRecord !== null,
+            'has_medical' => $this->medical !== null || ($this->status->value === 'aprobada' && $this->student?->medicalRecord !== null),
             'notes' => $this->notes,
             'season' => EnrollmentRequestAccess::season($this->season),
             'group' => [
@@ -43,6 +43,9 @@ class EnrollmentRequestResource extends JsonResource
             'student_id' => $this->student_id,
             'created_at' => $this->created_at->toIso8601String(),
             'reviewed_at' => $this->reviewed_at?->toIso8601String(),
+            // Quién la confirmó o la rechazó (el mismo tutor si se confirmó sola).
+            'reviewed_by' => $this->reviewedBy?->name,
+            'self_approved' => $this->reviewed_by !== null && $this->reviewed_by === $this->user_id,
         ];
     }
 }

@@ -30,8 +30,8 @@ use Illuminate\Database\Eloquent\Builder;
 use UnitEnum;
 
 /**
- * Solicitudes de inscripción que mandan las familias desde la app. Aprobar da de alta al chico (con
- * `RegisterStudent`, inscripción y cuotas del plan); rechazar le avisa al tutor con el motivo.
+ * Solicitudes de inscripción que mandan las familias desde la app. El chico ya va a clases (inscripción
+ * pendiente); confirmar emite sus cuotas y rechazar lo saca de la lista y le avisa al tutor con el motivo.
  */
 class EnrollmentRequestResource extends Resource
 {
@@ -53,7 +53,7 @@ class EnrollmentRequestResource extends Resource
     {
         $user = auth()->user();
 
-        return $user !== null && Filament::getTenant() !== null && EnrollmentRequestAccess::canReview($user);
+        return $user !== null && Filament::getTenant() !== null && EnrollmentRequestAccess::canReviewAny($user);
     }
 
     public static function canCreate(): bool
@@ -63,7 +63,8 @@ class EnrollmentRequestResource extends Resource
 
     public static function getNavigationBadge(): ?string
     {
-        $pending = EnrollmentRequest::query()->pending()->count();
+        $user = auth()->user();
+        $pending = $user ? EnrollmentRequestAccess::reviewable($user)->pending()->count() : 0;
 
         return $pending > 0 ? (string) $pending : null;
     }
@@ -71,7 +72,10 @@ class EnrollmentRequestResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['user', 'season', 'group.program', 'student', 'organization']))
+            // Todas, o las de sus categorías (técnico).
+            ->modifyQueryUsing(fn (Builder $query) => $query
+                ->whereIn('id', EnrollmentRequestAccess::reviewable(auth()->user())->select('id'))
+                ->with(['user', 'season', 'group.program', 'student.guardians', 'organization', 'reviewedBy']))
             ->columns([
                 TextColumn::make('created_at')->label('Pedida')->since()->sortable()
                     ->tooltip(fn (EnrollmentRequest $record) => $record->created_at->format('d/m/Y H:i')),
@@ -88,9 +92,10 @@ class EnrollmentRequestResource extends Resource
                 TextColumn::make('user.name')->label('Pidió')
                     ->description(fn (EnrollmentRequest $record) => $record->relationship->label()),
                 TextColumn::make('status')->label('Estado')->badge()
-                    ->description(fn (EnrollmentRequest $record) => $record->status === EnrollmentRequestStatus::Rejected
-                        ? $record->rejection_reason
-                        : null),
+                    ->description(fn (EnrollmentRequest $record) => collect([
+                        $record->reviewedBy ? ($record->reviewed_by === $record->user_id ? 'Se confirmó sola' : "Revisó {$record->reviewedBy->name}") : null,
+                        $record->status === EnrollmentRequestStatus::Rejected ? $record->rejection_reason : null,
+                    ])->filter()->join(' · ') ?: null),
             ])
             ->defaultSort('created_at', 'desc')
             ->filters([
@@ -108,12 +113,12 @@ class EnrollmentRequestResource extends Resource
      */
     private static function childDetails(EnrollmentRequest $record): string
     {
-        $existing = $record->isPending() ? $record->existingStudent()?->load('guardians') : null;
+        $existing = $record->isPending() ? $record->preexistingStudent() : null;
 
         return collect([
             (int) $record->birth_date->diffInYears($record->organization->today()).' años',
             $record->document ? "Doc. {$record->document}" : null,
-            $existing ? 'Ya está cargado'.($existing->guardians->isEmpty() ? '' : ' (tutores: '.$existing->guardians->pluck('full_name')->join(', ').')') : null,
+            $existing ? 'Ya estaba cargado'.($existing->guardians->isEmpty() ? '' : ' (tutores: '.$existing->guardians->pluck('full_name')->join(', ').')') : null,
             $record->medical !== null ? 'Cargó la ficha médica' : null,
             $record->notes,
         ])->filter()->join(' · ');
@@ -122,20 +127,20 @@ class EnrollmentRequestResource extends Resource
     private static function approveAction(): Action
     {
         return Action::make('approve')
-            ->label('Aprobar')
+            ->label('Confirmar')
             ->icon(Heroicon::OutlinedCheckCircle)
             ->color('success')
             ->visible(fn (EnrollmentRequest $record) => $record->isPending())
-            ->modalHeading('Aprobar inscripción')
-            ->modalSubmitActionLabel('Aprobar e inscribir')
+            ->modalHeading('Confirmar inscripción')
+            ->modalSubmitActionLabel('Confirmar')
             ->fillForm(fn (EnrollmentRequest $record) => [
                 'group_id' => $record->group_id,
                 'mid_period' => EnrollmentRequestAccess::midPeriod($record->season, $record->group, Filament::getTenant()->today())['default'] ?? null,
                 'over_capacity' => false,
             ])
             ->schema(fn (EnrollmentRequest $record) => [
-                Text::make("Se da de alta a {$record->fullName()} con sus cuotas según el plan de la temporada {$record->season->name}"
-                    .($record->existingStudent() ? ' (ya está cargado: se le suma este tutor).' : '.')),
+                Text::make("{$record->fullName()} ya va a clases. Al confirmar se emiten sus cuotas según el plan de la temporada {$record->season->name}"
+                    .($record->preexistingStudent() ? ' y se le suma este tutor.' : '.')),
                 Select::make('group_id')->label(Terms::label('group', 'Categoría'))
                     ->options(fn () => collect(self::groupOptions($record))->mapWithKeys(fn (array $group) => [$group['id'] => self::groupLabel($group)]))
                     ->required()
@@ -160,7 +165,7 @@ class EnrollmentRequestResource extends Resource
 
                 Notification::make()
                     ->success()
-                    ->title("Inscripción aprobada: {$request->fullName()} en {$request->group->name}.")
+                    ->title("Inscripción confirmada: {$request->fullName()} en {$request->group->name}.")
                     ->body('Le avisamos al tutor.')
                     ->actions([
                         Action::make('student')->label('Ver ficha')->button()
@@ -178,7 +183,7 @@ class EnrollmentRequestResource extends Resource
             ->color('danger')
             ->visible(fn (EnrollmentRequest $record) => $record->isPending())
             ->modalHeading('Rechazar solicitud')
-            ->modalDescription('El tutor recibe el motivo y puede mandarla de nuevo.')
+            ->modalDescription('Sale de la lista de la categoría. El tutor recibe el motivo y puede mandarla de nuevo.')
             ->schema([
                 Textarea::make('reason')->label('Motivo')->placeholder('No hay lugar este año, falta un dato…')
                     ->required()->maxLength(500),
@@ -195,7 +200,9 @@ class EnrollmentRequestResource extends Resource
      */
     private static function groupOptions(EnrollmentRequest $record): array
     {
-        return EnrollmentRequestAccess::groupOptions($record->season, $record->group->program, CarbonImmutable::parse($record->birth_date));
+        return collect(EnrollmentRequestAccess::groupOptions($record->season, $record->group->program, CarbonImmutable::parse($record->birth_date), $record->enrollment_id))
+            ->filter(fn (array $group) => EnrollmentRequestAccess::canReviewGroup(auth()->user(), $group['id']))
+            ->values()->all();
     }
 
     /**

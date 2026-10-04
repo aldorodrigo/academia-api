@@ -27,7 +27,7 @@ use Illuminate\Validation\ValidationException;
  */
 class EnrollmentRequestController extends Controller
 {
-    private const WITH = ['user', 'season', 'group.program', 'student.medicalRecord', 'organization'];
+    private const WITH = ['user', 'season', 'group.program', 'student.medicalRecord', 'student.guardians', 'organization', 'reviewedBy'];
 
     public function __construct(private CurrentOrganization $current) {}
 
@@ -47,7 +47,7 @@ class EnrollmentRequestController extends Controller
             'first_name' => ['required', 'string', 'max:100'],
             'last_name' => ['required', 'string', 'max:100'],
             'birth_date' => ['required', 'date', 'before:'.$today->toDateString(), 'after:'.$today->subYears(100)->toDateString()],
-            'document' => ['nullable', 'string', 'max:20'],
+            'document' => ['required', 'string', 'max:20', 'regex:/^[\w.\-]+$/u'],
             'relationship' => ['nullable', Rule::enum(GuardianRelationship::class)],
             'season_id' => ['required', 'integer'],
             'group_id' => ['required', 'integer'],
@@ -60,6 +60,8 @@ class EnrollmentRequestController extends Controller
             'birth_date.required' => 'Ingresá la fecha de nacimiento.',
             'birth_date.before' => 'La fecha de nacimiento tiene que ser pasada.',
             'birth_date.after' => 'Revisá el año de nacimiento.',
+            'document.required' => 'Ingresá el número de documento.',
+            'document.regex' => 'Ingresá el número de documento, sin espacios.',
             'season_id.required' => 'Elegí la temporada.',
             'group_id.required' => 'Elegí la categoría.',
         ]);
@@ -105,7 +107,7 @@ class EnrollmentRequestController extends Controller
         $this->authorizeReview($request);
         $request->validate(['status' => ['nullable', Rule::in(['pendiente', 'todos'])]]);
 
-        $requests = EnrollmentRequest::query()
+        $requests = EnrollmentRequestAccess::reviewable($request->user())
             ->when($request->input('status', 'pendiente') === 'pendiente', fn ($query) => $query->pending()->oldest())
             ->when($request->input('status') === 'todos', fn ($query) => $query->latest()->limit(50))
             ->with(self::WITH)
@@ -126,12 +128,15 @@ class EnrollmentRequestController extends Controller
 
         $group = null;
         if (isset($data['group_id'])) {
-            $group = Group::query()->find($data['group_id'])
-                ?? throw ValidationException::withMessages(['group_id' => 'Elegí una categoría.']);
+            $group = Group::query()->find($data['group_id']);
+
+            if ($group === null || ! EnrollmentRequestAccess::canReviewGroup($request->user(), $group)) {
+                throw ValidationException::withMessages(['group_id' => 'Elegí una de las categorías que podés confirmar.']);
+            }
         }
 
         $enrollmentRequest = $review->approve(
-            $this->find($id),
+            $this->find($request, $id),
             $request->user(),
             $group,
             isset($data['mid_period']) ? MidPeriod::from($data['mid_period']) : null,
@@ -149,14 +154,17 @@ class EnrollmentRequestController extends Controller
             ['reason.required' => 'Contale a la familia por qué no la aprobás.'],
         );
 
-        $enrollmentRequest = $review->reject($this->find($id), $request->user(), $data['reason']);
+        $enrollmentRequest = $review->reject($this->find($request, $id), $request->user(), $data['reason']);
 
         return new ReviewEnrollmentRequestResource($enrollmentRequest->load(self::WITH));
     }
 
-    private function find(int $id): EnrollmentRequest
+    /**
+     * Una que puede confirmar (404 para las de categorías ajenas).
+     */
+    private function find(Request $request, int $id): EnrollmentRequest
     {
-        $enrollmentRequest = EnrollmentRequest::query()->find($id);
+        $enrollmentRequest = EnrollmentRequestAccess::reviewable($request->user())->find($id);
 
         abort_if($enrollmentRequest === null, 404, 'No encontramos esta solicitud.');
 
@@ -166,9 +174,9 @@ class EnrollmentRequestController extends Controller
     private function authorizeReview(Request $request): void
     {
         abort_unless(
-            EnrollmentRequestAccess::canReview($request->user()),
+            EnrollmentRequestAccess::canReviewAny($request->user()),
             403,
-            'No tenés permiso para aprobar solicitudes de inscripción.',
+            'No tenés permiso para confirmar inscripciones.',
         );
     }
 }

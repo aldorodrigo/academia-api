@@ -15,11 +15,12 @@ use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
 /**
- * Inscripción que pide un tutor desde la app (business-logic.md §3, "Inscripción desde la app"). El chico no es
- * alumno hasta que alguien con permiso la aprueba (`ReviewEnrollmentRequest`, que usa `RegisterStudent`).
- * La ficha médica viaja cifrada y no la ve quien aprueba: pasa a la ficha del alumno.
+ * Inscripción que pide un tutor desde la app (business-logic.md §3, "Inscripción desde la app"). El chico entra
+ * ya: `RegisterStudent` lo da de alta con la inscripción `pendiente` (va a clases, no se cobra) y quien tiene
+ * permiso la confirma (se emiten las cuotas) o la rechaza (sale de la lista). La ficha médica viaja cifrada, no la
+ * ve quien confirma y pasa a la ficha del alumno al confirmar.
  */
-#[Fillable(['organization_id', 'user_id', 'first_name', 'last_name', 'document', 'birth_date', 'relationship', 'season_id', 'group_id', 'notes', 'medical', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'student_id'])]
+#[Fillable(['organization_id', 'user_id', 'first_name', 'last_name', 'document', 'birth_date', 'relationship', 'season_id', 'group_id', 'notes', 'medical', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'student_id', 'enrollment_id', 'student_created', 'previous_enrollment_status', 'guardian_linked'])]
 #[Hidden(['medical'])]
 class EnrollmentRequest extends Model
 {
@@ -35,6 +36,8 @@ class EnrollmentRequest extends Model
             'medical' => 'encrypted:array',
             'status' => EnrollmentRequestStatus::class,
             'reviewed_at' => 'datetime',
+            'student_created' => 'boolean',
+            'guardian_linked' => 'boolean',
         ];
     }
 
@@ -57,11 +60,11 @@ class EnrollmentRequest extends Model
     }
 
     /**
-     * El mismo chico ya cargado en el club (por documento, o nombre + apellido + nacimiento).
+     * Ya estaba cargado en el club antes de la solicitud (con otros tutores): se lo muestra a quien confirma.
      */
-    public function existingStudent(): ?Student
+    public function preexistingStudent(): ?Student
     {
-        return Student::findExisting($this->document, $this->first_name, $this->last_name, $this->birth_date);
+        return $this->student_created ? null : $this->student;
     }
 
     /**
@@ -110,6 +113,18 @@ class EnrollmentRequest extends Model
     }
 
     /**
+     * La inscripción pendiente que creó (o reactivó) la solicitud.
+     *
+     * @return BelongsTo<Enrollment, $this>
+     */
+    public function enrollment(): BelongsTo
+    {
+        return $this->belongsTo(Enrollment::class);
+    }
+
+    /**
+     * Quien la confirmó o la rechazó (el mismo tutor si podía confirmarla).
+     *
      * @return BelongsTo<User, $this>
      */
     public function reviewedBy(): BelongsTo

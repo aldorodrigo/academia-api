@@ -49,12 +49,12 @@ class CurrentOrganizationController extends Controller
                 'membership' => [
                     'roles' => $roles,
                     // Permisos que usa la app para mostrar secciones (ej. informes).
-                    'permissions' => collect(['view_reports' => 'View:Reports'])
+                    'permissions' => collect(['view_reports' => 'View:Reports', 'create_students' => 'Create:Student'])
                         ->filter(fn (string $permission) => $user->can($permission))
                         ->keys()
                         ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
                         ->when(PaymentReportAccess::canReview($user, $organization), fn ($permissions) => $permissions->push('review_payment_reports'))
-                        ->when(EnrollmentRequestAccess::canReview($user), fn ($permissions) => $permissions->push('manage_enrollment_requests'))
+                        ->when(EnrollmentRequestAccess::canReviewAny($user), fn ($permissions) => $permissions->push('manage_enrollment_requests'))
                         ->when(
                             $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
                             fn ($permissions) => $permissions->push('teach_lessons'),

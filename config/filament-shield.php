@@ -268,8 +268,10 @@ return [
         'Take:Attendance' => 'Tomar asistencia en cualquier grupo',
         // Aprobar o rechazar los comprobantes de transferencia de los tutores (tesorero y protesorero lo hacen por su cargo).
         'Review:PaymentReports' => 'Validar comprobantes de pago',
-        // Aprobar o rechazar las solicitudes de inscripción de la app (quien puede crear inscripciones también).
-        'Manage:EnrollmentRequests' => 'Gestionar solicitudes de inscripción',
+        // Confirmar o rechazar las inscripciones que piden las familias desde la app (secretario y prosecretario).
+        'Manage:EnrollmentRequests' => 'Confirmar inscripciones de la app (todas las categorías)',
+        // Lo mismo, solo en las categorías donde es técnico (el técnico, por defecto).
+        'Confirm:GroupEnrollments' => 'Confirmar inscripciones de la app en sus categorías',
     ],
 
     /*
