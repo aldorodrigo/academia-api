@@ -4,6 +4,7 @@ namespace App\Actions\Academic;
 
 use App\Models\Group;
 use App\Models\Program;
+use App\Models\Site;
 use App\Models\Venue;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -114,9 +115,13 @@ class SaveGroups
             return null;
         }
 
-        return Venue::query()->firstOrCreate(
+        // Lugar nuevo (o el que ya existe con ese nombre) con su cancha del mismo nombre.
+        $site = Site::query()->firstOrCreate(
             ['name' => trim($venue['name'])],
             ['address' => filled($venue['address'] ?? null) ? trim($venue['address']) : null],
-        )->id;
+        );
+
+        return $site->venues()->first()?->id
+            ?? Venue::query()->create(['site_id' => $site->id, 'name' => $site->name])->id;
     }
 }

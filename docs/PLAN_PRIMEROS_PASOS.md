@@ -71,12 +71,13 @@ Cada etapa: contrato → app → API y panel → probado de punta a punta. Se fr
 
 ### Cuándo se abre la guía
 
-- Al crear el club entra directo a la guía.
-- Mientras esté incompleta y no la haya cerrado, se abre sola al entrar al club (en la app, una vez por sesión; en el
-  panel, el Escritorio lleva a "Primeros pasos").
-- Cerrada: tarjeta "Configurá tu club · 3 de 5" arriba en el inicio de la app y aviso en el Escritorio del panel,
-  hasta completarla. Siempre se llega desde "Mi cuenta → Configurar el club" y desde el menú del panel.
-- Completa: pantalla "¡Tu club está listo!" una vez, con el link para compartir.
+- **La guía vive en el Escritorio del panel y en el inicio de la app** (cambio del 03/10/2026; antes era una página
+  aparte que se abría sola). Al crear el club se entra al Escritorio/inicio con la guía desplegada arriba.
+- Mientras esté incompleta: la lista de pasos arriba de todo. "Seguir después" la achica a una barra
+  "Configurá tu club · 2 de 4 · Seguir" (y "Seguir" la vuelve a desplegar). En la app también desde
+  "Mi cuenta → Configurar el club".
+- Completa: desaparece (del Escritorio, del inicio y del menú). En la app, pantalla "¡Todo listo!" una vez.
+  `/primeros-pasos` (panel) y `/configurar` (app) llevan al Escritorio/inicio.
 - Las organizaciones que ya existen (Jakare) quedan con la guía cerrada para que no se abra sola.
 
 ### Pasos

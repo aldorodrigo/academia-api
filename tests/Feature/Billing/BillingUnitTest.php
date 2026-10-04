@@ -9,8 +9,10 @@ use App\Filament\Resources\Seasons\Pages\CreateSeason;
 use App\Filament\Resources\Seasons\Support\SeasonPlan;
 use App\Models\Organization;
 use App\Models\Program;
+use App\Support\Onboarding\Checklist;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Livewire\Livewire;
 
 /** Plan anual 2027 con la frecuencia dada. */
@@ -162,5 +164,24 @@ describe('resumen y ejemplos del asistente', function () {
             ->fillForm(['fee_frequency' => FeeFrequency::Daily->value, 'daily_grouping' => DailyGrouping::Day->value])
             ->assertSee('El mismo día de cada entrenamiento (recomendado)')
             ->assertDontSee('a mitad de');
+    });
+});
+
+describe('concordancia con el vocabulario del club', function () {
+    it('distingue el género de los términos habituales', function () {
+        foreach (['Categoría', 'Clase', 'Profesora', 'Actividad', 'Disciplina'] as $word) {
+            expect(Vocabulary::isFeminine($word))->toBeTrue();
+        }
+        foreach (['Grupo', 'Nivel', 'Técnico', 'Profesor', 'Estilo'] as $word) {
+            expect(Vocabulary::isFeminine($word))->toBeFalse();
+        }
+    });
+
+    it('la guía concuerda con "Grupo" y "Profesora"', function () {
+        $club = Organization::factory()->create(['slug' => 'ritmo', 'terminology' => ['group' => 'Grupo', 'instructor' => 'Profesora']]);
+        $steps = collect(Checklist::for($club)->toArray()['steps'])->keyBy('key');
+
+        expect($steps['groups']['description'])->toBe('Las familias eligen el grupo al inscribirse.')
+            ->and($steps['instructors']['description'])->toBe('Invitalas para que tomen asistencia desde la app.');
     });
 });

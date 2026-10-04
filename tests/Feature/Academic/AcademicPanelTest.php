@@ -172,10 +172,29 @@ it('los relation managers del alumno muestran inscripciones y tutores', function
     Livewire::test(GuardiansRelationManager::class, ['ownerRecord' => $student, 'pageClass' => EditStudent::class])
         ->assertOk()
         ->assertSee('Madre')
-        ->callTableAction('invite', $guardian);
+        ->callTableAction('invite', $guardian)
+        ->assertActionMounted('showLink');
 
     Mail::assertQueued(InvitationMail::class, fn ($mail) => $mail->hasTo('ana@test.com'));
     expect($guardian->invitations()->sole()->guardian_id)->toBe($guardian->id);
+});
+
+it('un tutor con solo celular se invita por WhatsApp desde la ficha', function () {
+    inPanel($this->admin, $this->jakare);
+    $student = Student::factory()->for($this->jakare)->create();
+    $guardian = Guardian::factory()->for($this->jakare)->create(['first_name' => 'Ana', 'email' => null, 'phone' => '0981 123 456']);
+    $student->guardians()->attach($guardian, ['relationship' => 'madre']);
+
+    Livewire::test(GuardiansRelationManager::class, ['ownerRecord' => $student, 'pageClass' => EditStudent::class])
+        ->callTableAction('invite', $guardian)
+        ->assertActionMounted('showLink')
+        ->assertSet('mountedActions.0.arguments.phone', '+595981123456')
+        ->assertSet('mountedActions.0.arguments.email', null);
+
+    Mail::assertNothingQueued();
+    expect($guardian->invitations()->sole())
+        ->phone->toBe('+595981123456')
+        ->guardian_id->toBe($guardian->id);
 });
 
 it('se inscribe solo desde la ficha del jugador y no permite duplicados', function () {
@@ -220,7 +239,7 @@ it('los menús de familias, sedes y disciplinas ya no existen', function (string
     $this->actingAs($this->admin)->get("/admin/jakare/{$path}")->assertNotFound();
 })->with(['familias', 'sedes', 'programas']);
 
-it('nuevo jugador: datos, categoría sugerida, tutores e invitación en un paso', function () {
+it('nuevo jugador: datos, categoría sugerida y tutores en un paso (la invitación va desde la ficha)', function () {
     inPanel($this->admin, $this->jakare);
     $sub10 = Group::factory()->for($this->program)->create(['name' => 'Sub-10', 'organization_id' => $this->jakare->id, 'min_age' => 9, 'max_age' => 10]);
     Group::factory()->for($this->program)->create(['name' => 'Sub-12', 'organization_id' => $this->jakare->id, 'min_age' => 11, 'max_age' => 12]);
@@ -233,17 +252,19 @@ it('nuevo jugador: datos, categoría sugerida, tutores e invitación en un paso'
 
     $guardians = array_keys($page->get('data.guardians'));
     $page->set("data.guardians.{$guardians[0]}", [
-        'email' => 'ana@test.com', 'first_name' => 'Ana', 'last_name' => 'Benítez', 'relationship' => 'madre', 'phone' => null, 'invite' => true,
+        'phone' => '0981 123 456', 'email' => 'ana@test.com', 'first_name' => 'Ana', 'last_name' => 'Benítez', 'relationship' => 'madre',
     ])
+        ->assertDontSee('Enviar invitación a la app')
         ->call('create')
         ->assertHasNoFormErrors()
-        ->assertNotified('Jugador inscripto. Invitaciones enviadas: 1.');
+        ->assertNotified('Jugador inscripto.');
 
     $student = Student::query()->where('document', '6123456')->sole();
     expect($student->currentEnrollments()->sole()->group_id)->toBe($sub10->id)
         ->and($student->guardians()->sole()->email)->toBe('ana@test.com')
+        ->and($student->guardians()->sole()->phone)->toBe('+595981123456')
         ->and($student->family_id)->not->toBeNull();
-    Mail::assertQueued(InvitationMail::class, fn ($mail) => $mail->hasTo('ana@test.com'));
+    Mail::assertNothingQueued();
 });
 
 it('un menor sin tutores no se puede crear', function () {
@@ -288,6 +309,19 @@ it('un correo de tutor ya cargado completa sus datos', function () {
         ->assertSet("data.guardians.{$item}.first_name", 'Ana')
         ->assertSet("data.guardians.{$item}.last_name", 'Benítez')
         ->assertSet("data.guardians.{$item}.phone", $guardian->phone);
+});
+
+it('un celular de tutor ya cargado completa sus datos', function () {
+    inPanel($this->admin, $this->jakare);
+    Guardian::factory()->for($this->jakare)->create(['first_name' => 'Ana', 'last_name' => 'Benítez', 'email' => 'ana@test.com', 'phone' => '0981 123 456']);
+
+    $page = Livewire::test(CreateStudent::class);
+    $item = array_key_first($page->get('data.guardians'));
+
+    $page->set("data.guardians.{$item}.phone", '0981123456')
+        ->assertSet("data.guardians.{$item}.first_name", 'Ana')
+        ->assertSet("data.guardians.{$item}.email", 'ana@test.com')
+        ->assertSee('Ya está cargado.');
 });
 
 it('con una sola disciplina no se pregunta en el formulario de categoría', function () {

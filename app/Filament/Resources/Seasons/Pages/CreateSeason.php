@@ -3,7 +3,7 @@
 namespace App\Filament\Resources\Seasons\Pages;
 
 use App\Actions\Seasons\CreateSeason as CreateSeasonAction;
-use App\Filament\Pages\Onboarding;
+use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Enrollments\EnrollmentResource;
 use App\Filament\Resources\Enrollments\Pages\SeasonTransfer;
 use App\Filament\Resources\Seasons\SeasonResource;
@@ -87,6 +87,6 @@ class CreateSeason extends CreateRecord
 
     protected function getRedirectUrl(): string
     {
-        return $this->fromGuide ? Onboarding::getUrl() : static::getResource()::getUrl('index');
+        return $this->fromGuide ? Dashboard::getUrl() : static::getResource()::getUrl('index');
     }
 }

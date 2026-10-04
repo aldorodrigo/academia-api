@@ -11,6 +11,7 @@ use App\Models\Invitation;
 use App\Models\User;
 use App\Rules\MobilePhone;
 use App\Support\Onboarding\Team;
+use App\Support\Scheduling\ScheduleConflicts;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,6 +50,12 @@ class InstructorController extends Controller
             $data['phone'] ?? null,
         );
 
+        // Un técnico que ya existe y queda con dos categorías a la vez: aviso.
+        $warnings = $result['user'] === null ? [] : ScheduleConflicts::forInstructor(
+            $result['user'],
+            $result['user']->instructedGroups()->pluck('groups.id')->all(),
+        );
+
         $item = $result['user'] !== null
             ? $this->userItem($result['user']->load('instructedGroups'), $current)
             : [
@@ -57,7 +64,7 @@ class InstructorController extends Controller
                 'whatsapp_url' => $result['invitation']->whatsappUrl($result['token']),
             ];
 
-        return response()->json(['data' => $item], Response::HTTP_CREATED);
+        return response()->json(['data' => $item, 'warnings' => $warnings], Response::HTTP_CREATED);
     }
 
     public function me(Request $request, CurrentOrganization $current, ManageInstructors $manage): JsonResponse
@@ -70,7 +77,10 @@ class InstructorController extends Controller
 
         $manage->setTeaching($current->get(), $request->user(), $data['teaches'], $data['group_ids'] ?? []);
 
-        return response()->json(['data' => $this->team($request->user()->fresh(), $current)]);
+        return response()->json([
+            'data' => $this->team($request->user()->fresh(), $current),
+            'warnings' => $data['teaches'] ? ScheduleConflicts::forInstructor($request->user(), $data['group_ids'] ?? []) : [],
+        ]);
     }
 
     public function update(Request $request, CurrentOrganization $current, ManageInstructors $manage, int $user): JsonResponse
@@ -80,7 +90,10 @@ class InstructorController extends Controller
 
         $manage->setGroups($current->get(), $instructor, $data['group_ids']);
 
-        return response()->json(['data' => $this->userItem($instructor->load('instructedGroups'), $current)]);
+        return response()->json([
+            'data' => $this->userItem($instructor->load('instructedGroups'), $current),
+            'warnings' => ScheduleConflicts::forInstructor($instructor, $data['group_ids']),
+        ]);
     }
 
     public function resend(int $invitation, CreateInvitation $create): JsonResponse

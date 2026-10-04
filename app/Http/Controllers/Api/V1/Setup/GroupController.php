@@ -11,6 +11,8 @@ use App\Models\Schedule;
 use App\Models\User;
 use App\Models\Venue;
 use App\Support\Onboarding\Templates;
+use App\Support\Scheduling\ScheduleConflicts;
+use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -72,6 +74,7 @@ class GroupController extends Controller
             'groups' => ['required', 'array', 'min:1', 'max:40'],
             'groups.*.name' => ['required', 'string', 'max:255', 'distinct:ignore_case'],
             ...self::groupRules('groups.*.'),
+            'groups.*.schedules.*.venue_id' => ['nullable', 'integer', Rule::exists('venues', 'id')->where('organization_id', app(CurrentOrganization::class)->id())],
             'venue' => ['nullable', 'array'],
             'venue.id' => ['nullable', 'integer'],
             'venue.name' => ['nullable', 'string', 'max:255'],
@@ -114,6 +117,25 @@ class GroupController extends Controller
         $group->delete();
 
         return response()->noContent();
+    }
+
+    /**
+     * Avisos de choque para horarios que se están cargando (misma cancha, mismo día y hora).
+     */
+    public function conflicts(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'schedules' => ['present', 'array', 'max:200'],
+            'schedules.*.key' => ['required', 'string', 'max:50'],
+            'schedules.*.group_id' => ['nullable', 'integer'],
+            'schedules.*.group_name' => ['required', 'string', 'max:255'],
+            'schedules.*.weekday' => ['required', 'integer', 'between:1,7'],
+            'schedules.*.starts_at' => ['required', 'date_format:H:i'],
+            'schedules.*.ends_at' => ['required', 'date_format:H:i'],
+            'schedules.*.venue_id' => ['nullable', 'integer'],
+        ]);
+
+        return response()->json(['data' => (object) ScheduleConflicts::forSlots($data['schedules'])]);
     }
 
     public function storeVenue(Request $request): JsonResponse
@@ -175,7 +197,7 @@ class GroupController extends Controller
                 'weekday' => $schedule->weekday,
                 'starts_at' => Schedule::time($schedule->starts_at),
                 'ends_at' => Schedule::time($schedule->ends_at),
-                'venue' => $schedule->venue === null ? null : ['id' => $schedule->venue->id, 'name' => $schedule->venue->name],
+                'venue' => $schedule->venue === null ? null : ['id' => $schedule->venue->id, 'name' => $schedule->venue->label],
             ])->values(),
             'instructors' => $group->instructors->map(fn (User $user) => ['id' => $user->id, 'name' => $user->name])->values(),
             'enrollments_count' => (int) ($group->enrollments_count ?? 0),

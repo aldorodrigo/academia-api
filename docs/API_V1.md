@@ -1121,11 +1121,39 @@ antes de empezar o si la edad "hasta" es menor que "desde".
 #### `PUT setup/groups/{id}`
 
 El mismo cuerpo de una categoría (`name`, edades o nivel, `capacity`, `is_active`, `schedules` con `venue_id`
-opcional) → la categoría. Los horarios se reemplazan enteros.
+opcional) → la categoría. Los horarios se reemplazan enteros. En `POST setup/groups` cada horario también puede
+traer su `venue_id` (la cancha); `venue` (todos los horarios) queda para compatibilidad.
 
 #### `DELETE setup/groups/{id}`
 
 `204`. `422` si tiene inscripciones ("Tiene inscripciones: desactivala en vez de borrarla.").
+
+#### Lugares y canchas
+
+Un **lugar** (Polideportivo, con su dirección) tiene una o varias **canchas** (salas, aulas: la palabra es
+`term('space')`, por defecto según el tipo: Cancha, Sala, Aula, Espacio). Los horarios y las clases apuntan a la
+cancha (`venue_id`). La cancha se muestra "Polideportivo · Cancha 2"; si se llama como el lugar (un lugar con una
+sola), solo "Polideportivo". `GET venues` (y `venue.name` en clases, horarios y avisos) ya trae ese nombre.
+
+- `GET setup/sites` → `[{ "id": 1, "name": "Polideportivo", "address": "Av. España 123", "spaces": [ { "id": 11, "name": "Cancha 1", "label": "Polideportivo · Cancha 1" } ] }]`
+- `POST setup/sites` `{ "name": "Polideportivo", "address": "…", "spaces": ["Cancha 1", "Cancha 2"] }` → `201` con el lugar.
+  Sin `spaces`, una cancha con el nombre del lugar. `422` si el lugar ya existe o hay nombres repetidos.
+- `POST setup/sites/{id}/spaces` `{ "name": "Cancha 3" }` → `201` con el lugar. `422` si ya existe en ese lugar.
+
+#### `POST setup/schedules/conflicts`
+
+Choques de horarios que se están cargando, contra los guardados (de categorías activas) y entre sí: misma cancha,
+mismo día y horas que se superponen (17:00–18:30 y 18:30–20:00 no chocan). Solo avisa: se puede guardar igual.
+
+`{ "schedules": [ { "key": "0-0", "group_id": null, "group_name": "Sub-8", "weekday": 2, "starts_at": "17:30", "ends_at": "18:30", "venue_id": 11 } ] }`
+→ `{ "data": { "0-0": ["Choca con Sub-10 el martes de 17:00 a 18:30 en Polideportivo · Cancha 1."] } }`.
+Con `group_id` (editando una categoría) no cuenta sus propios horarios guardados.
+
+**Técnicos con dos categorías a la vez:** `PUT setup/instructors/me`, `PUT setup/instructors/{id}` y
+`POST setup/instructors` (si ya era técnico) suman `"warnings": ["Laura Gómez tiene Sub-10 y Sub-12 el martes a las 18:00."]`.
+
+**Reprogramar** (`POST classes/{id}/reschedule`) suma `"warnings": ["Ese día Sub-10 usa Polideportivo · Cancha 1 de 17:00 a 18:30."]`
+si otra categoría usa la cancha a esa hora (la clase se reprograma igual).
 
 #### `GET venues` (ya existe) · `POST setup/venues`
 

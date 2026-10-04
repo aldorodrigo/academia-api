@@ -41,7 +41,7 @@ class EnrollmentResource extends JsonResource
                 'weekday' => $schedule->weekday,
                 'starts_at' => Schedule::time($schedule->starts_at),
                 'ends_at' => Schedule::time($schedule->ends_at),
-                'venue' => $schedule->venue ? ['name' => $schedule->venue->name] : null,
+                'venue' => $schedule->venue ? ['name' => $schedule->venue->label] : null,
             ])->values();
             $groupData['instructors'] = $group->instructors
                 ->map(fn (User $instructor) => ['name' => $instructor->name])

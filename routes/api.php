@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\Setup\GroupController as SetupGroupController;
 use App\Http\Controllers\Api\V1\Setup\InstructorController as SetupInstructorController;
 use App\Http\Controllers\Api\V1\Setup\ProgramController as SetupProgramController;
 use App\Http\Controllers\Api\V1\Setup\SeasonController as SetupSeasonController;
+use App\Http\Controllers\Api\V1\Setup\SiteController as SetupSiteController;
 use App\Http\Controllers\Api\V1\StudentAttendanceController;
 use App\Http\Controllers\Api\V1\StudentController;
 use App\Http\Controllers\Api\V1\VenueController;
@@ -143,6 +144,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                     Route::put('groups/{group}', [SetupGroupController::class, 'update'])->whereNumber('group')->name('groups.update');
                     Route::delete('groups/{group}', [SetupGroupController::class, 'destroy'])->whereNumber('group')->name('groups.destroy');
                     Route::post('venues', [SetupGroupController::class, 'storeVenue'])->name('venues.store');
+                    Route::post('schedules/conflicts', [SetupGroupController::class, 'conflicts'])->name('schedules.conflicts');
+                    Route::get('sites', [SetupSiteController::class, 'index'])->name('sites.index');
+                    Route::post('sites', [SetupSiteController::class, 'store'])->name('sites.store');
+                    Route::post('sites/{site}/spaces', [SetupSiteController::class, 'addSpace'])->whereNumber('site')->name('sites.spaces');
 
                     Route::get('seasons', [SetupSeasonController::class, 'index'])->name('seasons.index');
                     Route::get('seasons/new', [SetupSeasonController::class, 'create'])->name('seasons.create');

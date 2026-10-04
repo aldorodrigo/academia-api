@@ -4,7 +4,6 @@ use App\Enums\OrganizationRole;
 use App\Filament\Pages\Auth\RegisterAccount;
 use App\Filament\Pages\Auth\VerifyAccount;
 use App\Filament\Pages\Dashboard;
-use App\Filament\Pages\Onboarding;
 use App\Filament\Pages\Tenancy\RegisterOrganization;
 use App\Filament\Resources\Seasons\Pages\CreateSeason;
 use App\Jobs\SendWhatsAppCode;
@@ -166,7 +165,7 @@ describe('alta desde el panel', function () {
             ->assertSchemaStateSet(['terminology.student' => 'Alumno', 'terminology.instructor' => 'Profesor'])
             ->call('register')
             ->assertHasNoFormErrors()
-            ->assertRedirect('/admin/academia-ritmo/primeros-pasos');
+            ->assertRedirect('/admin/academia-ritmo');
 
         $club = Organization::query()->where('slug', 'academia-ritmo')->firstOrFail();
         expect($user->isOrganizationAdmin($club))->toBeTrue()
@@ -176,15 +175,25 @@ describe('alta desde el panel', function () {
 });
 
 describe('guía en el panel', function () {
-    it('el Escritorio lleva a la guía mientras esté incompleta y no se haya cerrado', function () {
+    it('la guía está en el Escritorio: completa, achicada con "Seguir después" y de nuevo con "Seguir"', function () {
         [$club] = guideAdmin();
 
-        Livewire::test(Dashboard::class)->assertRedirect(Onboarding::getUrl());
-
-        Livewire::test(Onboarding::class)->callAction('dismiss');
+        Livewire::test(Dashboard::class)
+            ->assertNoRedirect()
+            ->assertSee('Configurá tu club')
+            ->assertSee('0 de 4')
+            ->assertSee('¿Qué enseñan?')
+            ->callAction('dismissGuide');
         expect($club->fresh()->onboarding_dismissed_at)->not->toBeNull();
 
-        Livewire::test(Dashboard::class)->assertNoRedirect();
+        Livewire::test(Dashboard::class)
+            ->assertSee('Configurá tu club · 0 de 4')
+            ->assertDontSee('Te llevamos paso a paso')
+            ->callAction('resumeGuide');
+        expect($club->fresh()->onboarding_dismissed_at)->toBeNull();
+
+        // La dirección vieja lleva al Escritorio.
+        $this->get('/admin/ritmo/primeros-pasos')->assertRedirect(Dashboard::getUrl());
     });
 
     it('solo la ve el administrador', function () {
@@ -192,13 +201,14 @@ describe('guía en el panel', function () {
         $tutor = memberOf($club);
         app(RoleAssigner::class)->assign($club, $tutor, OrganizationRole::Guardian);
 
-        $this->actingAs($tutor)->get('/admin/ritmo/primeros-pasos')->assertForbidden();
+        $this->actingAs($tutor);
+        Livewire::test(Dashboard::class)->assertDontSee('Configurá tu club');
     });
 
     it('disciplinas, categorías y técnicos desde los paneles laterales', function () {
         [$club, $admin] = guideAdmin();
 
-        Livewire::test(Onboarding::class)
+        Livewire::test(Dashboard::class)
             ->assertSee('0 de 4')
             ->callAction('programs', data: [
                 'programs' => ['Fútbol'],
@@ -207,9 +217,10 @@ describe('guía en el panel', function () {
             ->assertHasNoActionErrors();
 
         $futbol = Program::query()->where('name', 'Fútbol')->firstOrFail();
+        $cancha = Venue::query()->create(['name' => 'Cancha del club']);
         expect(Program::query()->where('name', 'Ajedrez')->value('group_criterion')->value)->toBe('level');
 
-        Livewire::test(Onboarding::class)
+        Livewire::test(Dashboard::class)
             ->mountAction('groups')
             ->setActionData(['program_id' => $futbol->id])
             ->assertActionDataSet(['groups.0.name' => 'Sub-6'])
@@ -217,23 +228,32 @@ describe('guía en el panel', function () {
                 'groups' => [
                     ['name' => 'Sub-8', 'min_age' => 7, 'max_age' => 8, 'level' => null],
                     ['name' => 'Sub-10', 'min_age' => 9, 'max_age' => 10, 'level' => null],
+                    ['name' => 'Sub-12', 'min_age' => 11, 'max_age' => 12, 'level' => null],
                 ],
-                'weekdays' => [2, 4],
-                'starts_at' => '17:00',
-                'ends_at' => '18:30',
-                'venue_name' => 'Cancha del club',
                 'capacity' => 20,
+                // Cada una con sus días y horarios; Sub-10 además el sábado; Sub-12 sin horario todavía.
+                'plan' => [
+                    ['name' => 'Sub-8', 'slots' => [['weekdays' => [2, 4], 'starts_at' => '17:00', 'ends_at' => '18:30', 'venue_id' => $cancha->id]]],
+                    ['name' => 'Sub-10', 'slots' => [
+                        ['weekdays' => [1, 3], 'starts_at' => '18:30', 'ends_at' => '20:00', 'venue_id' => $cancha->id],
+                        ['weekdays' => [6], 'starts_at' => '09:00', 'ends_at' => '10:30', 'venue_id' => null],
+                    ]],
+                    ['name' => 'Sub-12', 'slots' => [['weekdays' => [], 'starts_at' => '17:00', 'ends_at' => '18:30', 'venue_id' => null]]],
+                ],
             ])
             ->callMountedAction()
             ->assertHasNoActionErrors();
 
         $sub8 = Group::query()->where('name', 'Sub-8')->firstOrFail();
+        $sub10 = Group::query()->where('name', 'Sub-10')->firstOrFail();
         expect($sub8->capacity)->toBe(20)
             ->and($sub8->schedules->pluck('weekday')->all())->toBe([2, 4])
             ->and($sub8->schedules->first()->venue->name)->toBe('Cancha del club')
-            ->and(Venue::query()->count())->toBe(1);
+            ->and($sub10->schedules->map(fn ($s) => $s->weekday.' '.Schedule::time($s->starts_at))->all())->toBe(['1 18:30', '3 18:30', '6 09:00'])
+            ->and(Group::query()->where('name', 'Sub-12')->firstOrFail()->schedules)->toBeEmpty()
+            ->and(collect(Dashboard::checklist()['steps'])->firstWhere('key', 'groups')['summary'])->toBe('3 categorías · 1 sin horario');
 
-        Livewire::test(Onboarding::class)
+        Livewire::test(Dashboard::class)
             ->callAction('teaching', data: ['teaches' => true, 'group_ids' => [$sub8->id]])
             ->callAction('inviteInstructor', data: ['name' => 'Marta Ríos', 'contact' => 'marta@test.com', 'group_ids' => [$sub8->id]])
             ->assertActionMounted('showLink');
@@ -242,7 +262,7 @@ describe('guía en el panel', function () {
             ->and($admin->instructedGroups()->pluck('groups.id')->all())->toBe([$sub8->id]);
         Mail::assertQueued(InvitationMail::class, fn (InvitationMail $mail) => $mail->hasTo('marta@test.com'));
 
-        expect(collect(Onboarding::checklist()['steps'])->pluck('status', 'key')->all())->toBe([
+        expect(collect(Dashboard::checklist()['steps'])->pluck('status', 'key')->all())->toBe([
             'programs' => 'done',
             'groups' => 'done',
             'season' => 'pending',
@@ -255,19 +275,19 @@ describe('guía en el panel', function () {
         $futbol = Program::factory()->for($club)->create(['name' => 'Fútbol']);
         $group = Group::factory()->for($futbol)->create(['organization_id' => $club->id]);
         Schedule::query()->create(['group_id' => $group->id, 'weekday' => 2, 'starts_at' => '17:00', 'ends_at' => '18:30']);
-        Livewire::test(Onboarding::class)->callAction('skipInstructors');
+        Livewire::test(Dashboard::class)->callAction('skipInstructors');
 
         Livewire::withQueryParams(['guia' => 1])
             ->test(CreateSeason::class)
             ->fillForm(['fee_amount' => 150000])
             ->call('create')
             ->assertHasNoFormErrors()
-            ->assertRedirect(Onboarding::getUrl());
+            ->assertRedirect(Dashboard::getUrl());
 
-        expect(Onboarding::checklist()['completed'])->toBeTrue()
+        expect(Dashboard::checklist()['completed'])->toBeTrue()
             ->and($club->fresh()->onboarding_completed_at)->not->toBeNull();
 
-        Livewire::test(Onboarding::class)->assertSee('¡Todo listo!');
-        Livewire::test(Dashboard::class)->assertNoRedirect();
+        // Completa, la guía desaparece del Escritorio.
+        Livewire::test(Dashboard::class)->assertDontSee('Configurá tu club')->assertDontSee('Te llevamos paso a paso');
     });
 });

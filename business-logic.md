@@ -88,6 +88,23 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
 
 `instructor` y `tutor` se muestran con el vocabulario de la organización (ej. "Técnico", "Profesor/a").
 
+### Permisos por defecto y Escritorio
+- Cada rol base **nace con los permisos de su función** (`App\Support\Roles\DefaultPermissions`); el admin los
+  cambia en Roles. Presidente y vicepresidente: ver todo e informes (el presidente, también aprobar becas). Tesorero y
+  protesorero: cobros, cuotas, gastos, cuentas, tarifas, becas y descuentos, ver alumnos y grupos, informes (el
+  tesorero, también aprobar becas). Secretario y prosecretario: alumnos, tutores, inscripciones e invitaciones; ver
+  grupos, temporadas y miembros. Vocal: informes. Síndico: ver lo financiero e informes. Admin, técnico y tutor: nada
+  extra (el admin pasa por todo; técnico y tutor usan sus grupos e hijos).
+- Se aplican al crear el rol; `organizations:sync-roles` los completa en los roles base que no tienen **ningún**
+  permiso (no pisa lo que cambió el admin).
+- **Quien no es admin solo invita o asigna tutores y técnicos** (no cargos ni administrador).
+- **Escritorio del panel:** arriba la guía (hasta completarla), botones a lo principal y tarjetas que se muestran por
+  **permiso** (sirven para roles creados a mano): Hoy (clases del día y asistencia), Cobranza del mes (cobrado, falta
+  del mes, vencido con días de gracia, vence esta semana), Morosos (5 familias con más deuda, con WhatsApp), Alumnos
+  (activos, altas y bajas del mes, cupo por grupo), Caja, Para hacer (cada cosa para quien la puede resolver),
+  Cumpleaños y Balance del mes. **App:** la guía en el inicio y botones según permisos (Mis grupos, Estado de cuenta,
+  Mis reservas, Agenda, Informes).
+
 ### Asignaciones y mandatos
 - **`role_assignments` es la fuente de verdad** de quién tiene qué rol y desde/hasta cuándo;
   `model_has_roles` (spatie) se sincroniza desde ahí. Terminar una asignación no la borra:
@@ -163,6 +180,17 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - **Familia:** agrupa alumnos y tutores. Un tutor puede tener varios hijos; un hijo varios tutores.
 - Alumno adulto sin tutor: es su propio responsable.
 - Ficha médica: visible solo para roles autorizados.
+
+### Lugares, canchas y choques *(Sprint 5d)*
+- Un **lugar** (nombre y dirección) tiene una o varias **canchas** (salas, aulas, pileta: la palabra sale del
+  vocabulario, `space`, según el tipo: Cancha, Sala, Aula, Espacio). Cada horario y cada clase usa una cancha.
+  Se muestra "Polideportivo · Cancha 2", o solo el lugar si tiene una sola con su mismo nombre. "Cancha 1" se puede
+  repetir en lugares distintos. Un lugar con horarios no se borra.
+- **Choques** (solo avisos; se guarda igual, por ejemplo si comparten la cancha):
+  - dos categorías en la misma cancha, el mismo día y con horas que se superponen (al cargar horarios en la guía o
+    en la categoría, comparando con lo guardado y entre sí);
+  - un técnico con dos categorías a la misma hora (al asignarle categorías o cargar horarios de su categoría);
+  - una clase reprogramada a una hora en que otra categoría usa esa cancha ese día.
 
 ## 4. Dinero — reglas generales
 

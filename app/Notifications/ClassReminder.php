@@ -35,7 +35,7 @@ class ClassReminder extends Notification implements ShouldQueue
         $names = self::names($students->pluck('first_name')->all());
         $verb = $students->count() > 1 ? 'tienen' : 'tiene';
         $day = ucfirst(self::dayLabel($session->date, $today));
-        $venue = $session->venue ? " ({$session->venue->name})" : '';
+        $venue = $session->venue ? " ({$session->venue->label})" : '';
 
         $this->body = "{$day} {$names} {$verb} {$session->group->program->name} a las "
             .substr($session->starts_at, 0, 5)."{$venue}. ".($students->count() > 1 ? '¿Los llevás?' : '¿Lo llevás?');

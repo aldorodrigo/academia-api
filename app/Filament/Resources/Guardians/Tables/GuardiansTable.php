@@ -68,30 +68,42 @@ class GuardiansTable
     }
 
     /**
-     * Invitación como tutor: al aceptarla ve a sus hijos en la app. Con correo se manda por email;
-     * si solo tiene celular, se muestra el link para mandarlo por WhatsApp a ese número.
+     * Invitación como tutor: al aceptarla ve a sus hijos en la app. Como al técnico: con correo
+     * se manda por email y, con celular, el modal del link trae el botón de WhatsApp a ese número.
      */
     public static function inviteAction(): Action
     {
         return Action::make('invite')
             ->label(fn (Guardian $record) => $record->invitations()->exists() ? 'Reenviar invitación' : 'Invitar a la app')
             ->icon(Heroicon::OutlinedEnvelope)
+            ->button()
             ->visible(fn (Guardian $record) => (filled($record->email) || Phone::mobile($record->phone) !== null) && ! $record->hasAccount())
             ->authorize('create', Invitation::class)
             ->requiresConfirmation()
-            ->modalDescription(fn (Guardian $record) => filled($record->email)
-                ? "Se envía la invitación a {$record->email}."
-                : "Vas a poder mandarle el link por WhatsApp al {$record->phone_display}.")
+            ->modalIcon(Heroicon::OutlinedEnvelope)
+            ->modalHeading(fn (Guardian $record) => "Invitar a {$record->full_name}")
+            ->modalDescription(fn (Guardian $record) => self::inviteChannels($record))
+            ->modalSubmitActionLabel('Crear invitación')
             ->action(function (Guardian $record, Component $livewire): void {
                 [$invitation, $token] = app(CreateInvitation::class)->forGuardian($record, auth()->user());
 
-                if (filled($invitation->phone)) {
-                    $livewire->replaceMountedAction('showLink', ['token' => $token, 'name' => $record->full_name, 'phone' => $invitation->phone]);
-
-                    return;
-                }
-
-                Notification::make()->success()->title('Invitación enviada.')->send();
+                $livewire->replaceMountedAction('showLink', [
+                    'token' => $token,
+                    'name' => $record->full_name,
+                    'phone' => $invitation->phone ?? Phone::mobile($record->phone),
+                    'email' => $invitation->email,
+                ]);
             });
+    }
+
+    private static function inviteChannels(Guardian $record): string
+    {
+        $phone = Phone::mobile($record->phone);
+
+        return match (true) {
+            filled($record->email) && $phone !== null => "Le llega por correo a {$record->email} y también vas a poder mandársela por WhatsApp al {$record->phone_display}.",
+            filled($record->email) => "Le llega por correo a {$record->email}.",
+            default => "Vas a poder mandarle el link por WhatsApp al {$record->phone_display}.",
+        };
     }
 }

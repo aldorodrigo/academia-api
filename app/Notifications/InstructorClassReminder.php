@@ -26,7 +26,7 @@ class InstructorClassReminder extends Notification implements ShouldQueue
         $session->loadMissing(['group.program', 'venue']);
         $counts = $session->counts();
         $day = ucfirst(ClassReminder::dayLabel($session->date, $today));
-        $venue = $session->venue ? " ({$session->venue->name})" : '';
+        $venue = $session->venue ? " ({$session->venue->label})" : '';
         $makeup = $session->is_makeup ? ' (recuperación)' : '';
 
         $this->classId = $session->id;
