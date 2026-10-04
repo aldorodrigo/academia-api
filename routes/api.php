@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\ClassController;
 use App\Http\Controllers\Api\V1\ClassResponseController;
 use App\Http\Controllers\Api\V1\CurrentOrganizationController;
 use App\Http\Controllers\Api\V1\DeviceController;
+use App\Http\Controllers\Api\V1\EnrollmentRequestController;
 use App\Http\Controllers\Api\V1\GroupController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\Lessons\BookingController;
@@ -89,6 +90,15 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('payment-reports', [PaymentReportController::class, 'index'])->name('payment-reports.index');
             Route::post('payment-reports/{report}/approve', [PaymentReportController::class, 'approve'])->whereNumber('report')->name('payment-reports.approve');
             Route::post('payment-reports/{report}/reject', [PaymentReportController::class, 'reject'])->whereNumber('report')->name('payment-reports.reject');
+
+            // Inscripción desde la app: el tutor la pide, quien tiene permiso la aprueba o rechaza.
+            Route::get('enrollment-requests/options', [EnrollmentRequestController::class, 'options'])->name('enrollment-requests.options');
+            Route::post('enrollment-requests', [EnrollmentRequestController::class, 'store'])->middleware('throttle:10,1')->name('enrollment-requests.store');
+            Route::get('enrollment-requests', [EnrollmentRequestController::class, 'index'])->name('enrollment-requests.index');
+            Route::delete('enrollment-requests/{id}', [EnrollmentRequestController::class, 'destroy'])->whereNumber('id')->name('enrollment-requests.destroy');
+            Route::get('enrollment-requests/review', [EnrollmentRequestController::class, 'review'])->name('enrollment-requests.review');
+            Route::post('enrollment-requests/{id}/approve', [EnrollmentRequestController::class, 'approve'])->whereNumber('id')->name('enrollment-requests.approve');
+            Route::post('enrollment-requests/{id}/reject', [EnrollmentRequestController::class, 'reject'])->whereNumber('id')->name('enrollment-requests.reject');
 
             Route::get('reports/balance', [ReportController::class, 'balance'])->name('reports.balance');
             Route::get('reports/balances', [ReportController::class, 'balances'])->name('reports.balances');

@@ -1531,7 +1531,7 @@ próxima) y `group_id` (activa, de una disciplina de la temporada). Opcionales: 
 (por defecto `tutor`), `notes` (hasta 500) y `medical` (cada campo opcional). Errores `422`:
 - "Ya mandaste una solicitud para Sofía; esperá a que el club la revise." (otra pendiente del mismo chico: documento,
   o nombre + apellido + nacimiento).
-- "Sofía ya está inscripta en Fútbol (2026)." (ya es su hijo y está inscripto en esa disciplina y temporada).
+- "Sofía ya tiene inscripción en Fútbol (2026)." (ya es su hijo y está inscripto en esa disciplina y temporada).
 
 Avisa por push (y correo) a quienes aprueban.
 
@@ -1587,7 +1587,7 @@ pedida y lo del plan) → la solicitud aprobada (con `student_id`). Errores `422
 - `group_id`: "Elegí una categoría de Fútbol." · `status`: "Esta solicitud ya fue revisada." ·
   `season_id`: "La temporada 2026 ya terminó."
 
-Push al tutor: "Sofía ya está inscripta en Sub-8 · Fútbol (2026)."
+Push al tutor: "Aprobamos la inscripción de Sofía en Sub-8 · Fútbol (2026). Ya ves sus clases y sus cuotas en la app."
 
 #### `POST enrollment-requests/{id}/reject`
 

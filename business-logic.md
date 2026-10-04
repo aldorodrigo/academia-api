@@ -205,6 +205,26 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Alumno adulto sin tutor: es su propio responsable.
 - Ficha médica: visible solo para roles autorizados.
 
+### Inscripción desde la app *(2026-10-04, `docs/PLAN_INSCRIPCION_TUTOR.md`)*
+- Un **miembro activo** (normalmente un tutor) pide la inscripción de un hijo: nombre, apellido, fecha de nacimiento,
+  documento (opcional), parentesco, disciplina, temporada vigente o próxima y categoría activa (la API sugiere la que
+  corresponde por año de nacimiento) y, si quiere, la ficha médica. La **solicitud** queda `pendiente` ("En revisión"):
+  no crea alumnos ni cargos.
+- Una sola pendiente por chico (documento, o nombre + apellido + nacimiento) y usuario. Si ya es su hijo y tiene
+  inscripción en esa disciplina y temporada, no se puede pedir. Mientras está pendiente el tutor la cancela.
+- **Aprueba** quien tiene "Gestionar solicitudes de inscripción" o puede crear inscripciones (secretario y prosecretario
+  por defecto; el admin siempre), en el panel o en la app. Puede cambiar la categoría (de la misma disciplina) y qué se
+  cobra del período en curso (`MidPeriod`, por defecto el del plan). Si la categoría tiene cupo y está completa
+  (ocupan las inscripciones activas, becadas o pendientes de la temporada), tiene que confirmarlo.
+- **Al aprobar**, en una sola operación (`RegisterStudent`): alumno (reutilizado si ya existe), tutor vinculado a la
+  cuenta que la pidió sin invitación (su ficha de tutor si ya tiene, sin pisarla), familia automática, inscripción
+  `activo` y cuotas según el plan. La ficha médica pasa a la del alumno si no tenía. Si no tenía el rol `tutor`, se le
+  asigna. **Rechazar** pide motivo. Las dos cosas avisan al tutor (push y correo); una solicitud nueva avisa a quienes
+  aprueban.
+- La ficha médica de la solicitud se guarda cifrada, no la ve quien aprueba y se borra al aprobar (ya está en la ficha),
+  rechazar o cancelar.
+- Pendiente para el Sprint 5e: el link público del club (familias que todavía no están), actividades y lista de espera.
+
 ### Lugares, canchas y choques *(Sprint 5d)*
 - Un **lugar** (nombre y dirección) tiene una o varias **canchas** (salas, aulas, pileta: la palabra sale del
   vocabulario, `space`, según el tipo: Cancha, Sala, Aula, Espacio). Cada horario y cada clase usa una cancha.

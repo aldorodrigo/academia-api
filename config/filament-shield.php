@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use App\Filament\Resources\EnrollmentRequests\EnrollmentRequestResource;
 use App\Filament\Resources\PaymentReports\PaymentReportResource;
 use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
 use Filament\Pages\Dashboard;
@@ -198,6 +199,8 @@ return [
         'exclude' => [
             // Se accede con el permiso "Validar comprobantes de pago" (o el cargo de tesorero).
             PaymentReportResource::class,
+            // Se accede con "Gestionar solicitudes de inscripción" (o quien puede crear inscripciones).
+            EnrollmentRequestResource::class,
         ],
     ],
 
@@ -265,6 +268,8 @@ return [
         'Take:Attendance' => 'Tomar asistencia en cualquier grupo',
         // Aprobar o rechazar los comprobantes de transferencia de los tutores (tesorero y protesorero lo hacen por su cargo).
         'Review:PaymentReports' => 'Validar comprobantes de pago',
+        // Aprobar o rechazar las solicitudes de inscripción de la app (quien puede crear inscripciones también).
+        'Manage:EnrollmentRequests' => 'Gestionar solicitudes de inscripción',
     ],
 
     /*

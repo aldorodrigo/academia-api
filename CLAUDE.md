@@ -129,6 +129,11 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Alta de jugador: `App\Actions\Students\RegisterStudent` (datos + inscripción + tutores + invitación). La usan
   el formulario "Nuevo jugador" y la importación (`ImportStudentRow` adapta la fila; el importer corre en cola y
   recibe `organization_id` en `options`).
+- Inscripción desde la app: `EnrollmentRequest` (solicitud del tutor, sin alumno ni cargos hasta aprobarla),
+  `App\Actions\Enrollments\SubmitEnrollmentRequest` / `ReviewEnrollmentRequest` (aprobar usa `RegisterStudent` con el
+  tutor por `user_id`), `EnrollmentRequestAccess` (quién aprueba: `Manage:EnrollmentRequests` o `Create:Enrollment`;
+  opciones con categoría sugerida y cupo; mitad de período con `MidPeriodPreview::periodStarted`). Panel: "Solicitudes
+  de inscripción" en Académico. Plan: `docs/PLAN_INSCRIPCION_TUTOR.md` (5e le suma el link público).
 - Familia: automática e invisible (`Family::syncFor($student)`), sin menú ni campo en el panel.
 - Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season, $program)`.
 - Campos de inscripción (alta, acción "Inscribir", pestaña Inscripciones): `App\Filament\Support\EnrollmentForm`.

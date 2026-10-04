@@ -22,7 +22,8 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Alta de un jugador en un solo paso: datos, inscripción, tutores (con familia
- * automática) e invitación a la app. La usan el formulario del panel y la importación.
+ * automática) e invitación a la app. La usan el formulario del panel, la importación y la aprobación de
+ * solicitudes de inscripción de la app.
  *
  * No duplica: el alumno se busca por documento (o nombre + fecha de nacimiento) y el
  * tutor por correo, documento o nombre dentro de la familia.
@@ -39,7 +40,7 @@ class RegisterStudent
 
     /**
      * @param  array{first_name: string, last_name: string, birth_date: CarbonImmutable|string, document?: ?string, shirt_size?: ?string, position?: ?string, notes?: ?string, user_id?: ?int}  $data
-     * @param  list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string, invite?: bool}>  $guardians
+     * @param  list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string, invite?: bool, user_id?: ?int}>  $guardians  con `user_id` queda vinculado a esa cuenta (sin invitación)
      * @param  EnrollmentStatus|null  $status  null: se mantiene el de una inscripción existente (o Activo si es nueva)
      * @param  bool  $mustBeNew  el formulario "Nuevo jugador" no reutiliza un jugador existente (la importación sí)
      * @param  MidPeriod|null  $midPeriod  qué se cobra del período en curso (null: lo del plan de la temporada)
@@ -131,8 +132,12 @@ class RegisterStudent
 
             $phone = Phone::normalize($data['phone'] ?? null);
 
-            // El mismo tutor: por correo, por celular, por documento o por nombre en la familia.
-            $guardian = ($email ? Guardian::query()->where('email', $email)->first() : null)
+            $userId = $data['user_id'] ?? null;
+
+            // El mismo tutor: por su usuario (solicitud desde la app), por correo, por celular, por documento o
+            // por nombre en la familia.
+            $guardian = ($userId ? Guardian::query()->where('user_id', $userId)->first() : null)
+                ?? ($email ? Guardian::query()->where('email', $email)->first() : null)
                 ?? ($phone ? Guardian::query()->where('phone', $phone)->first() : null)
                 ?? (filled($data['document'] ?? null) ? Guardian::query()->where('document', $data['document'])->first() : null)
                 ?? $this->sameNameInFamily($student, $data, $familyId)
@@ -144,6 +149,7 @@ class RegisterStudent
                 'document' => $data['document'] ?? null,
                 'email' => $email,
                 'phone' => $data['phone'] ?? null,
+                'user_id' => $guardian->user_id ?? $userId,
             ], fn ($value) => $value !== null))->save();
 
             $student->guardians()->syncWithoutDetaching([
