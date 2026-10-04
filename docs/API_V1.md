@@ -1429,3 +1429,173 @@ código de la copia, invitaciones a celular y correo).
   porque los antivirus de correo abren los links solos.
 - **Vista previa de los links:** la app web tiene las etiquetas `og:` de Tuku (título, descripción y la tarjeta
   `https://tukuha.app/brand/tuku-tarjeta-redes.png`), que WhatsApp muestra al compartir una invitación.
+
+## Inscripción desde la app
+
+Un miembro activo de la organización (normalmente un tutor) pide la inscripción de un hijo; queda **pendiente** hasta
+que alguien con el permiso "Gestionar solicitudes de inscripción" (o que puede crear inscripciones) la aprueba o la
+rechaza, en el panel o en la app. La solicitud no genera cargos ni crea alumnos: al aprobarla se da de alta con
+`RegisterStudent` (alumno, tutor vinculado a su usuario, familia, inscripción `activo` y cuotas según el plan de la
+temporada). Plan: `docs/PLAN_INSCRIPCION_TUTOR.md`. Todo con token + `X-Organization`.
+
+### Objeto solicitud
+
+```json
+{
+  "id": 18,
+  "status": "pendiente",
+  "status_label": "En revisión",
+  "child": {
+    "first_name": "Sofía",
+    "last_name": "Benítez",
+    "full_name": "Sofía Benítez",
+    "birth_date": "2018-07-02",
+    "document": "7123456"
+  },
+  "relationship": "madre",
+  "has_medical": true,
+  "notes": null,
+  "season": { "id": 1, "name": "2026", "starts_on": "2026-02-01", "ends_on": "2026-11-30" },
+  "group": { "id": 3, "name": "Sub-8", "program": { "id": 1, "name": "Fútbol" } },
+  "rejection_reason": null,
+  "student_id": null,
+  "created_at": "2026-10-04T10:15:00-03:00",
+  "reviewed_at": null
+}
+```
+
+- `status`: `pendiente` ("En revisión"), `aprobada` ("Aprobada"), `rechazada` ("No aprobada") o `cancelada` ("Cancelada").
+- `relationship`: `padre`, `madre`, `tutor`, `abuelo` u `otro`.
+- `has_medical`: si cargó la ficha médica (los datos no se devuelven: pasan a la ficha del alumno al aprobar).
+- `student_id`: el alumno dado de alta al aprobar (para abrir `/hijos/{id}`).
+
+### Tutor
+
+#### `GET enrollment-requests/options?birth_date=2018-07-02`
+
+Dónde se puede inscribir: una opción por disciplina y temporada vigente o próxima, con sus categorías activas.
+`birth_date` es opcional; con ella llega `suggested_group_id` (por año de nacimiento, solo en disciplinas con ese
+criterio; `null` si no hay una sola que corresponda).
+
+```json
+{
+  "data": [
+    {
+      "program": { "id": 1, "name": "Fútbol" },
+      "season": { "id": 1, "name": "2026", "starts_on": "2026-02-01", "ends_on": "2026-11-30" },
+      "suggested_group_id": 3,
+      "groups": [
+        {
+          "id": 3,
+          "name": "Sub-8",
+          "capacity": 20,
+          "spots_left": 3,
+          "full": false,
+          "schedules": [{ "weekday": 1, "starts_at": "17:00", "ends_at": "18:30" }]
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `capacity` y `spots_left` son `null` si la categoría no tiene cupo. Ocupado = inscripciones `activo`, `becado` o
+  `pendiente` de esa temporada. Con `full: true` se puede pedir igual (el club decide).
+- Sin opciones (`data: []`): el club todavía no tiene una temporada abierta con categorías.
+
+#### `POST enrollment-requests` (con throttle)
+
+```json
+{
+  "first_name": "Sofía",
+  "last_name": "Benítez",
+  "birth_date": "2018-07-02",
+  "document": "7123456",
+  "relationship": "madre",
+  "season_id": 1,
+  "group_id": 3,
+  "notes": "Es su primer año.",
+  "medical": {
+    "blood_type": "O+",
+    "allergies": "Penicilina",
+    "conditions": null,
+    "medications": null,
+    "emergency_contact_name": "Ana Benítez",
+    "emergency_contact_phone": "0981123456"
+  }
+}
+```
+
+→ `201` con la solicitud. Obligatorios: nombre, apellido, fecha de nacimiento (pasada), `season_id` (vigente o
+próxima) y `group_id` (activa, de una disciplina de la temporada). Opcionales: `document` (hasta 20), `relationship`
+(por defecto `tutor`), `notes` (hasta 500) y `medical` (cada campo opcional). Errores `422`:
+- "Ya mandaste una solicitud para Sofía; esperá a que el club la revise." (otra pendiente del mismo chico: documento,
+  o nombre + apellido + nacimiento).
+- "Sofía ya está inscripta en Fútbol (2026)." (ya es su hijo y está inscripto en esa disciplina y temporada).
+
+Avisa por push (y correo) a quienes aprueban.
+
+#### `GET enrollment-requests`
+
+Las solicitudes del usuario: pendientes y las no aprobadas de los últimos 30 días, de la más nueva a la más vieja
+(las aprobadas ya aparecen en `GET students`).
+
+#### `DELETE enrollment-requests/{id}`
+
+Cancela una solicitud propia pendiente → `204`. Ya revisada → `422` "Esta solicitud ya fue revisada.".
+
+### Quien aprueba (permiso `manage_enrollment_requests` en `GET organization`)
+
+#### `GET enrollment-requests/review?status=pendiente`
+
+`status` opcional (`pendiente` por defecto, de la más vieja a la más nueva; `todos` para las últimas 50). Cada
+solicitud suma:
+
+```json
+{
+  "requested_by": { "name": "Ana Benítez", "phone": "0981 123 456", "email": null },
+  "age": 8,
+  "existing_student": { "id": 12, "full_name": "Sofía Benítez", "guardians": ["Carlos Benítez"] },
+  "group_options": [
+    { "id": 3, "name": "Sub-8", "capacity": 20, "spots_left": 0, "full": true, "suggested": true }
+  ],
+  "mid_period": {
+    "label": "Se inscribe a mitad de mes: se cobra",
+    "default": "completo",
+    "options": [
+      { "value": "completo", "label": "El mes completo" },
+      { "value": "proporcional", "label": "Lo que falta del mes (proporcional)" },
+      { "value": "proximo", "label": "Desde el mes que viene" }
+    ]
+  }
+}
+```
+
+- `age`: edad de hoy.
+- `existing_student`: el chico ya está cargado en el club (por documento o nombre + nacimiento); aprobar lo reutiliza y
+  le suma este tutor. `null` si es nuevo.
+- `group_options`: categorías activas de la disciplina, con el cupo en la temporada y la sugerida por edad, para
+  cambiarla al aprobar.
+- `mid_period`: `null` si el período en curso no empezó (o la temporada no tiene plan); si no, qué se cobra de la
+  cuota en curso, con el valor del plan por defecto.
+
+#### `POST enrollment-requests/{id}/approve`
+
+`{ "group_id": 3, "mid_period": "proporcional", "over_capacity": true }` (todo opcional: por defecto la categoría
+pedida y lo del plan) → la solicitud aprobada (con `student_id`). Errores `422`:
+- `over_capacity`: "Sub-8 está completa (20 de 20). Confirmá para inscribirla igual." (cupo lleno sin confirmar).
+- `group_id`: "Elegí una categoría de Fútbol." · `status`: "Esta solicitud ya fue revisada." ·
+  `season_id`: "La temporada 2026 ya terminó."
+
+Push al tutor: "Sofía ya está inscripta en Sub-8 · Fútbol (2026)."
+
+#### `POST enrollment-requests/{id}/reject`
+
+`{ "reason": "No hay lugar en Sub-8 este año." }` (obligatorio) → la solicitud rechazada. Ya revisada → `422`. Push al
+tutor: "El club no aprobó la inscripción de Sofía: No hay lugar en Sub-8 este año."
+
+### Push
+
+Con copia por correo a quien tenga un correo para copias.
+`data`: `{ "type": "enrollment_request", "route": "/solicitudes" }` para quien aprueba;
+`{ "type": "enrollment_request_reviewed", "route": "/hijos/12" }` (aprobada) o `"/hijos"` (no aprobada) para el tutor.
