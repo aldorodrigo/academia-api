@@ -5,10 +5,12 @@ use App\Filament\Pages\Auth\RegisterAccount;
 use App\Filament\Pages\Auth\RequestPasswordReset;
 use App\Filament\Platform\Widgets\VerificationCodes;
 use App\Jobs\SendWhatsAppCode;
+use App\Mail\EmailVerificationCodeMail;
 use App\Models\User;
 use App\Support\Verification\CodeGuard;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Livewire\Livewire;
 
@@ -117,4 +119,46 @@ it('con Turnstile, cada envío pide un token nuevo (el anterior ya se usó)', fu
         ->assertHasNoFormErrors();
 
     expect(User::query()->where('phone', '+595981123456')->exists())->toBeTrue();
+});
+
+it('al crear la cuenta en el panel con el celular, el correo es opcional y le llega la copia del código', function () {
+    Bus::fake([SendWhatsAppCode::class]);
+    Mail::fake();
+
+    Livewire::test(RegisterAccount::class)
+        ->assertSee('Correo (opcional)')
+        ->fillForm([
+            'name' => 'Laura Gómez',
+            'phone' => '0981 123 456',
+            'email' => 'Laura@Test.com',
+            'password' => 'secreta123',
+            'passwordConfirmation' => 'secreta123',
+            'terms' => true,
+        ])
+        ->tap(fn () => $this->travel(3)->seconds())
+        ->call('register')
+        ->assertHasNoFormErrors();
+
+    $user = User::query()->where('phone', '+595981123456')->sole();
+    expect($user->email)->toBe('laura@test.com');
+    Bus::assertDispatched(SendWhatsAppCode::class, fn (SendWhatsAppCode $job) => $job->phone === '+595981123456');
+    Mail::assertQueued(EmailVerificationCodeMail::class, fn (EmailVerificationCodeMail $mail) => $mail->hasTo('laura@test.com')
+        && $mail->whatsapp === '+595981123456');
+});
+
+it('en el panel, un correo verificado de otra cuenta no se puede usar', function () {
+    User::factory()->create(['email' => 'laura@test.com']);
+
+    Livewire::test(RegisterAccount::class)
+        ->fillForm([
+            'name' => 'Laura Gómez',
+            'phone' => '0981 123 456',
+            'email' => 'laura@test.com',
+            'password' => 'secreta123',
+            'passwordConfirmation' => 'secreta123',
+            'terms' => true,
+        ])
+        ->tap(fn () => $this->travel(3)->seconds())
+        ->call('register')
+        ->assertHasFormErrors(['email']);
 });

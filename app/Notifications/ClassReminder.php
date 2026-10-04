@@ -6,24 +6,22 @@ use App\Models\ClassSession;
 use App\Models\Student;
 use App\Support\Push\PushMessage;
 use Carbon\CarbonImmutable;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\URL;
 
 /**
  * Aviso de día de clase al tutor: "Hoy Mateo tiene Fútbol a las 17:00 (Cancha 1). ¿Lo llevás?"
- * con los botones "Sí, va" / "No va" (links firmados que vencen al empezar la clase).
+ * con los botones "Sí, va" / "No va" (links firmados que vencen al empezar la clase; en el correo, a una página).
  */
-class ClassReminder extends Notification implements ShouldQueue
+class ClassReminder extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     /** @var array<string, string> */
     public array $data;
+
+    /** @var array{going: string, not_going: string} */
+    public array $mailLinks;
 
     /**
      * @param  Collection<int, Student>|Student  $students  alumnos del usuario en esa clase
@@ -46,6 +44,15 @@ class ClassReminder extends Notification implements ShouldQueue
             'students' => $students->pluck('id')->implode(','),
             'going' => $going ? 1 : 0,
         ]);
+
+        // En el correo, los botones abren una página que confirma la respuesta (los antivirus de correo abren los links).
+        $page = fn (bool $going) => URL::temporarySignedRoute('class-reminder.show', $session->startsAt(), [
+            'class' => $session->id,
+            'user' => $userId,
+            'students' => $students->pluck('id')->implode(','),
+            'going' => $going ? 1 : 0,
+        ]);
+        $this->mailLinks = ['going' => $page(true), 'not_going' => $page(false)];
 
         $this->data = [
             'type' => 'class_reminder',
@@ -81,16 +88,16 @@ class ClassReminder extends Notification implements ShouldQueue
         };
     }
 
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
-    }
-
     public function toPush(object $notifiable): PushMessage
     {
         return new PushMessage('Día de clase', $this->body, $this->data, withActions: true, category: 'CLASS_REMINDER');
+    }
+
+    protected function mailActions(PushMessage $push): array
+    {
+        return [
+            ['label' => 'Sí, va', 'url' => $this->mailLinks['going']],
+            ['label' => 'No va', 'url' => $this->mailLinks['not_going'], 'color' => 'secondary'],
+        ];
     }
 }

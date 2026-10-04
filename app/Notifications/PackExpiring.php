@@ -4,17 +4,12 @@ namespace App\Notifications;
 
 use App\Models\ClassPack;
 use App\Support\Push\PushMessage;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
 /**
- * Push al alumno o tutor: el paquete vence pronto y le quedan clases sin reservar.
+ * Aviso al alumno o tutor: el paquete vence pronto y le quedan clases sin reservar.
  */
-class PackExpiring extends Notification implements ShouldQueue
+class PackExpiring extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     public int $teacherId;
@@ -27,14 +22,6 @@ class PackExpiring extends Notification implements ShouldQueue
         $classes = $unreserved === 1 ? '1 clase' : "{$unreserved} clases";
 
         $this->body = "El paquete de {$pack->student->first_name} con {$pack->teacher->name} vence el {$day} y le quedan {$classes} sin reservar. ¡Reservalas!";
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
     }
 
     public function toPush(object $notifiable): PushMessage

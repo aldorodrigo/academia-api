@@ -8,8 +8,8 @@ use App\Support\Verification\CodeGuard;
 use Illuminate\Validation\ValidationException;
 
 /**
- * "Olvidé mi contraseña" con código: por WhatsApp si se ingresa el celular, por correo si se ingresa
- * el correo. No revela si hay una cuenta.
+ * "Olvidé mi contraseña" con código: por WhatsApp si se ingresa el celular (con copia al correo verificado),
+ * por correo si se ingresa el correo. No revela si hay una cuenta.
  */
 class ResetPasswordWithCode
 {
@@ -24,14 +24,17 @@ class ResetPasswordWithCode
         $this->guard->ensureIpAllowed();
 
         $user = User::findByLogin($login);
+        $byMail = Phone::looksLikeEmail($login);
 
-        if ($user === null) {
+        // Por correo, solo al verificado (o al de una cuenta sin celular): un correo opcional sin confirmar
+        // podría ser de otra persona.
+        if ($user === null || ($byMail && $user->mailableEmail() === null)) {
             $this->guard->hitIp();
 
             return;
         }
 
-        $this->sendCode->handle($user, SendVerificationCode::RESET, Phone::looksLikeEmail($login) ? 'mail' : 'whatsapp');
+        $this->sendCode->handle($user, SendVerificationCode::RESET, $byMail ? 'mail' : 'whatsapp');
     }
 
     /**

@@ -4,17 +4,12 @@ namespace App\Notifications;
 
 use App\Models\ClassSession;
 use App\Support\Push\PushMessage;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
 /**
- * Push a los tutores: se suspendió una clase del grupo.
+ * Aviso a los tutores: se suspendió una clase del grupo.
  */
-class ClassSuspended extends Notification implements ShouldQueue
+class ClassSuspended extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     public function __construct(ClassSession $session)
@@ -27,16 +22,13 @@ class ClassSuspended extends Notification implements ShouldQueue
             .substr($session->starts_at, 0, 5).$reason.'.';
     }
 
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
-    }
-
     public function toPush(object $notifiable): PushMessage
     {
         return new PushMessage('Clase suspendida', $this->body, ['type' => 'class_suspended', 'route' => '/inicio']);
+    }
+
+    protected function mailPose(): ?string
+    {
+        return 'descansa';
     }
 }

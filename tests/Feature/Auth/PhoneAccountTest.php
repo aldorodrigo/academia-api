@@ -2,6 +2,7 @@
 
 use App\Actions\Auth\SendVerificationCode;
 use App\Jobs\SendWhatsAppCode;
+use App\Mail\ConfirmEmailMail;
 use App\Mail\EmailVerificationCodeMail;
 use App\Mail\WhatsAppSimulatedMail;
 use App\Models\Guardian;
@@ -11,6 +12,7 @@ use App\Notifications\WhatsAppPaused;
 use App\Support\Phone;
 use App\Support\Tenancy\CurrentOrganization;
 use App\Support\Verification\CodeGuard;
+use App\Support\Verification\EmailConfirmation;
 use App\Support\Verification\TooManyCodes;
 use App\Support\WhatsApp\CloudApiWhatsAppSender;
 use App\Support\WhatsApp\LogWhatsAppSender;
@@ -49,6 +51,21 @@ function whatsappCode(string $phone): string
         }
 
         return $job->phone === $phone;
+    });
+
+    return $code;
+}
+
+/** El código de la copia por correo a esa dirección. */
+function mailedCode(string $email): string
+{
+    $code = null;
+    Mail::assertQueued(EmailVerificationCodeMail::class, function (EmailVerificationCodeMail $mail) use ($email, &$code) {
+        if ($mail->hasTo($email)) {
+            $code = $mail->code;
+        }
+
+        return $mail->hasTo($email);
     });
 
     return $code;
@@ -98,7 +115,8 @@ describe('cuenta con el celular', function () {
     });
 
     it('valida el celular, el país y que no tenga cuenta', function () {
-        User::factory()->create(['phone' => '+595981123456']);
+        User::factory()->create(['phone' => '+595981123456', 'phone_verified_at' => now()]);
+        User::factory()->create(['email' => 'usada@test.com']);
 
         $this->postJson('/api/v1/auth/register', phonePayload())
             ->assertUnprocessable()
@@ -109,8 +127,9 @@ describe('cuenta con el celular', function () {
             ->assertJsonPath('errors.phone.0', 'Ese país no está habilitado. Creá la cuenta con tu correo.');
         $this->postJson('/api/v1/auth/register', phonePayload(['phone' => null]))
             ->assertJsonPath('errors.phone.0', 'Ingresá tu celular o tu correo.');
-        $this->postJson('/api/v1/auth/register', phonePayload(['phone' => '0981 999 888', 'email' => 'a@test.com']))
-            ->assertJsonPath('errors.phone.0', 'Elegí el celular o el correo.');
+        // Con el celular, el correo es opcional, pero tampoco puede ser de otra cuenta.
+        $this->postJson('/api/v1/auth/register', phonePayload(['phone' => '0981 999 888', 'email' => 'Usada@test.com']))
+            ->assertJsonPath('errors.email.0', 'Ya hay una cuenta con ese correo. Ingresá con tu contraseña.');
     });
 
     it('una cuenta sin verificar no ocupa el número: el registro nuevo la reemplaza', function () {
@@ -145,6 +164,109 @@ describe('cuenta con el celular', function () {
         $noEmail = User::factory()->unverified()->create(['phone' => '+595981555444', 'email' => null]);
         $this->actingAs($noEmail, 'sanctum')->postJson('/api/v1/auth/verify/resend', ['channel' => 'mail'])
             ->assertJsonPath('errors.channel.0', 'Tu cuenta no tiene correo.');
+    });
+});
+
+describe('correo opcional: copia por correo de lo que va por WhatsApp', function () {
+    it('con el celular y un correo, el código va por WhatsApp y una copia con su propio código por correo', function () {
+        $token = $this->postJson('/api/v1/auth/register', phonePayload(['email' => 'Laura@Test.com']))->assertCreated()->json('token');
+
+        $user = User::query()->where('phone', '+595981123456')->sole();
+        expect($user->email)->toBe('laura@test.com');
+        whatsappCode('+595981123456');
+        Mail::assertQueued(EmailVerificationCodeMail::class, fn (EmailVerificationCodeMail $mail) => $mail->hasTo('laura@test.com')
+            && $mail->whatsapp === '+595981123456'
+            && $mail->confirmUrl !== null);
+        expect(DB::table('verification_sends')->pluck('channel')->sort()->values()->all())->toBe(['mail', 'whatsapp']);
+
+        // El código del correo confirma el correo, no el celular.
+        $this->withToken($token)->postJson('/api/v1/auth/verify', ['code' => mailedCode('laura@test.com')])->assertNoContent();
+
+        $user->refresh();
+        expect($user->email_verified_at)->not->toBeNull()
+            ->and($user->phone_verified_at)->toBeNull()
+            ->and($user->mailableEmail())->toBe('laura@test.com')
+            ->and(DB::table('verification_sends')->whereNull('verified_at')->count())->toBe(0);
+    });
+
+    it('con el código de WhatsApp el correo queda sin confirmar y no recibe copias de los avisos', function () {
+        $token = $this->postJson('/api/v1/auth/register', phonePayload(['email' => 'laura@test.com']))->json('token');
+
+        $this->withToken($token)->postJson('/api/v1/auth/verify', ['code' => whatsappCode('+595981123456')])->assertNoContent();
+
+        $user = User::query()->where('phone', '+595981123456')->sole();
+        expect($user->phone_verified_at)->not->toBeNull()
+            ->and($user->email_verified_at)->toBeNull()
+            ->and($user->mailableEmail())->toBeNull();
+    });
+
+    it('un celular sin verificar no ocupa el número aunque la cuenta tenga el correo verificado', function () {
+        $other = User::factory()->create(['phone' => '+595981123456', 'email' => 'otro@test.com']);
+
+        $this->postJson('/api/v1/auth/register', phonePayload())->assertCreated();
+
+        expect($other->fresh()->phone)->toBeNull()
+            ->and($other->fresh()->email)->toBe('otro@test.com')
+            ->and(User::query()->where('phone', '+595981123456')->sole()->name)->toBe('Laura Gómez');
+    });
+
+    it('un correo sin verificar tampoco ocupa el correo', function () {
+        $other = User::factory()->unverified()->create(['phone' => '+595981555444', 'phone_verified_at' => now(), 'email' => 'laura@test.com']);
+
+        $this->postJson('/api/v1/auth/register', phonePayload(['phone' => null, 'email' => 'laura@test.com']))->assertCreated();
+
+        expect($other->fresh()->email)->toBeNull()
+            ->and($other->fresh()->phone)->toBe('+595981555444')
+            ->and(User::query()->where('email', 'laura@test.com')->sole()->name)->toBe('Laura Gómez');
+    });
+
+    it('para cambiar la contraseña, la copia va solo a un correo verificado y sirve su código', function () {
+        User::factory()->create(['phone' => '+595981123456', 'phone_verified_at' => now(), 'email' => 'laura@test.com']);
+
+        $this->postJson('/api/v1/auth/password/forgot', ['login' => '0981 123 456'])->assertNoContent();
+        whatsappCode('+595981123456');
+        Mail::assertQueued(EmailVerificationCodeMail::class, fn (EmailVerificationCodeMail $mail) => $mail->hasTo('laura@test.com')
+            && $mail->purpose === 'reset' && $mail->whatsapp === '+595981123456' && $mail->confirmUrl === null);
+
+        $this->postJson('/api/v1/auth/password/reset', [
+            'login' => '0981123456', 'code' => mailedCode('laura@test.com'),
+            'password' => 'nueva1234', 'password_confirmation' => 'nueva1234', 'device_name' => 'app',
+        ])->assertCreated();
+    });
+
+    it('a un correo sin confirmar no le llegan códigos para cambiar la contraseña', function () {
+        User::factory()->unverified()->create(['phone' => '+595981555444', 'phone_verified_at' => now(), 'email' => 'pedro@test.com']);
+
+        $this->postJson('/api/v1/auth/password/forgot', ['login' => '0981 555 444'])->assertNoContent();
+        $this->postJson('/api/v1/auth/password/forgot', ['login' => 'pedro@test.com'])->assertNoContent();
+
+        Bus::assertDispatchedTimes(SendWhatsAppCode::class, 1);
+        Mail::assertNotQueued(EmailVerificationCodeMail::class);
+    });
+
+    it('confirma el correo con el link y desde ahí recibe las copias', function () {
+        $user = User::factory()->unverified()->create(['phone' => '+595981123456', 'phone_verified_at' => now(), 'email' => 'laura@test.com']);
+        expect($user->mailableEmail())->toBeNull();
+
+        $this->get(EmailConfirmation::url($user))->assertOk()->assertSee('Listo, confirmaste tu correo');
+
+        expect($user->fresh()->email_verified_at)->not->toBeNull()
+            ->and($user->fresh()->mailableEmail())->toBe('laura@test.com');
+    });
+
+    it('con el link vencido manda uno nuevo; si cambió el correo, no sirve', function () {
+        $user = User::factory()->unverified()->create(['phone' => '+595981123456', 'phone_verified_at' => now(), 'email' => 'laura@test.com']);
+        $url = EmailConfirmation::url($user);
+
+        $this->travel(EmailConfirmation::VALID_DAYS + 1)->days();
+        $this->get($url)->assertStatus(410)->assertSee('Te mandamos uno nuevo a laura@test.com.');
+        Mail::assertQueued(ConfirmEmailMail::class, fn (ConfirmEmailMail $mail) => $mail->hasTo('laura@test.com'));
+
+        $fresh = EmailConfirmation::url($user);
+        $user->update(['email' => 'otra@test.com']);
+        $this->get($fresh)->assertForbidden();
+        $this->get(str_replace('signature=', 'signature=x', EmailConfirmation::url($user)))->assertForbidden();
+        expect($user->fresh()->email_verified_at)->toBeNull();
     });
 });
 

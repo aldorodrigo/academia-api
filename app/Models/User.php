@@ -101,6 +101,48 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
     }
 
     /**
+     * La cuenta a la que pertenece ese celular o correo: solo si está verificado (un dato sin verificar no
+     * ocupa el número ni el correo de nadie). Las cuentas sin nada verificado que ya son de una organización
+     * (anteriores a la verificación) también cuentan.
+     *
+     * @param  Builder<User>  $query
+     * @param  'phone'|'email'  $column
+     */
+    #[Scope]
+    protected function owning(Builder $query, string $column, string $value): void
+    {
+        $query->where($column, $value)->where(fn (Builder $query) => $query
+            ->whereNotNull("{$column}_verified_at")
+            ->orWhere(fn (Builder $query) => $query
+                ->whereNull('phone_verified_at')
+                ->whereNull('email_verified_at')
+                ->whereHas('memberships')));
+    }
+
+    /**
+     * Libera un celular o un correo sin verificar para una cuenta nueva: borra las cuentas pendientes que lo
+     * tienen y se lo saca a las otras (que siguen con el dato que sí verificaron).
+     */
+    public static function releaseContacts(?string $phone, ?string $email): void
+    {
+        foreach (array_filter(['phone' => $phone, 'email' => $email]) as $column => $value) {
+            static::query()->pending()->where($column, $value)->get()->each->delete();
+            static::query()->where($column, $value)->whereNull("{$column}_verified_at")
+                ->whereNot(fn (Builder $query) => $query->owning($column, $value))
+                ->update([$column => null]);
+        }
+    }
+
+    /**
+     * Correo al que van las copias de los avisos y de los códigos: el verificado o, si la cuenta no tiene
+     * celular, el correo con el que se creó.
+     */
+    public function mailableEmail(): ?string
+    {
+        return filled($this->email) && ($this->email_verified_at !== null || blank($this->phone)) ? $this->email : null;
+    }
+
+    /**
      * El código se manda por WhatsApp (o por correo), no con un link.
      */
     public function sendEmailVerificationNotification(): void

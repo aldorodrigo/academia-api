@@ -4,17 +4,12 @@ namespace App\Notifications;
 
 use App\Models\ClassPack;
 use App\Support\Push\PushMessage;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
 /**
- * Push al alumno o tutor: queda una clase del paquete.
+ * Aviso al alumno o tutor: queda una clase del paquete.
  */
-class PackLow extends Notification implements ShouldQueue
+class PackLow extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     public function __construct(ClassPack $pack)
@@ -22,14 +17,6 @@ class PackLow extends Notification implements ShouldQueue
         $pack->loadMissing(['student', 'teacher']);
 
         $this->body = "A {$pack->student->first_name} le queda 1 clase del paquete con {$pack->teacher->name}.";
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
     }
 
     public function toPush(object $notifiable): PushMessage

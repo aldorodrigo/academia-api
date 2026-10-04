@@ -2,14 +2,17 @@
 
 namespace App\Mail;
 
+use App\Actions\Auth\SendVerificationCode;
 use App\Support\Phone;
+use App\Support\WhatsApp\Branding;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 
 /**
- * Desarrollo: el mensaje de WhatsApp con el código, como correo a `{número}@whatsapp.test` (Mailpit).
+ * Desarrollo: el mensaje de WhatsApp con el código, como correo a `{número}@whatsapp.test` (Mailpit). Se ve
+ * como el chat con Tuku: foto y nombre del perfil, y la plantilla de autenticación con su botón.
  */
 class WhatsAppSimulatedMail extends Mailable
 {
@@ -27,7 +30,12 @@ class WhatsAppSimulatedMail extends Mailable
 
     public function content(): Content
     {
-        return new Content(htmlString: '<p><strong>'.e($this->code).'</strong> es tu código de verificación. Por tu seguridad, no lo compartas.</p>'
-            .'<p style="color:#888">(WhatsApp simulado al '.e(Phone::display($this->phone)).'.)</p>');
+        return new Content(view: 'mail.whatsapp-simulado', with: [
+            // Con otro nombre que la propiedad pública `phone` (esa pisa los datos de la vista).
+            'phoneDisplay' => Phone::display($this->phone),
+            'minutes' => SendVerificationCode::VALID_MINUTES,
+            'about' => Branding::ABOUT,
+            'button' => Branding::COPY_BUTTON,
+        ]);
     }
 }

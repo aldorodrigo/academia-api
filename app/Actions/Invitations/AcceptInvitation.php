@@ -3,6 +3,7 @@
 namespace App\Actions\Invitations;
 
 use App\Enums\MembershipStatus;
+use App\Mail\ConfirmEmailMail;
 use App\Models\Group;
 use App\Models\Guardian;
 use App\Models\Invitation;
@@ -13,6 +14,7 @@ use App\Support\Roles\RoleAssigner;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -37,13 +39,8 @@ class AcceptInvitation
             $user = $invitation->existingUser();
 
             if ($user === null) {
-                // Una cuenta sin verificar con ese celular o correo se reemplaza.
-                User::query()->pending()
-                    ->where(fn ($query) => filled($invitation->phone)
-                        ? $query->where('phone', $invitation->phone)
-                        : $query->where('email', $invitation->email))
-                    ->get()
-                    ->each->delete();
+                // Un celular o correo sin verificar de otra cuenta se libera.
+                User::releaseContacts($invitation->phone, $invitation->email);
 
                 $user = User::query()->create([
                     'name' => $data['name'],
@@ -51,10 +48,15 @@ class AcceptInvitation
                     'phone' => $invitation->phone,
                     'password' => $data['password'],
                 ]);
-                // El link llegó a ese correo o a ese WhatsApp: queda verificado.
+                // El link llegó a ese WhatsApp o a ese correo: queda verificado. Con los dos, el celular; el
+                // correo se confirma con el link que le mandamos (hasta entonces no recibe copias).
                 $user->forceFill(filled($invitation->phone)
                     ? ['phone_verified_at' => now()]
                     : ['email_verified_at' => now()])->save();
+
+                if (filled($invitation->phone) && filled($invitation->email)) {
+                    Mail::to($invitation->email)->queue((new ConfirmEmailMail($user))->afterCommit());
+                }
             } elseif (! Hash::check($data['password'], $user->password)) {
                 throw ValidationException::withMessages(['password' => 'La contraseña no es correcta.']);
             }

@@ -6,6 +6,7 @@ use App\Actions\Auth\RegisterUser;
 use App\Actions\Auth\SendVerificationCode;
 use App\Actions\Auth\VerifyCode;
 use App\Http\Controllers\Controller;
+use App\Rules\ContactAvailable;
 use App\Rules\MobilePhone;
 use App\Support\Phone;
 use App\Support\Verification\CodeGuard;
@@ -16,7 +17,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Validation\Rules\Password;
 
 /**
- * Alta de cuenta (registro abierto) con el celular o el correo, y verificación con código.
+ * Alta de cuenta (registro abierto) con el celular (y un correo opcional) o con el correo, y verificación con código.
  */
 class RegisterController extends Controller
 {
@@ -27,14 +28,11 @@ class RegisterController extends Controller
             'email' => filled($request->input('email')) ? mb_strtolower(trim((string) $request->input('email'))) : null,
         ]);
 
-        // Una cuenta sin verificar no ocupa el número ni el correo.
-        $taken = fn (string $column) => Rule::unique('users', $column)
-            ->where(fn ($query) => $query->where(fn ($q) => $q->whereNotNull('phone_verified_at')->orWhereNotNull('email_verified_at')));
-
+        // Un celular o correo sin verificar no ocupa el dato. Con el celular, el correo es opcional: le llegan copias.
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
-            'phone' => ['nullable', 'required_without:email', 'prohibits:email', 'string', new MobilePhone, $taken('phone')],
-            'email' => ['nullable', 'required_without:phone', 'email', 'max:255', $taken('email')],
+            'phone' => ['nullable', 'required_without:email', 'string', new MobilePhone, new ContactAvailable('phone')],
+            'email' => ['nullable', 'required_without:phone', 'email', 'max:255', new ContactAvailable('email')],
             'password' => ['required', 'confirmed', Password::min(8)],
             'device_name' => ['required', 'string', 'max:255'],
             'terms' => ['accepted'],
@@ -43,9 +41,6 @@ class RegisterController extends Controller
         ], [
             'phone.required_without' => 'Ingresá tu celular o tu correo.',
             'email.required_without' => 'Ingresá tu celular o tu correo.',
-            'phone.prohibits' => 'Elegí el celular o el correo.',
-            'phone.unique' => 'Ya hay una cuenta con ese número. Ingresá con tu contraseña.',
-            'email.unique' => 'Ya hay una cuenta con ese correo. Ingresá con tu contraseña.',
             'terms.accepted' => 'Tenés que aceptar los términos.',
         ]);
 

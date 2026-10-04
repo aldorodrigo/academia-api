@@ -40,6 +40,9 @@ return [
     'whatsapp' => [
         'token' => env('WHATSAPP_TOKEN'),
         'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        // Para `whatsapp:brand`: cuenta de WhatsApp Business (crea la plantilla) y app de Meta (sube la foto).
+        'business_account_id' => env('WHATSAPP_BUSINESS_ACCOUNT_ID'),
+        'app_id' => env('WHATSAPP_APP_ID'),
         'api_version' => env('WHATSAPP_API_VERSION', 'v23.0'),
         'code_template' => env('WHATSAPP_CODE_TEMPLATE', 'codigo_verificacion'),
         'template_language' => env('WHATSAPP_TEMPLATE_LANGUAGE', 'es'),

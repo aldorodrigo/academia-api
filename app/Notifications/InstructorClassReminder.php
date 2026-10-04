@@ -5,18 +5,13 @@ namespace App\Notifications;
 use App\Models\ClassSession;
 use App\Support\Push\PushMessage;
 use Carbon\CarbonImmutable;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
 /**
  * Aviso al técnico: "Hoy tenés clase con Sub-10 a las 17:00 (Cancha 1) · 15 van, 2 no van,
  * 4 sin responder", con el botón "Tomar asistencia".
  */
-class InstructorClassReminder extends Notification implements ShouldQueue
+class InstructorClassReminder extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     public int $classId;
@@ -38,14 +33,6 @@ class InstructorClassReminder extends Notification implements ShouldQueue
             ]));
     }
 
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
-    }
-
     public function toPush(object $notifiable): PushMessage
     {
         return new PushMessage('Mis clases', $this->body, [
@@ -53,5 +40,10 @@ class InstructorClassReminder extends Notification implements ShouldQueue
             'route' => "/clases/{$this->classId}",
             'class_id' => (string) $this->classId,
         ], withActions: true, category: 'CLASS_TODAY');
+    }
+
+    protected function mailActions(PushMessage $push): array
+    {
+        return [['label' => 'Tomar asistencia', 'url' => rtrim(config('app.frontend_url'), '/').$push->data['route']]];
     }
 }

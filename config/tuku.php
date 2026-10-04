@@ -12,6 +12,9 @@
 
 return [
 
+    // Sitio público (landing): lo enlazan los correos y el perfil de WhatsApp.
+    'url' => env('TUKU_URL', 'https://tukuha.app'),
+
     // Hasta esta fecha (inclusive) Tuku es gratis para todas las organizaciones.
     'free_until' => env('TUKU_FREE_UNTIL', '2027-10-31'),
 
