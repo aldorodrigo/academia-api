@@ -13,14 +13,17 @@ use Filament\Actions\BulkAction;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
+use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Bajas en el panel (Inscripciones y ficha del jugador): dar de baja con fecha y motivo, reactivar
- * y descartar el aviso del técnico. La deuda queda: se condona aparte (Cuenta o Cargos).
+ * Bajas en el panel (Inscripciones y ficha del jugador): dar de baja con fecha, motivo y, si se
+ * elige, un aviso amable a la familia; reactivar y descartar el aviso de baja (técnico o tutor).
+ * La deuda queda: se condona aparte (Cuenta o Cargos).
  */
 class WithdrawalActions
 {
@@ -36,14 +39,28 @@ class WithdrawalActions
             ->modalDescription(fn (Enrollment $record) => self::effect($record))
             ->fillForm(fn (Enrollment $record) => [
                 'ended_on' => $record->organization->today()->toDateString(),
-                'withdrawal_reason' => $record->dropout_note ?? ($record->hasDropoutReport() ? 'Dejó de venir' : null),
+                'withdrawal_reason' => $record->dropout_note ?? ($record->hasDropoutReport() ? ($record->dropout_source === 'guardian' ? 'Deja el club' : 'Dejó de venir') : null),
+                'notify' => WithdrawEnrollment::noticeRecipients($record->student)->isNotEmpty(),
+                'message' => WithdrawEnrollment::defaultNotice($record),
             ])
-            ->schema(self::fields())
+            ->schema(fn (Enrollment $record) => [
+                ...self::fields(),
+                Toggle::make('notify')->label('Avisar a la familia')->live()
+                    ->disabled(fn () => WithdrawEnrollment::noticeRecipients($record->student)->isEmpty())
+                    ->helperText(fn () => WithdrawEnrollment::noticeRecipients($record->student)->isEmpty()
+                        ? 'No tiene tutores con la app: si querés avisarle, hacelo por WhatsApp.'
+                        : 'Le llega por la app y por correo a: '.WithdrawEnrollment::noticeRecipients($record->student)->pluck('name')->join(', ').'.'),
+                Textarea::make('message')->label('Mensaje para la familia')->rows(4)->maxLength(1000)
+                    ->helperText('Podés cambiarlo antes de mandarlo.')
+                    ->visible(fn (Get $get) => (bool) $get('notify'))
+                    ->required(fn (Get $get) => (bool) $get('notify')),
+            ])
             ->modalSubmitActionLabel('Dar de baja')
             ->action(function (Enrollment $record, array $data, Action $action): void {
-                self::attempt($action, fn () => app(WithdrawEnrollment::class)->handle($record, $data['ended_on'], $data['withdrawal_reason'], auth()->user()));
+                $notice = ($data['notify'] ?? false) ? $data['message'] : null;
+                self::attempt($action, fn () => app(WithdrawEnrollment::class)->handle($record, $data['ended_on'], $data['withdrawal_reason'], auth()->user(), $notice));
 
-                Notification::make()->success()->title('Baja registrada.')
+                Notification::make()->success()->title($notice !== null ? 'Baja registrada y aviso enviado a la familia.' : 'Baja registrada.')
                     ->body('Lo que debe sigue en su cuenta hasta que se pague o se condone.')->send();
             });
     }
@@ -56,14 +73,21 @@ class WithdrawalActions
             ->color('danger')
             ->authorizeIndividualRecords('update')
             ->modalDescription('Las cuotas impagas (también la del período en curso) siguen en su cuenta; se anulan solo las futuras sin pagar.')
-            ->fillForm(fn () => ['ended_on' => filament()->getTenant()->today()->toDateString()])
-            ->schema(self::fields())
+            ->fillForm(fn () => ['ended_on' => filament()->getTenant()->today()->toDateString(), 'notify' => false])
+            ->schema([
+                ...self::fields(),
+                Toggle::make('notify')->label('Avisar a las familias con el mensaje sugerido')
+                    ->helperText('Un mensaje amable, con las puertas abiertas, a los tutores con la app. Para cambiarlo, dalas de baja de a una.'),
+            ])
             ->modalSubmitActionLabel('Dar de baja')
             ->action(function (Collection $records, array $data, BulkAction $action): void {
                 $records = $records->reject(fn (Enrollment $record) => $record->isWithdrawn() || $record->isFinished());
 
                 self::attempt($action, fn () => $records->each(
-                    fn (Enrollment $record) => app(WithdrawEnrollment::class)->handle($record, $data['ended_on'], $data['withdrawal_reason'], auth()->user()),
+                    fn (Enrollment $record) => app(WithdrawEnrollment::class)->handle(
+                        $record, $data['ended_on'], $data['withdrawal_reason'], auth()->user(),
+                        ($data['notify'] ?? false) ? WithdrawEnrollment::defaultNotice($record) : null,
+                    ),
                 ));
 
                 Notification::make()->success()->title($records->count() === 1 ? '1 baja registrada.' : "{$records->count()} bajas registradas.")->send();
@@ -104,7 +128,7 @@ class WithdrawalActions
             ->authorize('update')
             ->visible(fn (Enrollment $record) => $record->hasDropoutReport())
             ->requiresConfirmation()
-            ->modalHeading('Descartar el aviso del técnico')
+            ->modalHeading('Descartar el aviso de baja')
             ->modalDescription(fn (Enrollment $record) => "{$record->student->full_name} sigue inscripto y el aviso desaparece.")
             ->action(function (Enrollment $record): void {
                 app(ReportDropout::class)->clear($record, auth()->user());
@@ -123,9 +147,11 @@ class WithdrawalActions
         }
 
         if ($record->hasDropoutReport()) {
-            $by = $record->dropoutReportedBy?->name ?? 'El técnico';
+            $guardian = $record->dropout_source === 'guardian';
+            $by = $record->dropoutReportedBy?->name ?? ($guardian ? 'La familia' : 'El técnico');
 
-            return "{$by} avisó que dejó de venir ({$record->dropout_reported_at->setTimezone($record->organization->timezone)->format('d/m')})"
+            return "{$by} avisó que ".($guardian ? 'deja el club' : 'dejó de venir')
+                ." ({$record->dropout_reported_at->setTimezone($record->organization->timezone)->format('d/m')})"
                 .($record->dropout_note ? ": {$record->dropout_note}" : '');
         }
 

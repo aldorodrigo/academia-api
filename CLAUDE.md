@@ -146,11 +146,13 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `issue_upfront`, `mid_period`): períodos con `SeasonPeriods`; emisión por inscripción con `IssueSeasonCharges`
   (al crear la inscripción, idempotente por `unique_key` `enr:…:con:…:per:Y-m-d`); `GenerateSeasonCharges` (lock) y
   comando diario `charges:generate`. Baja o suspensión: `VoidFutureCharges`. `Charge::isUpcoming()` = próxima.
-- Bajas (`docs/PLAN_BAJAS.md`): `Enrollments\WithdrawEnrollment` (fecha y motivo; la deuda queda),
-  `ReactivateEnrollment` (cuotas desde el período en curso), `ReportDropout` (aviso "dejó de venir" del técnico,
-  `DropoutReported`); acciones del panel en `Filament\Support\WithdrawalActions`. Dados de baja en informes:
-  `Support\Enrollments\Withdrawals`. Condonar: `Billing\WaiveCharges` (permiso `Waive:Charge`; anulación con
-  `waived_amount`, estado `condonado`), acción `Filament\Support\WaiveChargeAction`.
+- Bajas (`docs/PLAN_BAJAS.md`): `Enrollments\WithdrawEnrollment` (fecha, motivo y aviso opcional a la familia
+  `StudentWithdrawn` con `defaultNotice()`; la deuda queda), `ReactivateEnrollment` (cuotas desde el período en curso),
+  `ReportDropout` (aviso del técnico "dejó de venir" o del tutor "deja el club", `dropout_source`; `DropoutReported`);
+  acciones del panel en `Filament\Support\WithdrawalActions`; endpoints de la app en `Api\V1\WithdrawalController`.
+  Dados de baja en informes: `Support\Enrollments\Withdrawals`. Condonar: `Billing\WaiveCharges` (permiso
+  `Waive:Charge`, admin/tesorero/presidente por defecto; anulación con `waived_amount`, estado `condonado`, fila en
+  `ChargeCondonation`) y `Billing\UnwaiveCharge` (deshacer); acciones `Filament\Support\WaiveChargeAction`.
 - Descuentos y becas: `DiscountCalculator`, en el orden de `organizations.billing.discount_order`.
 - Tarifa aplicable: `Tariff::applicable()`. Configuración de cobros: `Organization::billing()`.
 - Becas: `ScholarshipDecision` (permiso `Approve:Scholarship`).

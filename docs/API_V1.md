@@ -1486,4 +1486,135 @@ Cada familia suma `withdrawn`, igual que en Morosos.
 ### Cargos
 
 - `status` suma `condonado` ("Condonado"): se perdonó lo que faltaba pagar, con motivo y quién. Como las anuladas, no
-  aparece en `GET account` ni suma en saldos e informes.
+  aparece en `GET account` ni suma en saldos e informes. Si se deshace, vuelve.
+
+### `GET organization` (se amplía)
+
+`membership.permissions` suma `withdraw_students` (dar de baja: editar inscripciones; admin, secretario y
+prosecretario por defecto) y `waive_charges` (condonar y deshacer: admin, tesorero y presidente por defecto).
+
+### Tutor: "Deja el club"
+
+#### `POST students/{id}/leaving`
+
+El tutor (o el alumno adulto) avisa que el alumno deja el club. Marca todas sus inscripciones activas o becadas de
+temporadas vigentes o próximas y manda **un** aviso (push `dropout_reported`, `route: "/bajas"`, y correo) a quienes
+pueden dar de baja. No da la baja.
+
+```json
+{ "message": "Nos mudamos a Encarnación, ¡gracias por todo!" }
+```
+
+`message` es opcional (hasta 500). Responde `{ "data": { "leaving_reported_on": "2026-06-02" } }`. 404 si no es un
+alumno a su cargo; 422 si no tiene inscripciones vigentes.
+
+#### `DELETE students/{id}/leaving`
+
+Deshace el aviso. Responde `{ "data": { "leaving_reported_on": null } }`.
+
+#### `GET students` · `GET students/{id}` (se amplía)
+
+Cada alumno suma `"leaving_reported_on": "2026-06-02"` o `null`.
+
+### Quien da de baja (`withdraw_students`) o condona (`waive_charges`)
+
+#### `GET dropout-reports` (`withdraw_students`)
+
+Avisos de baja sin decidir, el más viejo primero.
+
+```json
+{
+  "data": [
+    {
+      "enrollment_id": 31,
+      "student": { "id": 9, "full_name": "Matías Zárate" },
+      "group": "Sub-10",
+      "program": "Fútbol",
+      "source": "guardian",
+      "reported_by": "Rosa Zárate",
+      "reported_on": "2026-06-02",
+      "note": "Nos mudamos a Encarnación"
+    }
+  ]
+}
+```
+
+`source`: `instructor` ("dejó de venir") o `guardian` ("deja el club").
+
+#### `GET staff/students/{id}` (`withdraw_students` o `waive_charges`)
+
+```json
+{
+  "data": {
+    "id": 9,
+    "full_name": "Matías Zárate",
+    "first_name": "Matías",
+    "enrollments": [
+      {
+        "id": 31, "program": "Fútbol", "group": "Sub-10", "season": "2026",
+        "status": "activo", "status_label": "Activo", "enrolled_on": "2026-04-01",
+        "ended_on": null, "withdrawal_reason": null, "can_withdraw": true,
+        "dropout_report": { "source": "guardian", "reported_by": "Rosa Zárate", "reported_on": "2026-06-02", "note": "…" }
+      }
+    ],
+    "notice": {
+      "recipients": 1,
+      "message": "Hola, te contamos que registramos la baja de Matías en Club Jakare. ¡Gracias por todo este tiempo compartido! Las puertas siempre van a estar abiertas: cuando quieran volver, escribinos y los esperamos con mucho gusto."
+    },
+    "charges": [
+      {
+        "…": "los campos de cada cargo de GET account",
+        "status": "condonado",
+        "pending_amount": 0,
+        "waiver": { "amount": 150000, "reason": "Dado de baja", "by": "Laura Gómez", "on": "2026-06-03" },
+        "can_waive": false,
+        "can_unwaive": true
+      }
+    ],
+    "balance": 300000
+  }
+}
+```
+
+- `enrollments`: las de temporadas vigentes o próximas. `can_withdraw`: no está de baja ni finalizada y el usuario
+  puede editarla.
+- `notice.recipients`: tutores con la app (y el alumno adulto con cuenta) que recibirían el aviso de baja;
+  `notice.message`: el mensaje sugerido.
+- `charges`: solo con `waive_charges` (si no, `null`). Son las cuotas sin anular y las condonadas, las más nuevas
+  primero. `balance` es lo que debe sin las próximas.
+
+#### `POST enrollments/{id}/withdraw` (`withdraw_students`)
+
+```json
+{ "ended_on": "2026-06-03", "reason": "Se mudó", "notify": true, "message": "Hola Rosa, ¡los esperamos cuando quieran volver!" }
+```
+
+- `ended_on`: entre la inscripción y hoy. `reason`: obligatorio (hasta 255).
+- `notify` y `message`: el aviso a la familia; `message` es obligatorio con `notify: true` (hasta 1000).
+- Responde `{ "data": { "status": "baja", "notified": 1 } }`. 422 si ya está de baja, la temporada terminó o la fecha
+  no vale. La deuda queda: solo se anulan las cuotas futuras sin pagos.
+
+#### `DELETE enrollments/{id}/dropout` (`withdraw_students`)
+
+"Sigue viniendo": descarta el aviso de baja. Responde `{ "data": { "dropout_report": null } }`.
+
+#### `POST charges/waive` (`waive_charges`)
+
+```json
+{ "charge_ids": [501, 502], "reason": "Dado de baja, lo decidió la comisión" }
+```
+
+Condona lo que falta pagar de cada cuota. Responde `{ "data": { "waived": 300000 } }`. 422 sin permiso, sin motivo o
+si alguna está anulada, pagada o ya condonada (no condona ninguna).
+
+#### `POST charges/{id}/unwaive` (`waive_charges`)
+
+`{ "reason": "Se condonó por error" }`. Deshace la condonación: la cuota vuelve a quedar pendiente por lo condonado y
+queda quién, cuándo y por qué. Responde la cuota como en `staff/students` (`waiver: null`, `can_waive: true`). 422 si
+no está condonada o falta el motivo.
+
+#### Push
+
+- `dropout_reported` (`route: "/bajas"`): "Aviso de baja". Ejemplo: "Rosa Zárate (familia) avisó que Matías Zárate
+  deja el club: «…». Decidí si le das la baja."
+- `student_withdrawn` (`route: "/inicio"`): "Baja de Matías", con el mensaje que eligió quien dio la baja.

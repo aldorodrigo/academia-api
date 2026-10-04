@@ -50,7 +50,7 @@ class ChargesRelationManager extends RelationManager
                     ->state(fn (Charge $record) => $record->isVoided() ? null : $record->pendingAmount()),
             ])
             ->defaultSort('due_on', 'desc')
-            ->recordActions([WaiveChargeAction::make()])
+            ->recordActions([WaiveChargeAction::make(), WaiveChargeAction::undo()])
             ->toolbarActions([WaiveChargeAction::bulk()]);
     }
 }

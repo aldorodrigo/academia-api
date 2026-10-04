@@ -20,7 +20,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 /**
  * Inscripción = alumno + grupo + temporada. Cada una genera sus propios cargos (Sprint 3).
  */
-#[Fillable(['organization_id', 'student_id', 'group_id', 'season_id', 'status', 'enrolled_on', 'ended_on', 'withdrawal_reason', 'withdrawn_by', 'dropout_reported_at', 'dropout_reported_by', 'dropout_note', 'mid_period', 'notes'])]
+#[Fillable(['organization_id', 'student_id', 'group_id', 'season_id', 'status', 'enrolled_on', 'ended_on', 'withdrawal_reason', 'withdrawn_by', 'dropout_reported_at', 'dropout_reported_by', 'dropout_note', 'dropout_source', 'mid_period', 'notes'])]
 class Enrollment extends Model
 {
     /** @use HasFactory<EnrollmentFactory> */
@@ -96,7 +96,7 @@ class Enrollment extends Model
 
             if ($enrollment->status === EnrollmentStatus::Withdrawn) {
                 $enrollment->ended_on ??= now()->toDateString();
-                $enrollment->forceFill(['dropout_reported_at' => null, 'dropout_reported_by' => null, 'dropout_note' => null]);
+                $enrollment->forceFill(['dropout_reported_at' => null, 'dropout_reported_by' => null, 'dropout_note' => null, 'dropout_source' => null]);
             } else {
                 $enrollment->forceFill(['ended_on' => null, 'withdrawal_reason' => null, 'withdrawn_by' => null]);
             }
@@ -183,6 +183,25 @@ class Enrollment extends Model
     public function hasDropoutReport(): bool
     {
         return $this->dropout_reported_at !== null;
+    }
+
+    /**
+     * Aviso de baja para la app y el panel (o null): quién, cuándo, de dónde y la nota.
+     *
+     * @return array{source: string, reported_by: ?string, reported_on: string, note: ?string}|null
+     */
+    public function dropoutReport(): ?array
+    {
+        if (! $this->hasDropoutReport()) {
+            return null;
+        }
+
+        return [
+            'source' => $this->dropout_source ?? 'instructor',
+            'reported_by' => $this->dropoutReportedBy?->name,
+            'reported_on' => $this->dropout_reported_at->setTimezone($this->organization->timezone)->toDateString(),
+            'note' => $this->dropout_note,
+        ];
     }
 
     /**

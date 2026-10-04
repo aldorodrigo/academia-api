@@ -10,7 +10,9 @@ use Illuminate\Validation\ValidationException;
 
 /**
  * Condonar: perdonar lo que falta pagar de una o varias cuotas (por ejemplo, la deuda de un
- * alumno dado de baja). Lo decide quien tiene el permiso "Condonar deudas" (el admin siempre).
+ * alumno dado de baja). Lo decide quien tiene el permiso "Condonar deudas" (admin siempre; tesorero
+ * y presidente por defecto). Cada condonación queda en `charge_condonations` y se puede deshacer
+ * (UnwaiveCharge).
  *
  * Es una anulación marcada como condonación: sale de saldos, morosos e informes como una anulada,
  * con estado "Condonado". Queda quién (`voided_by`), cuándo (`voided_at`), por qué (`void_reason`)
@@ -27,6 +29,13 @@ class WaiveCharges
         return $user?->can(self::PERMISSION) ?? false;
     }
 
+    public static function authorize(?User $user): void
+    {
+        if (! self::allows($user)) {
+            throw ValidationException::withMessages(['reason' => 'No tenés permiso para condonar deudas.']);
+        }
+    }
+
     /**
      * Se puede condonar: no anulada y con algo pendiente.
      */
@@ -41,9 +50,7 @@ class WaiveCharges
      */
     public function handle(iterable $charges, string $reason, User $by): int
     {
-        if (! self::allows($by)) {
-            throw ValidationException::withMessages(['reason' => 'No tenés permiso para condonar deudas.']);
-        }
+        self::authorize($by);
 
         if (blank(trim($reason))) {
             throw ValidationException::withMessages(['reason' => 'Indicá el motivo de la condonación.']);
@@ -64,6 +71,14 @@ class WaiveCharges
                 'void_reason' => trim($reason),
                 'voided_by' => $by->id,
                 'waived_amount' => $pending,
+            ]);
+
+            $charge->condonations()->create([
+                'organization_id' => $charge->organization_id,
+                'student_id' => $charge->student_id,
+                'amount' => $pending,
+                'reason' => trim($reason),
+                'created_by' => $by->id,
             ]);
 
             return $pending;

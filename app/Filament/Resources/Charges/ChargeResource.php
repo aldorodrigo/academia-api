@@ -96,7 +96,7 @@ class ChargeResource extends Resource
                     ->schema([DatePicker::make('period')->label('Mes')->format('Y-m-01')->displayFormat('m/Y')])
                     ->query(fn (Builder $query, array $data) => $query->when($data['period'] ?? null, fn (Builder $query, string $period) => $query->whereDate('period', $period))),
             ])
-            ->recordActions([self::detailAction(), self::historyAction(), WaiveChargeAction::make(), self::voidAction()])
+            ->recordActions([self::detailAction(), self::historyAction(), WaiveChargeAction::make(), WaiveChargeAction::undo(), self::voidAction()])
             ->toolbarActions([WaiveChargeAction::bulk()]);
     }
 

@@ -4,141 +4,159 @@
 > "Baja" en el panel. Una baja a principio de mes (Matías Zárate, 3/6) dejaba la cuota del mes ya emitida (1/6) y las
 > anteriores impagas, y en "Morosos" (app, panel y PDF/Excel) no se veía que el alumno ya se había ido.
 >
-> Decisiones del usuario: **la deuda queda pendiente como histórica** y se **condona según el administrador o quien
-> tenga el permiso**; la cuota del mes en curso **queda pendiente** hasta que el administrador la anule, el chico
-> vuelva y la pague, o se condone.
+> Decisiones del usuario:
+> - **Primera ronda:** la deuda queda pendiente como histórica y se condona según el administrador o quien tenga el
+>   permiso. La cuota del mes en curso queda pendiente hasta que el administrador la anule, el chico vuelva y la pague,
+>   o se le condone.
+> - **Segunda ronda (2026-10-04):**
+>   - Condonan por defecto también el **tesorero y el presidente**, y el permiso se agrega o quita por rol.
+>   - La condonación se puede **deshacer**, con registro de quién, cuándo y por qué.
+>   - Al dar de baja se **pregunta si se avisa a la familia**, con un mensaje amable "con las puertas abiertas",
+>     prellenado y editable, por push y correo.
+>   - El **tutor avisa desde la app** que su hijo deja el club.
+>   - **Baja y condonación también desde la app** para quien tenga el permiso.
 >
-> Reglas implementadas: `business-logic.md` §3 (Bajas) y §5/§7. Contrato: `docs/API_V1.md` → "Bajas y condonación".
+> Reglas implementadas: `business-logic.md` §3 (Bajas) y §5. Contrato: `docs/API_V1.md` → "Bajas y condonación".
 
 ## 1. Cómo se da la baja
 
-**En el panel**, con la acción **"Dar de baja"**:
+**En el panel**, con la acción "Dar de baja":
+- en **Inscripciones**, por fila o seleccionando varias;
+- en la **ficha del jugador → Inscripciones**.
 
-- en **Inscripciones** (por fila y masiva, "Dar de baja" en la barra de selección), y
-- en la **ficha del jugador → pestaña Inscripciones**.
-
-El formulario pide:
+**En la app** (permiso `withdraw_students`), en la ficha del alumno `/alumnos/:id`. Se llega desde:
+- "Avisos de baja" (`/bajas`, tarjeta en el inicio);
+- el menú del alumno en Mis grupos ("Ver ficha");
+- la marca "baja" en Morosos o Saldos.
 
 | Campo | Regla |
 |---|---|
-| **Fecha de baja** | Hoy por defecto. Entre la fecha de inscripción y hoy (no hay bajas a futuro en el MVP). |
-| **Motivo** | Obligatorio, texto libre ("Se mudó", "Dejó de venir", "Cambió de club"…). Si el técnico avisó, viene precargado con su nota. |
+| **Fecha de baja** | Hoy por defecto. Entre la fecha de inscripción y hoy (no hay bajas a futuro). |
+| **Motivo** | Obligatorio, texto libre. Si hubo aviso, viene precargado con su nota. |
+| **Avisar a la familia** | Prendido si hay tutores con la app (o el alumno adulto con cuenta). El mensaje viene prellenado (`WithdrawEnrollment::defaultNotice`, amable y con las puertas abiertas, sin hablar de plata) y se puede cambiar en el momento. Sale por push y correo (`StudentWithdrawn`). Sin tutores con la app, se sugiere avisar por WhatsApp a mano. Al dar de baja varias a la vez, se puede mandar el mensaje sugerido sin cambiarlo. |
 
-Antes de confirmar, el modal muestra el efecto en dinero:
+Antes de confirmar, el panel muestra el efecto en dinero: cuántas cuotas quedan pendientes y por cuánto (también la
+del período en curso) y cuántas cuotas futuras se anulan. La app lo resume en una línea.
 
-- "Quedan pendientes N cuotas por ₲ X (la de junio y anteriores): siguen en su cuenta. Para no cobrarlas, condonalas
-  desde la pestaña Cuenta."
-- "Se anulan N cuotas futuras sin pagar." (lo que ya hacía `VoidFutureCharges`).
+Al confirmar (`App\Actions\Enrollments\WithdrawEnrollment`):
+- la inscripción queda en estado `baja`, con `ended_on`, `withdrawal_reason` y `withdrawn_by`;
+- se anulan las cuotas futuras sin pagos;
+- se cierra el aviso de baja, si había;
+- si se eligió, sale el aviso a la familia;
+- todo queda en el registro de actividad (`academic`).
 
-Al confirmar (`App\Actions\Enrollments\WithdrawEnrollment`): estado `baja`, `ended_on` = la fecha elegida,
-`withdrawal_reason`, `withdrawn_by`; se anulan las cuotas cuyo período **todavía no empezó** y no tienen pagos; se borra
-el aviso del técnico, si había; queda en el registro de actividad (`academic`).
-
-- La acción "Estado" (fila y masiva) **ya no ofrece "Baja"**: toda baja lleva fecha y motivo. (El formulario de editar
-  la inscripción en la ficha todavía permite elegir "Baja"; queda con fecha de hoy y sin motivo. No se tocó porque lo
-  cambia la sesión de inscripción por tutores, F2.)
-- **En la app no se da la baja** en el MVP: es una decisión administrativa que mueve dinero y el panel ya tiene la
-  ficha, la cuenta y el historial a mano. La app sí lleva el **aviso del técnico** (punto 2).
+"Estado" ya no ofrece "Baja". El formulario de editar la inscripción en la ficha sigue ofreciéndola (fecha de hoy, sin
+motivo): no se tocó porque lo cambia F2.
 
 ## 2. Quién la marca
 
-- **Da la baja** quien puede **editar inscripciones** (`Update:Enrollment`: el admin, y el secretario y prosecretario
-  por defecto). Es el mismo permiso que ya cambiaba el estado: no se agrega uno nuevo.
-- **El técnico avisa "Dejó de venir"** desde la app (Mis grupos → grupo → alumno → "Avisar que dejó de venir", con una
-  nota opcional). No da la baja: la inscripción queda marcada (`dropout_reported_at/by`, `dropout_note`) y llega un
-  aviso (push + correo) a quienes pueden dar de baja. En el panel, Inscripciones muestra el aviso, tiene el filtro
-  "Avisó el técnico" y un contador en el menú; el admin decide: **"Dar de baja"** (con la nota como motivo) o
-  **"Sigue viniendo"** (descarta el aviso). El técnico puede deshacer su aviso.
+- **Da la baja** quien puede **editar inscripciones** (`Update:Enrollment`: admin; secretario y prosecretario por
+  defecto). En la app es el permiso `withdraw_students`.
+- **Avisos de baja** (no dan la baja; quien decide elige "Dar de baja" o "Sigue viniendo"):
+  - **El técnico**, desde Mis grupos: "Avisar que dejó de venir", con una nota opcional.
+  - **El tutor**, desde la ficha del hijo: "Avisar que deja el club", con un mensaje opcional. Marca todas las
+    inscripciones vigentes del hijo y manda un solo aviso.
 
-  *Por qué es lo mínimo útil:* el F4 nace de una baja que se registra tarde, y el técnico es el primero que ve que el
-  chico no viene; con un toque le avisa a quien decide. No se le da la baja al técnico porque mueve dinero (anula
-  cuotas) y no es su rol. El tutor que avisa que su hijo deja queda para después (punto 9).
+  Cada uno puede deshacer su aviso. Quedan en la inscripción: `dropout_reported_at`, `dropout_reported_by`,
+  `dropout_note` y `dropout_source` (`instructor` o `guardian`).
+
+  Llegan por push y correo (`DropoutReported`, a `/bajas`) a quienes pueden dar de baja. En el panel se ven en
+  Inscripciones, con el filtro "Con aviso de baja" y un contador en el menú; en la app, en `/bajas`.
 
 ## 3. Qué pasa con la deuda
 
-- **Queda pendiente como histórica. Nunca se borra ni se anula sola**: siguen las cuotas impagas de los meses
-  anteriores y **la del período en curso** (si ya empezó cuando se da la baja, aunque la fecha de baja sea anterior).
-- Lo único automático es lo de siempre: las cuotas **futuras** (período que todavía no empezó) sin pagos se anulan.
-- La deuda sigue sumando en el estado de cuenta de la familia, en Saldos y en Morosos, ahora **con la marca de baja**.
-- Sale de la cuenta solo si alguien con permiso la **anula** (error de carga) o la **condona** (punto 4), o si se paga.
+- **Queda pendiente como histórica. Nunca se borra ni se anula sola**: siguen las cuotas impagas anteriores y **la del
+  período en curso**. Solo se anulan solas las **futuras** sin pagos.
+- Sigue en el estado de cuenta, en Saldos y en Morosos, con la marca de baja.
+- Sale solo si se paga, se **anula** (error de carga) o se **condona**.
 
-## 4. Condonar
+## 4. Condonar y deshacer
 
-**Acción nueva "Condonar"** (no se reutiliza `ChargeWaiver`, que es el descuento por clase suspendida que se aplica en
-la próxima cuota, ni la anulación, que es para cargos mal emitidos):
-
-- En **Cargos** (por fila y masiva) y en la **ficha del jugador → Cuenta** (por fila y masiva: "Condonar lo
-  seleccionado").
-- **Permiso nuevo `Waive:Charge` "Condonar deudas"** (Shield → Roles). Por defecto **solo el admin** (Gate::before);
-  el admin se lo puede dar al tesorero, al presidente o a quien decida la comisión.
-- Pide **motivo** (obligatorio). Condona **lo que falta pagar** de cada cuota: lo ya pagado sigue siendo ingreso.
-- Queda registrado: `waived_amount` (lo condonado), `voided_at` (cuándo), `voided_by` (quién) y `void_reason`
-  (por qué), en el historial del cargo ("Condonada ₲ X: motivo") y en el registro de actividad (`billing`).
-- Técnicamente es una anulación marcada como condonación (`App\Actions\Billing\WaiveCharges`): sale de todos los
-  saldos e informes igual que una anulada (también de las consultas SQL del escritorio y de los informes nuevos,
-  que ya excluyen `voided_at`), con estado propio **"Condonado"** (`ChargeStatus::Waived`, `condonado`).
-- No se puede condonar una cuota anulada, pagada o ya condonada. Una condonación no se deshace en el MVP (si fue un
-  error, se carga un cargo manual).
+- **Dónde:**
+  - Panel: "Condonar" en Cargos y en la ficha → Cuenta, por fila o en bloque.
+  - App: en la ficha `/alumnos/:id`, "Condonar" por cuota y "Condonar todo lo pendiente".
+- **Permiso** `Waive:Charge` "Condonar deudas":
+  - por defecto lo tienen el **admin**, el **tesorero** y el **presidente** (`DefaultPermissions`);
+  - a los roles existentes se los agrega la migración `2026_10_09_100002`;
+  - el admin lo agrega o quita por rol en Roles (Shield);
+  - en la app es `waive_charges`.
+- **Qué hace:** condona **lo que falta pagar**, con motivo; lo ya pagado sigue siendo ingreso. Queda:
+  - en el cargo, `voided_at`, `voided_by`, `void_reason` y `waived_amount`, con estado "Condonado" (`condonado`);
+  - en `charge_condonations`, una fila por condonación (monto, motivo, quién, cuándo);
+  - en el historial del cargo, "Condonada ₲ X: motivo".
+- **Cómo cuenta:** es una anulación marcada, así que sale de saldos e informes como una anulada (también de las
+  consultas SQL que excluyen `voided_at`). No libera la clave del período y los descuentos por clases suspendidas
+  quedan usados.
+- **Deshacer** ("Deshacer condonación" en el panel; "Deshacer" en la app), con el mismo permiso y motivo obligatorio:
+  - la cuota vuelve a quedar pendiente por lo condonado;
+  - la condonación guarda `undone_at`, `undone_by` y `undo_reason`;
+  - el historial muestra "Condonación deshecha: motivo";
+  - se puede volver a condonar (otra fila).
+- No se condona una cuota anulada, pagada o ya condonada. No se usa `ChargeWaiver` (descuento por clase suspendida).
 
 ## 5. Si el alumno vuelve
 
-- Acción **"Reactivar"** en Inscripciones y en la ficha (elige Activo o Becado), para quien puede editar inscripciones.
-- **La deuda sigue ahí** para pagarse (lo que no se condonó ni se anuló).
-- Se emite la cuota **desde el período en curso**: los meses que estuvo afuera **no se cobran** (antes, al reactivar
-  se emitían desde la fecha de inscripción, también los meses de la baja). Las futuras que se anularon con la baja se
-  vuelven a emitir según el plan (todas juntas o al empezar cada período). Lo mismo al volver de una suspensión.
-- Se limpian `ended_on`, motivo y quién; el historial queda en el registro de actividad.
+- **"Reactivar"** (panel), como Activo o Becado. La deuda sigue para pagarse.
+- Las cuotas se emiten **desde el período en curso**: los meses que estuvo afuera no se cobran. Antes se emitían desde
+  la inscripción.
+- Las futuras anuladas se vuelven a emitir. Igual al volver de una suspensión.
 
 ## 6. Cómo se ve
 
 | Dónde | Qué cambia |
 |---|---|
-| **Morosos** (app, panel, PDF y Excel) | Cada familia trae `withdrawn` (sus hijos dados de baja con la fecha): "Matías: baja el 03/06/2026". **Filtro** "Todos / Siguen / Dados de baja" (`withdrawn=exclude|only`) en la app (chips) y en el panel (select). |
-| **Saldos** (app, panel, PDF y Excel) | La misma marca por familia. |
-| **Inscripciones** (panel) | La baja muestra fecha y motivo; el aviso del técnico, quién y cuándo; filtro "Avisó el técnico"; contador en el menú. |
-| **Ficha → Inscripciones** | Columna "Baja" con la fecha y el motivo. |
-| **Cargos y ficha → Cuenta** | Estado "Condonado" y "Condonar". |
-| **Estado de cuenta del tutor** (app) | Sin cambios: la deuda sigue hasta que se paga o se condona; la condonada desaparece como una anulada. |
-| **Mis grupos** (técnico, app) | El alumno avisado muestra "Avisaste que dejó de venir el 03/06" y "Sigue viniendo" para deshacer. Un alumno dado de baja ya no aparece en las clases (como antes). |
+| **Morosos** (app, panel, PDF y Excel) | `withdrawn` por familia: "Matías: baja el 03/06/2026". Filtro Todos / Siguen / Dados de baja (`withdrawn=exclude\|only`). En la app, con permiso, la marca abre la ficha del alumno. |
+| **Saldos** | La misma marca. |
+| **Inscripciones** (panel) | Baja con fecha y motivo; aviso (técnico o familia) con quién y cuándo; filtro y contador. |
+| **Cargos y Cuenta** (panel) | Estado "Condonado", "Condonar", "Deshacer condonación"; historial con cada paso. |
+| **App, inicio** | Tarjeta "Avisos de baja" para `withdraw_students`. |
+| **App, `/alumnos/:id`** | Inscripciones ("Dar de baja", "Sigue viniendo") y, con `waive_charges`, la cuenta con "Condonar" y "Deshacer". |
+| **App, ficha del hijo** (tutor) | "Avisar que deja el club" / "Ya no deja el club" y la marca "Avisaste que deja el club el …". |
+| **App, Mis grupos** | "Avisar que dejó de venir" / "Sigue viniendo"; con permiso, "Ver ficha". |
+| **Estado de cuenta del tutor** | La condonada desaparece como una anulada; si se deshace, vuelve. |
 
-Un alumno está **dado de baja** cuando todas sus inscripciones de temporadas vigentes o próximas están en `baja` (o no
-tiene ninguna y la última es una baja): `App\Support\Enrollments\Withdrawals`. Si sigue en otra disciplina, no.
+Un alumno está **dado de baja** cuando no tiene ninguna inscripción sin baja en temporadas vigentes o próximas y tiene
+al menos una baja (`App\Support\Enrollments\Withdrawals`). Si sigue en otra disciplina, no lo está.
 
 ## 7. Avisos
 
-- **Aviso del técnico** → push + correo (`DropoutReported`) a los miembros activos que pueden dar de baja
-  (`Update:Enrollment` o admin). Sin mascota (no es una buena noticia).
-- No se avisa al tutor de la baja ni de la condonación en el MVP (pregunta abierta).
+| Aviso | A quién | Canal |
+|---|---|---|
+| `DropoutReported` (técnico o tutor) | quienes pueden dar de baja, menos quien avisó | push (`/bajas`) + correo ("Ver en Tuku" y "Ver en el panel") |
+| `StudentWithdrawn` (si quien da la baja lo elige) | tutores con la app y alumno adulto con cuenta | push + correo, sin mascota |
+
+No se usa la API de WhatsApp: los avisos van por los canales que ya existen.
 
 ## 8. Contrato de API
 
-Sección "Bajas y condonación" de `docs/API_V1.md`:
+Ver "Bajas y condonación" en `docs/API_V1.md`:
+- `GET organization`: `withdraw_students` y `waive_charges`.
+- Técnico: `POST`/`DELETE groups/{id}/students/{student}/dropout`.
+- Tutor: `POST`/`DELETE students/{id}/leaving` y `leaving_reported_on` en `GET students`.
+- Quien da de baja o condona:
+  - `GET dropout-reports`
+  - `GET staff/students/{id}`
+  - `POST enrollments/{id}/withdraw`
+  - `DELETE enrollments/{id}/dropout`
+  - `POST charges/waive`
+  - `POST charges/{id}/unwaive`
+- Informes: `withdrawn` por familia y `?withdrawn=only|exclude`.
 
-- `GET groups/{id}`: cada alumno trae `dropout_reported_on` (o `null`).
-- `POST groups/{id}/students/{student}/dropout` (`{ "note": "…" }`) · `DELETE groups/{id}/students/{student}/dropout`.
-- `GET reports/delinquents?withdrawn=only|exclude` y `GET reports/balances`: `withdrawn` por familia.
-- `status: "condonado"` en los cargos (hoy no llega al tutor, que no ve las anuladas).
+## 9. Fuera de alcance
 
-## 9. Fuera del MVP
+- Reactivar desde la app (por ahora solo el panel).
+- Baja con fecha futura; motivos tipificados con un informe de bajas del período.
+- "Condonado en el mes" en el Balance.
+- Marca de baja en la tarjeta Morosos del Escritorio: la reescribe la rama de informes.
+- Aviso a la familia al condonar.
+- Avisar a tutores sin cuenta en la app (solo correo o WhatsApp): hoy se sugiere avisarles a mano.
 
-- El tutor avisa desde la app que su hijo deja el club.
-- Dar la baja o condonar desde la app (comisión).
-- Baja con fecha futura ("se va a fin de mes") y motivos tipificados con un informe de bajas del período.
-- Deshacer una condonación; "Condonado en el mes" en el Balance.
-- Marca de baja en la tarjeta **Morosos del Escritorio** (`Metrics`, la reescribe la sesión de informes): se agrega
-  cuando se integre esa rama.
-- Aviso al tutor de la baja o de la condonación.
+## 10. Posibles conflictos
 
-## 10. Implementación
-
-1. **App** (contra el contrato, con fakes): marca y filtro en Morosos y Saldos; aviso del técnico en el grupo.
-2. **API**: migración (`enrollments`: motivo, quién, aviso; `charges.waived_amount`), `WithdrawEnrollment`,
-   `ReactivateEnrollment`, `ReportDropout`, `WaiveCharges`, `Withdrawals`, `DropoutReported`, endpoints, informes.
-3. **Panel**: acciones en Inscripciones, ficha (Inscripciones y Cuenta), Cargos e Informes; permiso en Shield.
-4. Tests en los dos lados; `business-logic.md` y `API_V1.md`.
-
-**Posibles conflictos** con la rama de informes (`informes-etapa-0`): reescribe `DelinquentsReport`,
-`FamilyBalancesReport` (→ `BalancesReport`), `Reports.php`, su vista, `ChargeResource` y `Metrics`. Los cambios de esta
-rama en esos archivos son de pocas líneas (una clave `withdrawn` por fila, el filtro y una acción). Con F2 (inscripción
-por tutores): el hook `updated` de `Enrollment` (reactivar desde baja/suspensión emite desde hoy; de pendiente a activo
-sigue desde la inscripción) y `EnrollmentForm` (no se tocó).
+- **Rama de informes** (`informes-etapa-0`): reescribe `DelinquentsReport`, `FamilyBalancesReport`, `Reports.php` y su
+  vista, `ChargeResource` y `Metrics`. Acá los cambios son de pocas líneas: `withdrawn` por fila, el filtro y las
+  acciones de Cargos.
+- **F2** (inscripción por tutores): toca el hook `updated` de `Enrollment` y `StudentResource`, donde acá se agrega
+  `leaving_reported_on`. `EnrollmentForm` no se tocó.
+- **F1** (cobros): `ChargeStatus` (app y API) suma `condonado`.
+- **Migraciones:** `2026_10_09_100001` y `2026_10_09_100002`.

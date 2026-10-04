@@ -29,6 +29,7 @@ use App\Http\Controllers\Api\V1\Setup\SiteController as SetupSiteController;
 use App\Http\Controllers\Api\V1\StudentAttendanceController;
 use App\Http\Controllers\Api\V1\StudentController;
 use App\Http\Controllers\Api\V1\VenueController;
+use App\Http\Controllers\Api\V1\WithdrawalController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.v1.')->group(function () {
@@ -89,6 +90,16 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('payment-reports', [PaymentReportController::class, 'index'])->name('payment-reports.index');
             Route::post('payment-reports/{report}/approve', [PaymentReportController::class, 'approve'])->whereNumber('report')->name('payment-reports.approve');
             Route::post('payment-reports/{report}/reject', [PaymentReportController::class, 'reject'])->whereNumber('report')->name('payment-reports.reject');
+
+            // Bajas y condonación (docs/PLAN_BAJAS.md).
+            Route::get('dropout-reports', [WithdrawalController::class, 'dropoutReports'])->name('dropout-reports.index');
+            Route::get('staff/students/{student}', [WithdrawalController::class, 'student'])->whereNumber('student')->name('staff.students.show');
+            Route::post('enrollments/{enrollment}/withdraw', [WithdrawalController::class, 'withdraw'])->whereNumber('enrollment')->name('enrollments.withdraw');
+            Route::delete('enrollments/{enrollment}/dropout', [WithdrawalController::class, 'dismissDropout'])->whereNumber('enrollment')->name('enrollments.dropout.dismiss');
+            Route::post('charges/waive', [WithdrawalController::class, 'waive'])->name('charges.waive');
+            Route::post('charges/{charge}/unwaive', [WithdrawalController::class, 'unwaive'])->whereNumber('charge')->name('charges.unwaive');
+            Route::post('students/{student}/leaving', [WithdrawalController::class, 'leaving'])->whereNumber('student')->name('students.leaving');
+            Route::delete('students/{student}/leaving', [WithdrawalController::class, 'cancelLeaving'])->whereNumber('student')->name('students.leaving.cancel');
 
             Route::get('reports/balance', [ReportController::class, 'balance'])->name('reports.balance');
             Route::get('reports/balances', [ReportController::class, 'balances'])->name('reports.balances');

@@ -2,8 +2,10 @@
 
 use App\Actions\Billing\IssueSeasonCharges;
 use App\Actions\Billing\RegisterPayment;
+use App\Actions\Billing\UnwaiveCharge;
 use App\Actions\Billing\WaiveCharges;
 use App\Actions\Enrollments\ReactivateEnrollment;
+use App\Actions\Enrollments\ReportDropout;
 use App\Actions\Enrollments\WithdrawEnrollment;
 use App\Enums\ChargeStatus;
 use App\Enums\EnrollmentStatus;
@@ -18,6 +20,7 @@ use App\Filament\Resources\Students\RelationManagers\ChargesRelationManager;
 use App\Filament\Resources\Students\RelationManagers\EnrollmentsRelationManager;
 use App\Filament\Support\ChargeHistory;
 use App\Models\Charge;
+use App\Models\ChargeCondonation;
 use App\Models\Enrollment;
 use App\Models\Family;
 use App\Models\FeeConcept;
@@ -33,6 +36,7 @@ use App\Models\Student;
 use App\Models\Tariff;
 use App\Models\User;
 use App\Notifications\DropoutReported;
+use App\Notifications\StudentWithdrawn;
 use App\Reports\DelinquentsReport;
 use App\Reports\FamilyBalancesReport;
 use App\Support\Roles\RoleAssigner;
@@ -42,7 +46,6 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\ValidationException;
 use Livewire\Livewire;
 use Spatie\Activitylog\Models\Activity;
-use Spatie\Permission\Models\Permission;
 use Spatie\Permission\PermissionRegistrar;
 
 /**
@@ -217,18 +220,63 @@ describe('condonar', function () {
             ->and((new DelinquentsReport($this->jakare))->data()['families'])->toBeEmpty();
     });
 
-    it('sin el permiso "Condonar deudas" no se puede; con el permiso, sí', function () {
+    it('por defecto condonan el admin, el tesorero y el presidente; el permiso se agrega o quita por rol', function () {
         $treasurer = withdrawalMember(OrganizationRole::Treasurer, 'Laura Gómez');
+        $president = withdrawalMember(OrganizationRole::President, 'Pedro Presidente');
+        $deputy = withdrawalMember(OrganizationRole::DeputyTreasurer, 'Pablo Protesorero');
         app(CurrentOrganization::class)->set($this->jakare);
-
-        expect(fn () => app(WaiveCharges::class)->handle(withdrawalCharges($this->matias), 'Baja', $treasurer))
-            ->toThrow(ValidationException::class, 'No tenés permiso');
-
-        Permission::findOrCreate(WaiveCharges::PERMISSION, 'web');
-        Role::query()->where('organization_id', $this->jakare->id)->where('name', 'tesorero')->sole()->givePermissionTo(WaiveCharges::PERMISSION);
         app(PermissionRegistrar::class)->forgetCachedPermissions();
 
-        expect(app(WaiveCharges::class)->handle(withdrawalCharges($this->matias), 'Baja', $treasurer->fresh()))->toBe(450000);
+        expect(WaiveCharges::allows($treasurer))->toBeTrue()
+            ->and(WaiveCharges::allows($president))->toBeTrue()
+            ->and(WaiveCharges::allows($this->admin))->toBeTrue()
+            ->and(WaiveCharges::allows($deputy))->toBeFalse();
+
+        expect(fn () => app(WaiveCharges::class)->handle(withdrawalCharges($this->matias), 'Baja', $deputy))
+            ->toThrow(ValidationException::class, 'No tenés permiso');
+
+        // Roles: el admin se lo da al protesorero y se lo saca al tesorero.
+        Role::query()->where('organization_id', $this->jakare->id)->where('name', 'protesorero')->sole()->givePermissionTo(WaiveCharges::PERMISSION);
+        Role::query()->where('organization_id', $this->jakare->id)->where('name', 'tesorero')->sole()->revokePermissionTo(WaiveCharges::PERMISSION);
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+
+        expect(WaiveCharges::allows($treasurer->fresh()))->toBeFalse()
+            ->and(app(WaiveCharges::class)->handle(withdrawalCharges($this->matias), 'Baja', $deputy->fresh()))->toBe(450000);
+    });
+
+    it('deshacer: la cuota vuelve a quedar pendiente y queda quién, cuándo y por qué', function () {
+        $treasurer = withdrawalMember(OrganizationRole::Treasurer, 'Laura Gómez');
+        app(CurrentOrganization::class)->set($this->jakare);
+        $june = withdrawalCharges($this->matias)->last();
+        app(WaiveCharges::class)->handle([$june], 'Dado de baja', $treasurer);
+
+        expect(fn () => app(UnwaiveCharge::class)->handle($june->fresh(), ' ', $this->admin))->toThrow(ValidationException::class, 'por qué');
+
+        $this->travel(1)->days();
+        $june = app(UnwaiveCharge::class)->handle($june->fresh(), 'Se condonó por error', $this->admin);
+
+        expect($june->status())->not->toBe(ChargeStatus::Waived)
+            ->and($june->isVoided())->toBeFalse()
+            ->and($june->pendingAmount())->toBe(150000)
+            ->and(withdrawalCharges($this->matias)->sum(fn (Charge $c) => $c->pendingAmount()))->toBe(450000);
+
+        $condonation = ChargeCondonation::query()->sole();
+        expect($condonation->amount)->toBe(150000)
+            ->and($condonation->created_by)->toBe($treasurer->id)
+            ->and($condonation->undone_by)->toBe($this->admin->id)
+            ->and($condonation->undo_reason)->toBe('Se condonó por error')
+            ->and($condonation->undone_at)->not->toBeNull();
+
+        expect(collect(ChargeHistory::for($june))->pluck('text')->all())->toContain(
+            'Condonada ₲ 150.000: Dado de baja',
+            'Condonación deshecha: Se condonó por error',
+        );
+
+        expect(fn () => app(UnwaiveCharge::class)->handle($june, 'Otra vez', $this->admin))->toThrow(ValidationException::class, 'no está condonada');
+
+        // Se puede volver a condonar: otra condonación.
+        app(WaiveCharges::class)->handle([$june->fresh()], 'Ahora sí', $this->admin);
+        expect(ChargeCondonation::query()->count())->toBe(2);
     });
 
     it('pide motivo y no condona cuotas pagadas ni anuladas', function () {
@@ -449,8 +497,8 @@ describe('panel', function () {
     });
 
     it('sin el permiso no se ve "Condonar" en Cargos', function () {
-        $treasurer = withdrawalMember(OrganizationRole::Treasurer, 'Laura Gómez');
-        withdrawalPanel($treasurer);
+        $deputy = withdrawalMember(OrganizationRole::DeputyTreasurer, 'Pablo Protesorero');
+        withdrawalPanel($deputy);
         $charge = withdrawalCharges($this->matias)->first();
 
         Livewire::test(ManageCharges::class)
@@ -466,5 +514,160 @@ describe('panel', function () {
             ->assertHasNoTableActionErrors();
 
         expect($charge->fresh()->status())->toBe(ChargeStatus::Waived);
+
+        Livewire::test(ManageCharges::class)
+            ->assertTableActionHidden('waive', $charge->fresh())
+            ->callTableAction('unwaive', $charge->fresh(), data: ['reason' => 'Error'])
+            ->assertHasNoTableActionErrors();
+
+        expect($charge->fresh()->isVoided())->toBeFalse();
+    });
+
+    it('al dar de baja se puede avisar a la familia con un mensaje cambiado en el momento', function () {
+        $tutor = memberOf($this->jakare, ['name' => 'Rosa Zárate']);
+        $this->guardian->update(['user_id' => $tutor->id]);
+        withdrawalPanel($this->admin);
+
+        Livewire::test(ManageEnrollments::class)
+            ->mountTableAction('withdraw', $this->enrollment)
+            ->assertTableActionDataSet(['notify' => true, 'message' => WithdrawEnrollment::defaultNotice($this->enrollment)])
+            ->setTableActionData(['withdrawal_reason' => 'Se mudó', 'message' => 'Hola Rosa, ¡los esperamos cuando quieran volver!'])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        Notification::assertSentTo($tutor, StudentWithdrawn::class, fn (StudentWithdrawn $n) => $n->title === 'Baja de Matías'
+            && $n->body === 'Hola Rosa, ¡los esperamos cuando quieran volver!');
+    });
+});
+
+describe('avisos a la familia', function () {
+    it('el mensaje sugerido es amable y con las puertas abiertas; se puede no mandar', function () {
+        $tutor = memberOf($this->jakare, ['name' => 'Rosa Zárate']);
+        $this->guardian->update(['user_id' => $tutor->id]);
+
+        expect(WithdrawEnrollment::defaultNotice($this->enrollment))
+            ->toContain('registramos la baja de Matías en '.$this->jakare->name)
+            ->toContain('Las puertas siempre van a estar abiertas')
+            ->not->toContain('₲');
+
+        expect(fn () => app(WithdrawEnrollment::class)->handle($this->enrollment, '2026-06-03', 'Se mudó', $this->admin, ' '))
+            ->toThrow(ValidationException::class, 'mensaje');
+        expect($this->enrollment->fresh()->status)->toBe(EnrollmentStatus::Active);
+
+        app(WithdrawEnrollment::class)->handle($this->enrollment, '2026-06-03', 'Se mudó', $this->admin);
+        Notification::assertNotSentTo($tutor, StudentWithdrawn::class);
+    });
+});
+
+describe('app', function () {
+    beforeEach(function () {
+        $this->tutor = memberOf($this->jakare, ['name' => 'Rosa Zárate']);
+        $this->guardian->update(['user_id' => $this->tutor->id]);
+        $this->secretary = withdrawalMember(OrganizationRole::Secretary, 'Sonia Secretaria');
+        $this->treasurer = withdrawalMember(OrganizationRole::Treasurer, 'Laura Gómez');
+        app(CurrentOrganization::class)->set($this->jakare);
+    });
+
+    function withdrawalApi(User $user, string $method, string $uri, array $data = [])
+    {
+        return test()->actingAs($user, 'sanctum')->json($method, "/api/v1/{$uri}", $data, ['X-Organization' => 'jakare']);
+    }
+
+    it('los permisos llegan a la app', function () {
+        expect(withdrawalApi($this->secretary, 'GET', 'organization')->json('data.membership.permissions'))
+            ->toContain('withdraw_students')->not->toContain('waive_charges');
+        expect(withdrawalApi($this->treasurer, 'GET', 'organization')->json('data.membership.permissions'))
+            ->toContain('waive_charges')->not->toContain('withdraw_students');
+        expect(withdrawalApi($this->admin, 'GET', 'organization')->json('data.membership.permissions'))
+            ->toContain('withdraw_students', 'waive_charges');
+    });
+
+    it('el tutor avisa que su hijo deja el club; llega a quien da de baja, que decide', function () {
+        withdrawalApi($this->tutor, 'POST', "students/{$this->matias->id}/leaving", ['message' => 'Nos mudamos, ¡gracias por todo!'])
+            ->assertOk()
+            ->assertJsonPath('data.leaving_reported_on', '2026-06-03');
+
+        $enrollment = $this->enrollment->fresh();
+        expect($enrollment->dropout_source)->toBe('guardian')
+            ->and($enrollment->status)->toBe(EnrollmentStatus::Active);
+        Notification::assertSentTo([$this->admin, $this->secretary], DropoutReported::class,
+            fn (DropoutReported $n) => str_contains($n->body, 'Rosa Zárate (familia) avisó que Matías Zárate deja el club: «Nos mudamos, ¡gracias por todo!»'));
+        Notification::assertNotSentTo([$this->tutor, $this->treasurer], DropoutReported::class);
+
+        withdrawalApi($this->tutor, 'GET', "students/{$this->matias->id}")->assertJsonPath('data.leaving_reported_on', '2026-06-03');
+
+        withdrawalApi($this->secretary, 'GET', 'dropout-reports')
+            ->assertOk()
+            ->assertJsonPath('data.0.student.full_name', 'Matías Zárate')
+            ->assertJsonPath('data.0.source', 'guardian')
+            ->assertJsonPath('data.0.reported_by', 'Rosa Zárate');
+        withdrawalApi($this->tutor, 'GET', 'dropout-reports')->assertForbidden();
+
+        withdrawalApi($this->tutor, 'DELETE', "students/{$this->matias->id}/leaving")->assertOk();
+        expect($this->enrollment->fresh()->dropout_reported_at)->toBeNull();
+
+        $other = memberOf($this->jakare);
+        withdrawalApi($other, 'POST', "students/{$this->matias->id}/leaving")->assertNotFound();
+    });
+
+    it('la ficha para quien da de baja: inscripciones, aviso a la familia y baja con mensaje', function () {
+        app(ReportDropout::class)->report($this->enrollment, 'No viene', $this->secretary);
+
+        withdrawalApi($this->secretary, 'GET', "staff/students/{$this->matias->id}")
+            ->assertOk()
+            ->assertJsonPath('data.enrollments.0.can_withdraw', true)
+            ->assertJsonPath('data.enrollments.0.dropout_report.note', 'No viene')
+            ->assertJsonPath('data.notice.recipients', 1)
+            ->assertJsonPath('data.notice.message', WithdrawEnrollment::defaultNotice($this->enrollment))
+            ->assertJsonPath('data.charges', null);
+        withdrawalApi($this->tutor, 'GET', "staff/students/{$this->matias->id}")->assertForbidden();
+
+        withdrawalApi($this->secretary, 'POST', "enrollments/{$this->enrollment->id}/withdraw", ['ended_on' => '2026-06-03', 'reason' => 'Se mudó', 'notify' => true])
+            ->assertUnprocessable()->assertJsonValidationErrors('message');
+
+        withdrawalApi($this->secretary, 'POST', "enrollments/{$this->enrollment->id}/withdraw", [
+            'ended_on' => '2026-06-03', 'reason' => 'Se mudó', 'notify' => true, 'message' => '¡Gracias! Los esperamos cuando quieran.',
+        ])->assertOk()->assertJsonPath('data.notified', 1);
+
+        expect($this->enrollment->fresh()->status)->toBe(EnrollmentStatus::Withdrawn);
+        Notification::assertSentTo($this->tutor, StudentWithdrawn::class, fn (StudentWithdrawn $n) => $n->body === '¡Gracias! Los esperamos cuando quieran.');
+
+        withdrawalApi($this->treasurer, 'POST', "enrollments/{$this->enrollment->id}/withdraw", ['ended_on' => '2026-06-03', 'reason' => 'x'])->assertForbidden();
+        withdrawalApi($this->secretary, 'POST', "enrollments/{$this->enrollment->id}/withdraw", ['ended_on' => '2026-06-03', 'reason' => 'Otra'])
+            ->assertUnprocessable();
+    });
+
+    it('"Sigue viniendo" desde la app', function () {
+        app(ReportDropout::class)->report($this->enrollment, null, $this->secretary);
+
+        withdrawalApi($this->secretary, 'DELETE', "enrollments/{$this->enrollment->id}/dropout")->assertOk();
+
+        expect($this->enrollment->fresh()->dropout_reported_at)->toBeNull();
+    });
+
+    it('condonar y deshacer desde la app', function () {
+        $charges = withdrawalCharges($this->matias);
+
+        withdrawalApi($this->secretary, 'POST', 'charges/waive', ['charge_ids' => $charges->modelKeys(), 'reason' => 'Baja'])->assertUnprocessable();
+
+        withdrawalApi($this->treasurer, 'POST', 'charges/waive', ['charge_ids' => $charges->take(2)->modelKeys(), 'reason' => 'Dado de baja'])
+            ->assertOk()->assertJsonPath('data.waived', 300000);
+
+        $response = withdrawalApi($this->treasurer, 'GET', "staff/students/{$this->matias->id}")->assertOk();
+        $waived = collect($response->json('data.charges'))->firstWhere('id', $charges->first()->id);
+        expect($waived['status'])->toBe('condonado')
+            ->and($waived['waiver'])->toBe(['amount' => 150000, 'reason' => 'Dado de baja', 'by' => 'Laura Gómez', 'on' => '2026-06-03'])
+            ->and($waived['can_unwaive'])->toBeTrue()
+            ->and($waived['pending_amount'])->toBe(0)
+            ->and($response->json('data.balance'))->toBe(150000)
+            ->and($response->json('data.enrollments.0.can_withdraw'))->toBeFalse();
+
+        withdrawalApi($this->treasurer, 'POST', "charges/{$charges->first()->id}/unwaive", ['reason' => 'Fue un error'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'vencido')
+            ->assertJsonPath('data.waiver', null)
+            ->assertJsonPath('data.can_waive', true);
+
+        expect(ChargeCondonation::query()->whereNotNull('undone_at')->sole()->undone_by)->toBe($this->treasurer->id);
     });
 });

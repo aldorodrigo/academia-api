@@ -97,8 +97,8 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
   protesorero: cobros, cuotas, gastos, cuentas, tarifas, becas y descuentos, ver alumnos y grupos, informes (el
   tesorero, también aprobar becas). Secretario y prosecretario: alumnos, tutores, inscripciones e invitaciones; ver
   grupos, temporadas y miembros. Vocal: informes. Síndico: ver lo financiero e informes. Admin, técnico y tutor: nada
-  extra (el admin pasa por todo; técnico y tutor usan sus grupos e hijos). "Condonar deudas" no lo tiene ningún rol
-  por defecto: lo da el admin.
+  extra (el admin pasa por todo; técnico y tutor usan sus grupos e hijos). "Condonar deudas" nace con el tesorero y
+  el presidente (y se les agregó a los roles que ya existían); el admin lo agrega o quita por rol.
 - Se aplican al crear el rol; `organizations:sync-roles` los completa en los roles base que no tienen **ningún**
   permiso (no pisa lo que cambió el admin).
 - **Quien no es admin solo invita o asigna tutores y técnicos** (no cargos ni administrador).
@@ -204,16 +204,22 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Criterio de grupo por programa: año de nacimiento (fútbol) o nivel (pádel, danza).
 
 ### Bajas *(2026-10-04, `docs/PLAN_BAJAS.md`)*
-- **Se da de baja en el panel** ("Dar de baja" en Inscripciones, por fila o en bloque, y en la ficha del jugador), con
-  **fecha** (hoy por defecto; entre la inscripción y hoy) y **motivo** obligatorio; queda quién la dio y el registro de
-  actividad. La da quien puede **editar inscripciones** (admin; secretario y prosecretario por defecto). "Estado" ya no
-  ofrece "Baja".
+- **Se da de baja en el panel** ("Dar de baja" en Inscripciones, por fila o en bloque, y en la ficha del jugador) **o en
+  la app** (ficha del alumno para quien tiene el permiso), con **fecha** (hoy por defecto; entre la inscripción y hoy) y
+  **motivo** obligatorio; queda quién la dio y el registro de actividad. La da quien puede **editar inscripciones**
+  (admin; secretario y prosecretario por defecto). "Estado" ya no ofrece "Baja".
+- **Aviso a la familia:** al dar de baja se pregunta si se le avisa (prendido si hay tutores con la app). El mensaje
+  viene prellenado, amable y con las puertas abiertas ("…Las puertas siempre van a estar abiertas: cuando quieran
+  volver, escribinos y los esperamos"), sin hablar de plata, y se puede cambiar en el momento. Va por push y correo a
+  los tutores con la app (y al alumno adulto con cuenta); no por WhatsApp.
 - **La deuda queda como histórica:** las cuotas impagas, **también la del período en curso** si ya empezó, siguen
   pendientes hasta que se pagan, se anulan o se condonan (§5). Nunca se borran ni se anulan solas; solo se anulan
   solas las **futuras** sin pagos.
-- **El técnico avisa "Dejó de venir"** desde la app (sus grupos, nota opcional) y lo puede deshacer. No da la baja: la
-  inscripción queda marcada y les llega un aviso (push y correo) a quienes pueden darla, que deciden "Dar de baja"
-  (con la nota como motivo) o "Sigue viniendo". Dar la baja cierra el aviso.
+- **Avisos de baja:** el técnico avisa "Dejó de venir" (sus grupos, nota opcional) y el tutor avisa "Deja el club"
+  (ficha del hijo, mensaje opcional; marca todas sus inscripciones vigentes). Cada uno lo puede deshacer. No dan la
+  baja: la inscripción queda marcada y les llega un aviso (push y correo) a quienes pueden darla, que deciden en la app
+  ("Avisos de baja") o en el panel: "Dar de baja" (con la nota como motivo) o "Sigue viniendo". Dar la baja cierra el
+  aviso.
 - **Si vuelve:** "Reactivar" (activo o becado). La deuda sigue para pagarse; las cuotas se emiten **desde el período
   en curso** (los meses que estuvo afuera no se cobran) y se reemiten las futuras anuladas. Igual al volver de una
   suspensión. De pendiente a activo se sigue cobrando desde la fecha de inscripción.
@@ -267,10 +273,12 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
     el próximo (lo elige quien inscribe; el plan trae el valor por defecto).
   - **Baja o suspensión:** se anulan solas las cuotas futuras sin pagar (las ya empezadas quedan pendientes); si se
     reactiva, se emiten desde el período en curso y se reemiten las futuras (§3, Bajas).
-  - **Condonar** (permiso "Condonar deudas", `Waive:Charge`; por defecto solo el admin): perdona **lo que falta
-    pagar** de una o varias cuotas, con motivo; queda quién, cuándo, por qué y cuánto, con estado "Condonado".
-    Sale de la cuenta, de Saldos y de Morosos como una anulada; lo ya pagado sigue siendo ingreso. Es distinto de
-    "Anular" (cargo mal emitido). No se deshace: si fue un error, se carga un cargo manual.
+  - **Condonar** (permiso "Condonar deudas", `Waive:Charge`; por defecto el admin, el tesorero y el presidente, y se
+    agrega o quita por rol; panel y app): perdona **lo que falta pagar** de una o varias cuotas, con motivo; queda
+    quién, cuándo, por qué y cuánto (una fila por condonación), con estado "Condonado". Sale de la cuenta, de Saldos y
+    de Morosos como una anulada; lo ya pagado sigue siendo ingreso. Es distinto de "Anular" (cargo mal emitido).
+  - **Deshacer una condonación** (mismo permiso, con motivo): la cuota vuelve a quedar pendiente por lo condonado;
+    queda quién, cuándo y por qué, y el historial muestra los dos pasos. Se puede volver a condonar.
   - Becas, descuentos y montos nuevos **no rehacen** cuotas ya emitidas: se anula la cuota con
     "Volver a emitirla" y se rehace con lo de hoy.
   - La generación es **idempotente**: lock en Redis + clave única en BD

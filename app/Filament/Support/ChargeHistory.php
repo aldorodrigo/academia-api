@@ -46,12 +46,27 @@ class ChargeHistory
             ]);
         }
 
-        if ($charge->isVoided()) {
+        // Condonaciones (y las que se deshicieron), con quién, cuándo y por qué.
+        foreach ($charge->condonations()->reorder('id')->get() as $condonation) {
+            $entries->push([
+                'at' => $condonation->created_at,
+                'text' => 'Condonada '.$money($condonation->amount).": {$condonation->reason}",
+                'by' => $names($condonation->created_by),
+            ]);
+
+            if ($condonation->isUndone()) {
+                $entries->push([
+                    'at' => $condonation->undone_at,
+                    'text' => "Condonación deshecha: {$condonation->undo_reason}",
+                    'by' => $names($condonation->undone_by),
+                ]);
+            }
+        }
+
+        if ($charge->isVoided() && ! $charge->isWaived()) {
             $entries->push([
                 'at' => $charge->voided_at,
-                'text' => $charge->isWaived()
-                    ? 'Condonada '.$money($charge->waived_amount).": {$charge->void_reason}"
-                    : "Anulada: {$charge->void_reason}",
+                'text' => "Anulada: {$charge->void_reason}",
                 'by' => $names($charge->voided_by),
             ]);
 

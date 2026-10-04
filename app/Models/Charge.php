@@ -247,6 +247,16 @@ class Charge extends Model
     }
 
     /**
+     * Condonaciones (la vigente y las deshechas), la última primero.
+     *
+     * @return HasMany<ChargeCondonation, $this>
+     */
+    public function condonations(): HasMany
+    {
+        return $this->hasMany(ChargeCondonation::class)->orderByDesc('id');
+    }
+
+    /**
      * @return BelongsTo<User, $this>
      */
     public function voidedBy(): BelongsTo

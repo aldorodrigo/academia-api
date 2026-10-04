@@ -32,12 +32,12 @@ class DefaultPermissions
         $everything = [...self::FINANCE, ...self::PEOPLE, ...self::ACADEMIC, 'Invitation', 'Membership'];
 
         return match ($role) {
-            OrganizationRole::President => [...self::grant($everything, self::VIEW), 'View:Reports', 'Approve:Scholarship'],
+            OrganizationRole::President => [...self::grant($everything, self::VIEW), 'View:Reports', 'Approve:Scholarship', 'Waive:Charge'],
             OrganizationRole::VicePresident => [...self::grant($everything, self::VIEW), 'View:Reports'],
             OrganizationRole::Treasurer => [
                 ...self::grant(self::FINANCE, self::MANAGE),
                 ...self::grant([...self::PEOPLE, ...self::ACADEMIC], self::VIEW),
-                'View:Reports', 'Approve:Scholarship',
+                'View:Reports', 'Approve:Scholarship', 'Waive:Charge',
             ],
             OrganizationRole::DeputyTreasurer => [
                 ...self::grant(self::FINANCE, self::MANAGE),

@@ -49,7 +49,7 @@ class EnrollmentResource extends Resource
     }
 
     /**
-     * Avisos del técnico ("dejó de venir") sin decidir.
+     * Avisos de baja (técnico o familia) sin decidir.
      */
     public static function getNavigationBadge(): ?string
     {
@@ -60,7 +60,7 @@ class EnrollmentResource extends Resource
 
     public static function getNavigationBadgeTooltip(): ?string
     {
-        return 'Avisos de que dejó de venir';
+        return 'Avisos de baja (técnico o familia)';
     }
 
     /**
@@ -103,7 +103,7 @@ class EnrollmentResource extends Resource
                     ->default(fn () => Season::query()->open()->pluck('id')->all()),
                 SelectFilter::make('group')->label(Terms::label('group', 'Categoría'))->relationship('group', 'name')->preload(),
                 SelectFilter::make('status')->label('Estado')->options(EnrollmentStatus::class),
-                Filter::make('dropout')->label('Avisó el técnico')->toggle()
+                Filter::make('dropout')->label('Con aviso de baja (técnico o familia)')->toggle()
                     ->query(fn (Builder $query) => $query->whereNotNull('dropout_reported_at')),
             ])
             // Editar o borrar una inscripción se hace en la ficha del jugador.
