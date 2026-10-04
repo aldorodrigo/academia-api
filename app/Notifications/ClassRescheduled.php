@@ -5,17 +5,12 @@ namespace App\Notifications;
 use App\Models\ClassSession;
 use App\Support\Push\PushMessage;
 use Carbon\CarbonInterface;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
 /**
- * Push: una clase pasó a otro día u horario (o se canceló la reprogramación).
+ * Aviso: una clase pasó a otro día u horario (o se canceló la reprogramación).
  */
-class ClassRescheduled extends Notification implements ShouldQueue
+class ClassRescheduled extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     public string $route;
@@ -49,14 +44,6 @@ class ClassRescheduled extends Notification implements ShouldQueue
         $weekdays = ['', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado', 'domingo'];
 
         return $weekdays[$date->dayOfWeekIso].' '.$date->format('d/m');
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
     }
 
     public function toPush(object $notifiable): PushMessage

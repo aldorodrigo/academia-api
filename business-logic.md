@@ -56,9 +56,12 @@ documento difieren, se corrige uno de los dos en el mismo cambio.
   con roles distintos en cada una.
 - Solo entra a una organización con membresía **activa**.
 - Una persona puede tener **varios roles** a la vez (ej. tutor + tesorero); la app muestra todos sus perfiles.
-- La cuenta se identifica con el **celular (WhatsApp)** o con el **correo**; los dos son únicos y se entra
-  con cualquiera de ellos y la contraseña (app y panel). Los teléfonos se guardan en formato
+- La cuenta se identifica con el **celular (WhatsApp)** o con el **correo** (o los dos); los dos son únicos y se
+  entra con cualquiera de ellos y la contraseña (app y panel). Los teléfonos se guardan en formato
   internacional (`+595981123456`) y se muestran como `0981 123 456`.
+- Cada dato se verifica por separado (`phone_verified_at`, `email_verified_at`). Un celular o un correo **sin
+  verificar no ocupa el dato**: no identifica a la cuenta (invitaciones, registro) y una cuenta nueva con ese dato
+  se lo saca a la otra.
 
 ### Super admin y admin
 - **Super admin** de la plataforma (`users.is_super_admin`): acceso total a todas las organizaciones
@@ -116,15 +119,20 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
 
 ### Registro abierto *(Sprint 5d)*
 - Cualquiera puede **crear una cuenta** (nombre, **celular** o, si no tiene WhatsApp, **correo**, contraseña de
-  8+ y aceptación de los términos, con versión y fecha). La cuenta nace **sin organizaciones** y sin verificar.
+  8+ y aceptación de los términos, con versión y fecha). Con el celular, el **correo es opcional**: recibe una copia
+  de lo que va por WhatsApp. La cuenta nace **sin organizaciones** y sin verificar.
 - Se verifica con un **código de 6 dígitos** que llega **por WhatsApp** (WhatsApp Cloud API de Meta, plantilla de
-  autenticación; solo para códigos, los avisos siguen por push) o por correo. Vence a los 15 minutos, 5 intentos;
+  autenticación; solo para códigos, los avisos van por push y por correo) o por correo. Si va por WhatsApp y la cuenta
+  tiene correo, sale también una **copia por correo con su propio código**: el de WhatsApp verifica el celular y el
+  del correo, el correo. Vence a los 15 minutos, 5 intentos entre los dos;
   pedir otro reemplaza el anterior. Sin verificar, la app y el panel solo piden el código; la API no deja crear
   un club.
 - Una cuenta **sin verificar no ocupa** el celular ni el correo: un registro nuevo con el mismo dato la reemplaza
   y `accounts:prune-unverified` (cada hora) borra las de más de 24 horas.
-- **"Olvidé mi contraseña"** (app y panel): código por WhatsApp si se ingresa el celular, por correo si se ingresa el
-  correo. No revela si hay una cuenta. Al cambiarla se cierran las otras sesiones.
+- **"Olvidé mi contraseña"** (app y panel): código por WhatsApp si se ingresa el celular (copia solo a un correo
+  verificado), por correo si se ingresa el correo (solo si está verificado o la cuenta no tiene celular: un correo
+  opcional sin confirmar puede ser de otra persona). No revela si hay una cuenta. Al cambiarla se cierran las otras
+  sesiones.
 - Con la cuenta verificada y sin organizaciones, la app y el panel llevan a "Tu club".
 - **Protección del envío de códigos** (`CodeGuard`, igual para WhatsApp y correo):
   - Cloudflare Turnstile en crear cuenta, reenviar y "Olvidé mi contraseña" (si está configurado), campo trampa
@@ -139,18 +147,34 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
 - Los **roles** (admin de otro club, cargos, técnicos, tutores de alumnos cargados por el club)
   se siguen dando **por invitación**.
 
+### Copias por correo y marca *(2026-10-03)*
+- **Todo lo que sale por WhatsApp sale también por correo**: códigos (copia con su propio código) e invitaciones.
+  Los **avisos** (push) van también por correo: día de clase, clase suspendida o reprogramada, clases particulares,
+  paquetes y el aviso al técnico.
+- El correo de las copias es el **verificado** o, si la cuenta no tiene celular, el correo con el que se creó. Un
+  correo opcional se confirma con su código o con el botón "Confirmar mi correo" (link de 7 días; vencido, se manda
+  otro). Así un correo mal escrito no recibe datos de los chicos.
+- El aviso de día de clase por correo trae "Sí, va" / "No va": abren una página que guarda la respuesta con su botón
+  (no al abrir el link, porque los antivirus de correo lo abren solos). Vence al empezar la clase.
+- **Marca:** los correos llevan el logo, los colores, las tipografías y la mascota de Tuku (`hola` en bienvenidas e
+  invitaciones, `salta` en reservas, `descansa` en clases suspendidas; nunca junto a deudas). El número de WhatsApp
+  tiene el perfil de Tuku (nombre, foto, presentación, sitio) y la plantilla de autenticación en español con
+  "Copiar código" (`php artisan whatsapp:brand`, ver `docs/WHATSAPP.md`).
+
 ### Invitaciones
 - Alta de roles **por invitación** (el registro abierto da una cuenta sin organización).
-- La invitación va a un **correo o a un celular**, con roles (con mandato para los cargos), quién invitó y
-  vencimiento a los **14 días**. Sirve **una sola vez**.
-- El link `{APP_FRONTEND_URL}/invitacion/{token}` llega por email (con QR) o, si es a un celular, quien invita lo
-  manda por WhatsApp (`wa.me` a ese número, sin costo). Se muestra en el panel **una sola vez**: el token se
-  guarda solo hasheado (sha256). "Reenviar" genera un token nuevo.
+- La invitación va a un **correo, a un celular o a los dos**, con roles (con mandato para los cargos), quién invitó
+  y vencimiento a los **14 días**. Sirve **una sola vez**.
+- El link `{APP_FRONTEND_URL}/invitacion/{token}` llega por email (con QR) y, si hay celular, quien invita lo
+  manda por WhatsApp (`wa.me` a ese número, sin costo, con el texto de la marca). Un tutor con celular y correo la
+  recibe por los dos lados. Se muestra en el panel **una sola vez**: el token se guarda solo hasheado (sha256).
+  "Reenviar" genera un token nuevo.
 - Una invitación nueva para el mismo correo o celular **revoca** la pendiente anterior. Se puede revocar a mano.
 - Un tutor con solo celular se invita uno por uno (el panel muestra el link para WhatsApp); la importación y la
   invitación masiva mandan por correo a los que lo tienen.
-- Al aceptar: si no existe cuenta con ese correo o celular se crea (nombre + contraseña de 8+ caracteres) y ese
-  dato queda verificado;
+- Al aceptar: si no existe cuenta con ese correo o celular verificados se crea (nombre + contraseña de 8+
+  caracteres) y queda verificado el celular (o, sin celular, el correo); con los dos, al correo le llega
+  "Confirmá tu correo";
   si existe, se pide su contraseña actual. Se activa la membresía, se asignan los roles (sin
   duplicar los que ya tiene) y se devuelve el token de la app.
 - La invitación de un **técnico** desde la guía guarda su nombre (completa "Nombre y apellido" al

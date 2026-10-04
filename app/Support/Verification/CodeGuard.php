@@ -58,6 +58,20 @@ class CodeGuard
     }
 
     /**
+     * Se puede mandar la copia por correo de un código (solo los límites de ese correo).
+     */
+    public function canSendCopy(string $destination): bool
+    {
+        foreach ([...$this->destinationLimits($destination), [$this->failedKey($destination), self::MAX_FAILED_CODES]] as [$key, $max]) {
+            if (RateLimiter::tooManyAttempts($key, $max)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Cuenta un intento sin destino (ej. "Olvidé mi contraseña" de un número sin cuenta): solo la IP.
      */
     public function hitIp(): void
@@ -117,6 +131,27 @@ class CodeGuard
         if ($channel === 'whatsapp') {
             $this->detectPumping();
         }
+    }
+
+    /**
+     * Registra la copia por correo de un código que fue por WhatsApp: suma solo a los límites de ese correo.
+     */
+    public function recordCopy(User $user, string $purpose, string $destination): void
+    {
+        foreach ($this->destinationLimits($destination) as [$key, $max, $decay]) {
+            RateLimiter::hit($key, $decay);
+        }
+
+        DB::table('verification_sends')->insert([
+            'user_id' => $user->id,
+            'channel' => 'mail',
+            'purpose' => $purpose,
+            'destination' => $destination,
+            'country' => null,
+            'ip' => request()->ip(),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
     }
 
     /**
@@ -223,14 +258,24 @@ class CodeGuard
      */
     private function limits(string $destination, ?User $user): array
     {
+        return [
+            ...$this->destinationLimits($destination),
+            ...$this->ipLimits(),
+            ...($user ? [["codes:user-day:{$user->id}", 5, 86400]] : []),
+        ];
+    }
+
+    /**
+     * @return list<array{0: string, 1: int, 2: int}>
+     */
+    private function destinationLimits(string $destination): array
+    {
         $destination = sha1(mb_strtolower($destination));
 
         return [
             ["codes:dest-minute:{$destination}", 1, 60],
             ["codes:dest-hour:{$destination}", 3, 3600],
             ["codes:dest-day:{$destination}", 5, 86400],
-            ...$this->ipLimits(),
-            ...($user ? [["codes:user-day:{$user->id}", 5, 86400]] : []),
         ];
     }
 

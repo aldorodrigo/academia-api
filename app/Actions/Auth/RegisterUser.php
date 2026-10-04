@@ -6,9 +6,9 @@ use App\Models\User;
 use App\Support\Phone;
 
 /**
- * Alta de una cuenta sin organizaciones, con el celular (código por WhatsApp) o con el correo
- * (código por correo). Queda sin verificar hasta que ingresa el código. Una cuenta sin verificar
- * no ocupa el número ni el correo: el registro nuevo la reemplaza.
+ * Alta de una cuenta sin organizaciones, con el celular (código por WhatsApp y, si deja un correo, una copia
+ * por correo) o con el correo (código por correo). Queda sin verificar hasta que ingresa el código. Un dato
+ * sin verificar no ocupa el número ni el correo: el registro nuevo lo libera.
  */
 class RegisterUser
 {
@@ -18,18 +18,14 @@ class RegisterUser
     public function __construct(private SendVerificationCode $sendCode) {}
 
     /**
-     * @param  array{name: string, phone?: string|null, email?: string|null, password: string}  $data
+     * @param  array{name: string, phone?: string|null, email?: string|null, password: string}  $data  con el celular, el correo es opcional
      */
     public function handle(array $data): User
     {
         $phone = filled($data['phone'] ?? null) ? Phone::mobile($data['phone']) : null;
-        $email = $phone === null && filled($data['email'] ?? null) ? mb_strtolower(trim($data['email'])) : null;
+        $email = filled($data['email'] ?? null) ? mb_strtolower(trim($data['email'])) : null;
 
-        User::query()
-            ->pending()
-            ->where(fn ($query) => $phone ? $query->where('phone', $phone) : $query->where('email', $email))
-            ->get()
-            ->each->delete();
+        User::releaseContacts($phone, $email);
 
         $user = User::query()->create([
             'name' => trim($data['name']),

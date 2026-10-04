@@ -15,8 +15,9 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Crea (o renueva) una invitación a un correo o a un celular. Con correo, la envía por email; con
- * celular, quien invita la comparte por WhatsApp (link `wa.me` al número, sin costo).
+ * Crea (o renueva) una invitación a un celular, a un correo o a los dos. Con correo, la envía por email;
+ * con celular, quien invita la comparte por WhatsApp (link `wa.me` al número, sin costo). Con los dos,
+ * le llega por los dos lados.
  *
  * Devuelve el token en claro: es la única vez que existe, para mostrar el
  * link y el QR en el panel.
@@ -45,8 +46,7 @@ class CreateInvitation
     ): array {
         $roles = $this->normalizeRoles($roles);
         $phone = filled($phone) ? Phone::mobile($phone) : null;
-        // Va a uno solo: el celular si lo hay.
-        $email = $phone === null && filled($email) ? mb_strtolower(trim($email)) : null;
+        $email = filled($email) ? mb_strtolower(trim($email)) : null;
 
         if ($phone === null && $email === null) {
             throw ValidationException::withMessages(['email' => 'Ingresá el celular o el correo.']);
@@ -55,7 +55,9 @@ class CreateInvitation
         return $this->current->run($organization, function (Organization $organization) use ($email, $phone, $roles, $invitedBy, $guardian, $name, $groupIds) {
             // Una sola invitación pendiente por persona: la nueva reemplaza a las anteriores.
             Invitation::query()
-                ->where(fn ($query) => $phone ? $query->where('phone', $phone) : $query->where('email', $email))
+                ->where(fn ($query) => $query
+                    ->when($phone, fn ($query) => $query->orWhere('phone', $phone))
+                    ->when($email, fn ($query) => $query->orWhere('email', $email)))
                 ->whereNull('accepted_at')
                 ->whereNull('revoked_at')
                 ->each(fn (Invitation $old) => $old->update(['revoked_at' => now()]));
@@ -115,7 +117,7 @@ class CreateInvitation
             throw ValidationException::withMessages(['email' => 'El tutor no tiene celular ni correo.']);
         }
 
-        // Con correo se le manda por email; si solo tiene celular, se comparte por WhatsApp.
+        // Con correo se le manda por email; con celular, se comparte por WhatsApp (con los dos, por los dos).
         return $this->handle(
             $guardian->organization,
             $guardian->email,
@@ -123,7 +125,7 @@ class CreateInvitation
             $invitedBy,
             $guardian,
             $guardian->full_name,
-            phone: blank($guardian->email) ? $phone : null,
+            phone: $phone,
         );
     }
 

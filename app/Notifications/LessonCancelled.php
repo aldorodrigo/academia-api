@@ -4,17 +4,12 @@ namespace App\Notifications;
 
 use App\Models\Booking;
 use App\Support\Push\PushMessage;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
 /**
- * Push a la otra parte: se canceló una clase particular.
+ * Aviso a la otra parte: se canceló una clase particular.
  */
-class LessonCancelled extends Notification implements ShouldQueue
+class LessonCancelled extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     public function __construct(Booking $booking, public bool $byTeacher)
@@ -27,14 +22,6 @@ class LessonCancelled extends Notification implements ShouldQueue
         $this->body = $byTeacher
             ? "{$booking->teacher->name} canceló la clase de {$booking->student->first_name} de {$day} a las {$time}{$reason}. Podés reservar otro horario."
             : "{$booking->student->full_name} canceló la clase de {$day} a las {$time}.";
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
     }
 
     public function toPush(object $notifiable): PushMessage

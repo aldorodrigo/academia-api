@@ -4,17 +4,12 @@ namespace App\Notifications;
 
 use App\Models\Booking;
 use App\Support\Push\PushMessage;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
 /**
- * Push al alumno o tutor antes de una clase particular reservada.
+ * Aviso al alumno o tutor antes de una clase particular reservada.
  */
-class LessonReminder extends Notification implements ShouldQueue
+class LessonReminder extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     public function __construct(Booking $booking, bool $self)
@@ -33,14 +28,6 @@ class LessonReminder extends Notification implements ShouldQueue
     public static function dayLabel(Booking $booking): string
     {
         return ClassReminder::dayLabel($booking->date, $booking->organization->today());
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
     }
 
     public function toPush(object $notifiable): PushMessage

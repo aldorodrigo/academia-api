@@ -883,3 +883,71 @@ it('en el panel: suspender y reprogramar, y cancelar la reprogramación', functi
     $manager()->callTableAction('cancel_reschedule', $wednesday)->assertHasNoTableActionErrors();
     expect($wednesday->fresh()->isSuspended())->toBeTrue();
 });
+
+describe('copia por correo de los avisos', function () {
+    it('el aviso sale también por correo con la marca a quien tiene un correo para copias', function () {
+        $session = ClassSession::query()->withoutGlobalScopes()->find(todayClassId($this->instructor));
+        $suspended = new ClassSuspended($session);
+
+        $phoneOnly = User::factory()->create(['email' => null, 'phone' => '+595981000111', 'phone_verified_at' => now()]);
+        $unconfirmed = User::factory()->unverified()->create(['phone' => '+595981000222', 'phone_verified_at' => now()]);
+        expect($suspended->via($this->tutor))->toBe(['push', 'mail'])
+            ->and($suspended->via($phoneOnly))->toBe(['push'])
+            ->and($suspended->via($unconfirmed))->toBe(['push']);
+
+        $mail = $suspended->toMail($this->tutor);
+        expect($mail->subject)->toBe('Clase suspendida')
+            ->and((string) $mail->render())->toContain('Hola, Ana:')
+            ->toContain('Se suspendió la clase de Fútbol Sub-10 de hoy a las 17:00.')
+            ->toContain('brand/correo/tuku-descansa.png')
+            ->toContain('Ver en Tuku')
+            ->not->toContain('Regards');
+
+        $instructor = (new InstructorClassReminder($session, $this->jakare->today()))->toMail($this->instructor);
+        expect($instructor->viewData['actions'])->toBe([
+            ['label' => 'Tomar asistencia', 'url' => rtrim(config('app.frontend_url'), '/')."/clases/{$session->id}"],
+        ]);
+    });
+
+    it('"Sí, va" y "No va" del correo abren una página y la respuesta se guarda con su botón', function () {
+        $session = ClassSession::query()->withoutGlobalScopes()->find(todayClassId($this->instructor));
+        $mail = (new ClassReminder($session, $this->mateo, $this->jakare->today(), $this->tutor->id))->toMail($this->tutor);
+        [$going, $notGoing] = $mail->viewData['actions'];
+        expect($going['label'])->toBe('Sí, va')->and($notGoing['label'])->toBe('No va');
+
+        // Abrir el link (o que lo abra el antivirus del correo) no cambia nada.
+        $this->get($notGoing['url'])->assertOk()
+            ->assertSee('Día de clase')
+            ->assertSee('Hoy Mateo tiene Fútbol a las 17:00 (Cancha 1). ¿Lo llevás?')
+            ->assertSee('Sí, va');
+        expect(Attendance::query()->withoutGlobalScopes()->count())->toBe(0);
+
+        $this->post($notGoing['url'])->assertOk()->assertSee('Listo: avisaste que Mateo no va.');
+        expect(Attendance::query()->withoutGlobalScopes()->sole()->guardian_response)->toBe(GuardianResponse::NotGoing);
+
+        $this->post($going['url'])->assertOk()->assertSee('Listo: avisaste que Mateo va.');
+        expect(Attendance::query()->withoutGlobalScopes()->sole()->guardian_response)->toBe(GuardianResponse::Going);
+    });
+
+    it('el link vence al empezar la clase y no se puede cambiar', function () {
+        $session = ClassSession::query()->withoutGlobalScopes()->find(todayClassId($this->instructor));
+        [$going] = (new ClassReminder($session, $this->mateo, $this->jakare->today(), $this->tutor->id))->toMail($this->tutor)->viewData['actions'];
+
+        $this->get(str_replace("students={$this->mateo->id}", "students={$this->lucas->id}", $going['url']))->assertForbidden();
+
+        $this->travelTo(CarbonImmutable::parse('2026-09-28 17:05', 'America/Asuncion'));
+        $this->get($going['url'])->assertForbidden()->assertSee('Este link venció');
+        $this->post($going['url'])->assertForbidden();
+        expect(Attendance::query()->withoutGlobalScopes()->count())->toBe(0);
+    });
+
+    it('si la clase se suspendió, la página lo explica', function () {
+        $id = todayClassId($this->instructor);
+        $session = ClassSession::query()->withoutGlobalScopes()->find($id);
+        [$going] = (new ClassReminder($session, $this->mateo, $this->jakare->today(), $this->tutor->id))->toMail($this->tutor)->viewData['actions'];
+        Notification::fake();
+        attendanceApi($this->instructor, 'POST', "classes/{$id}/suspension", ['reason' => 'Lluvia'])->assertOk();
+
+        $this->post($going['url'])->assertUnprocessable()->assertSee('La clase está suspendida.');
+    });
+});

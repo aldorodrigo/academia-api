@@ -86,6 +86,16 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `SendWhatsAppCode`) o por correo. **Todo envío pasa por `App\Support\Verification\CodeGuard`** (Turnstile, campo
   trampa, países permitidos, límites por destino/IP/cuenta, tope diario y corte automático; pausa en
   `platform_settings`). No mandes códigos por fuera de esas acciones.
+- **Lo que sale por WhatsApp sale también por correo** (ver `docs/WHATSAPP.md`): el código lleva una copia con su
+  propio código (verifica el correo), las invitaciones con celular y correo van por los dos lados y los avisos push
+  también van por correo. Correo para copias: `User::mailableEmail()` (el verificado o, sin celular, el de la cuenta).
+  Cada dato se verifica por separado: un celular o correo sin verificar no ocupa el dato (`User::owning()`,
+  `User::releaseContacts()`, regla `ContactAvailable`).
+- **Avisos:** extender `App\Notifications\PushNotification` (push + correo con la marca a partir de `toPush()`;
+  `mailActions()` y `mailPose()` para los botones y la mascota). No crear notificaciones solo push.
+- **Correos con la marca Tuku:** componentes en `resources/views/vendor/mail` (tema `tuku.css`, `mascot`, `buttons`) y
+  `vendor/notifications/email.blade.php` en español. Los links de los correos que cambian algo abren una página
+  (`site.aviso`) con un botón que hace el `POST`: los antivirus de correo abren los links solos.
 - **Alta autoservicio** (Sprint 5d): `/admin/register` (`RegisterAccount`, celular o correo) → código
   (`VerifyAccount`, `->emailVerification()`) → `/admin/new` "Tu club" (`RegisterOrganization`,
   `->tenantRegistration()`). Un usuario sin ninguna membresía puede entrar al panel solo para eso. "Olvidé mi

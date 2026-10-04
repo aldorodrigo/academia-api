@@ -5,17 +5,12 @@ namespace App\Notifications;
 use App\Models\PaymentReport;
 use App\Support\Money;
 use App\Support\Push\PushMessage;
-use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Notification;
 
 /**
- * Push a quienes validan: un tutor informó una transferencia.
+ * Aviso a quienes validan: un tutor informó una transferencia.
  */
-class PaymentReported extends Notification implements ShouldQueue
+class PaymentReported extends PushNotification
 {
-    use Queueable;
-
     public string $body;
 
     public function __construct(PaymentReport $report)
@@ -24,14 +19,6 @@ class PaymentReported extends Notification implements ShouldQueue
 
         $this->body = "{$report->user->name} informó una transferencia de ".Money::pyg($report->amount)->format()
             ." ({$report->family->name}).";
-    }
-
-    /**
-     * @return list<string>
-     */
-    public function via(object $notifiable): array
-    {
-        return ['push'];
     }
 
     public function toPush(object $notifiable): PushMessage

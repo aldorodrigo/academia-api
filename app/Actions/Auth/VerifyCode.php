@@ -9,8 +9,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Comprueba el código: vence a los 15 minutos y admite 5 intentos. Al acertar, marca como verificado
- * el canal por el que llegó (celular o correo).
+ * Comprueba el código: vence a los 15 minutos y admite 5 intentos (entre el de WhatsApp y su copia por
+ * correo). Al acertar, marca como verificado el canal por el que llegó ese código (celular o correo).
  */
 class VerifyCode
 {
@@ -35,7 +35,14 @@ class VerifyCode
             $fail('El código venció. Pedí uno nuevo.');
         }
 
-        if (! Hash::check(trim($code), $row->code_hash)) {
+        $code = trim($code);
+        [$channel, $destination] = match (true) {
+            Hash::check($code, $row->code_hash) => [$row->channel, $row->destination],
+            $row->copy_code_hash !== null && Hash::check($code, $row->copy_code_hash) => ['mail', $row->copy_destination],
+            default => [null, null],
+        };
+
+        if ($channel === null) {
             DB::table('verification_codes')->where('id', $row->id)->increment('attempts');
 
             if ($row->attempts + 1 >= self::MAX_ATTEMPTS) {
@@ -45,13 +52,17 @@ class VerifyCode
             $fail('El código no es correcto.');
         }
 
-        if ($row->channel === 'whatsapp' && $user->phone === $row->destination) {
+        if ($channel === 'whatsapp' && $user->phone === $destination) {
             $user->forceFill(['phone_verified_at' => now()])->save();
-        } elseif ($row->channel === 'mail' && $user->email === $row->destination) {
+        } elseif ($channel === 'mail' && $user->email === $destination) {
             $user->forceFill(['email_verified_at' => now()])->save();
         }
 
         DB::table('verification_codes')->where('id', $row->id)->delete();
         $this->guard->markVerified($row->destination);
+
+        if ($row->copy_destination !== null) {
+            $this->guard->markVerified($row->copy_destination);
+        }
     }
 }

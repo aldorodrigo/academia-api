@@ -6,6 +6,7 @@ use App\Jobs\SendWhatsAppCode;
 use App\Mail\EmailVerificationCodeMail;
 use App\Models\User;
 use App\Support\Verification\CodeGuard;
+use App\Support\Verification\EmailConfirmation;
 use App\Support\Verification\TooManyCodes;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
@@ -16,6 +17,9 @@ use Illuminate\Validation\ValidationException;
  * Manda un código de 6 dígitos por WhatsApp (si la cuenta tiene celular) o por correo, para verificar
  * la cuenta o para cambiar la contraseña. Reemplaza al anterior del mismo propósito. Pasa por
  * `CodeGuard`; si WhatsApp está pausado, usa el correo cuando la cuenta lo tiene.
+ *
+ * Lo que sale por WhatsApp sale también por correo (copia con su propio código, que verifica el correo):
+ * para confirmar la cuenta, al correo de la cuenta; para cambiar la contraseña, solo a uno verificado.
  */
 class SendVerificationCode
 {
@@ -60,7 +64,9 @@ class SendVerificationCode
             $this->guard->ensureCanSend($destination, $user);
         }
 
-        $code = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+        $code = self::newCode();
+        $copy = $channel === 'whatsapp' ? $this->copyDestination($user, $purpose) : null;
+        $copyCode = $copy !== null ? self::newCode() : null;
 
         DB::table('verification_codes')->updateOrInsert(
             ['user_id' => $user->id, 'purpose' => $purpose],
@@ -68,6 +74,8 @@ class SendVerificationCode
                 'channel' => $channel,
                 'destination' => $destination,
                 'code_hash' => Hash::make($code),
+                'copy_destination' => $copy,
+                'copy_code_hash' => $copyCode !== null ? Hash::make($copyCode) : null,
                 'expires_at' => now()->addMinutes(self::VALID_MINUTES),
                 'attempts' => 0,
                 'created_at' => now(),
@@ -83,6 +91,32 @@ class SendVerificationCode
 
         $this->guard->record($user, $channel, $purpose, $destination);
 
+        if ($copy !== null) {
+            Mail::to($copy)->queue(new EmailVerificationCodeMail(
+                $user->name,
+                $copyCode,
+                $purpose,
+                whatsapp: $destination,
+                confirmUrl: $purpose === self::VERIFY && $user->email_verified_at === null ? EmailConfirmation::url($user) : null,
+            ));
+            $this->guard->recordCopy($user, $purpose, $copy);
+        }
+
         return $channel;
+    }
+
+    private static function newCode(): string
+    {
+        return str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+    }
+
+    /**
+     * Correo para la copia de un código que va por WhatsApp. Sin copia si ese correo llegó a su límite.
+     */
+    private function copyDestination(User $user, string $purpose): ?string
+    {
+        $email = $purpose === self::VERIFY ? $user->email : $user->mailableEmail();
+
+        return filled($email) && $this->guard->canSendCopy($email) ? $email : null;
     }
 }

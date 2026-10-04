@@ -921,19 +921,22 @@ coinciden con nuestros registros." Después de 10 contraseñas incorrectas, la c
 `{ "name": "Laura Gómez", "phone": "0981 123 456", "email": null, "password": "…", "password_confirmation": "…",
 "device_name": "app", "terms": true, "captcha_token": "…" }` → `201 {token}`.
 
-- Se manda `phone` **o** `email` ("Ingresá tu celular o tu correo."; los dos juntos: "Elegí el celular o el
-  correo.", así nadie ocupa el correo de otro sin confirmarlo). El celular se guarda en formato internacional.
+- Se manda `phone` o `email` ("Ingresá tu celular o tu correo."). Con `phone`, el `email` es **opcional**: le llega
+  una copia por correo de lo que va por WhatsApp (ver "Copias por correo" abajo). El celular se guarda en formato
+  internacional.
 - Crea el usuario sin organizaciones y le manda el **código de 6 dígitos** (vence a los 15 minutos) por WhatsApp si
-  hay `phone`, si no por correo.
-- `422` si el número o el correo ya tienen una cuenta verificada ("Ya hay una cuenta con ese número. Ingresá con tu
-  contraseña." / "… con ese correo …"). Una cuenta **sin verificar** no ocupa el número ni el correo: el registro
-  nuevo la reemplaza. Las cuentas sin verificar se borran a las 24 horas.
+  hay `phone` (y la copia, con otro código, al `email`), si no por correo.
+- `422` si el número o el correo ya están **verificados** en otra cuenta ("Ya hay una cuenta con ese número. Ingresá
+  con tu contraseña." / "… con ese correo …"). Un celular o un correo **sin verificar** no ocupa el dato: el registro
+  nuevo lo libera (borra la cuenta pendiente que lo tenía o se lo saca a la otra cuenta). Las cuentas sin nada
+  verificado se borran a las 24 horas.
 - `422` si la contraseña tiene menos de 8 caracteres o no coincide, o sin `terms` ("Tenés que aceptar los términos.").
 - Guarda la versión y la fecha de los términos aceptados.
 
 #### `POST auth/verify`
 
-`{ "code": "123456" }` → `204`. Verifica el canal por el que se mandó el código (WhatsApp o correo). `422` sobre
+`{ "code": "123456" }` → `204`. Sirve el código de WhatsApp o el de su copia por correo, y verifica el canal de ese
+código (el de WhatsApp, el celular; el del correo, el correo). Los 5 intentos son entre los dos. `422` sobre
 `code`: "El código no es correcto.", "El código venció. Pedí uno nuevo." o, después de 5 intentos fallidos,
 "Demasiados intentos. Pedí un código nuevo.".
 
@@ -947,7 +950,8 @@ coinciden con nuestros registros." Después de 10 contraseñas incorrectas, la c
 
 `{ "login": "0981 123 456", "captcha_token": "…" }` → `204` siempre, haya o no una cuenta ("Si hay una cuenta con ese
 número, te mandamos un código."). El código va por el canal de `login` (WhatsApp si es un número, correo si es un
-correo) y vence a los 15 minutos.
+correo) y vence a los 15 minutos. Por WhatsApp, la copia va solo a un correo **verificado**. Con un correo sin
+verificar de una cuenta con celular no se manda nada (puede ser de otra persona): esa cuenta lo cambia por WhatsApp.
 
 #### `POST auth/password/reset` (público, con throttle)
 
@@ -1395,5 +1399,33 @@ tutor: "No pudimos aprobar tu pago de ₲ 210.000: El comprobante no se lee.".
 
 ### Push
 
+Con copia por correo a quien tenga un correo para copias (ver «Copias por correo y marca»).
 `data`: `{ "type": "payment_report", "route": "/comprobantes" }` para quien valida y
 `{ "type": "payment_report_reviewed", "route": "/estado-de-cuenta" }` para el tutor.
+
+`"phone"`: una invitación va a un correo, a un celular o a los dos (`email` y `phone` pueden ser `null`, nunca los
+dos). Con correo, le llega por email; con celular, quien invita la comparte por WhatsApp (`whatsapp_url`). `user_exists`
+busca la cuenta por el celular o el correo **verificados**. Al aceptar, la cuenta nueva queda con el celular verificado
+(el link llegó a ese WhatsApp) o, sin celular, con el correo verificado. Con los dos, el correo queda sin verificar y
+le llega "Confirmá tu correo" (link para empezar a recibir las copias).
+
+## Copias por correo y marca (2026-10-03)
+
+Todo lo que sale por WhatsApp sale también por correo, y los correos y los mensajes de WhatsApp llevan la marca Tuku.
+Para la app no cambia ningún endpoint salvo lo de arriba (`auth/register` con correo opcional, `auth/verify` con el
+código de la copia, invitaciones a celular y correo).
+
+- **Correo para copias** de una cuenta: el verificado o, si la cuenta no tiene celular, el correo con el que se creó.
+  Un correo opcional sin verificar recibe solo la copia del código para confirmar la cuenta, con el botón
+  "Confirmar mi correo" (link firmado de 7 días a `GET /correo/confirmar/{user}/{hash}`; vencido, manda uno nuevo).
+- **Códigos:** la copia por correo trae su propio código (el de WhatsApp verifica el celular; el del correo, el correo).
+- **Invitaciones:** con celular y correo, le llega por correo y quien invita la comparte por WhatsApp (texto con la
+  marca: "Hola Ana, te invito a sumarte a *Club Jakare* en *Tuku*, la app de cuotas, asistencia y avisos de clase.
+  Creá tu cuenta desde este link: … Vence el 17/10 y sirve una sola vez.").
+- **Avisos:** cada push (día de clase, clase suspendida o reprogramada, clases particulares, paquetes, aviso al técnico)
+  va también por correo, con el título, el texto y un botón que abre la app web en la `route` del aviso. El aviso de
+  día de clase trae "Sí, va" / "No va": abren una página (`GET /clases/{class}/respuesta/{user}?students=…&going=…`,
+  firmada, vence al empezar la clase) y la respuesta se guarda con el botón de la página (un `POST` al mismo link),
+  porque los antivirus de correo abren los links solos.
+- **Vista previa de los links:** la app web tiene las etiquetas `og:` de Tuku (título, descripción y la tarjeta
+  `https://tukuha.app/brand/tuku-tarjeta-redes.png`), que WhatsApp muestra al compartir una invitación.

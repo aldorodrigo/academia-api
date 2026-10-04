@@ -55,6 +55,37 @@ it('el email de invitación se renderiza con el link y el QR', function () {
         ->toContain('/invitacion/'.$token);
 });
 
+it('el email de invitación tiene la marca Tuku', function () {
+    [$invitation, $token] = app(CreateInvitation::class)->handle($this->jakare, 'ana@test.com', [['role' => 'tutor']], name: 'Ana Pérez');
+
+    $html = (new InvitationMail($invitation, $token))->render();
+
+    expect($html)->toContain('brand/correo/tuku-logo.png')
+        ->toContain('brand/correo/tuku-hola.png')
+        ->toContain('Hola Ana, Club Jakare te sumó a Tuku como <strong')
+        ->toContain('Tutor</strong>. Tuku es la app de cuotas, asistencia y avisos de clase.')
+        ->toContain('Hecha en Paraguay')
+        ->toContain('#167a3a');
+});
+
+it('con celular y correo le llega por correo y se comparte por WhatsApp con la marca', function () {
+    [$invitation, $token] = app(CreateInvitation::class)->handle($this->jakare, 'Ana@Test.com', [['role' => 'tutor']], name: 'Ana Pérez', phone: '0981 555 444');
+
+    expect($invitation->phone)->toBe('+595981555444')->and($invitation->email)->toBe('ana@test.com');
+    Mail::assertQueued(InvitationMail::class, fn (InvitationMail $mail) => $mail->hasTo('ana@test.com'));
+
+    $expires = $invitation->expires_at->timezone($this->jakare->timezone)->format('d/m');
+    expect($invitation->whatsappText($token))->toBe(
+        "Hola Ana, te invito a sumarte a *Club Jakare* en *Tuku*, la app de cuotas, asistencia y avisos de clase.\n\n"
+        ."Creá tu cuenta desde este link:\n".Invitation::urlFor($token)."\n\n"
+        ."Vence el {$expires} y sirve una sola vez."
+    )->and($invitation->whatsappUrl($token))->toBe('https://wa.me/595981555444?text='.rawurlencode($invitation->whatsappText($token)));
+
+    // Una nueva al mismo correo (o al mismo celular) reemplaza a la pendiente.
+    app(CreateInvitation::class)->handle($this->jakare, 'ana@test.com', [['role' => 'tutor']]);
+    expect($invitation->fresh()->revoked_at)->not->toBeNull();
+});
+
 it('una invitación nueva revoca la pendiente anterior de la misma persona', function () {
     [$vieja] = invite($this->jakare);
     invite($this->jakare);

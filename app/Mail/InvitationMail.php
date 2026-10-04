@@ -9,6 +9,7 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
 class InvitationMail extends Mailable implements ShouldQueue
 {
@@ -29,6 +30,7 @@ class InvitationMail extends Mailable implements ShouldQueue
             markdown: 'mail.invitation',
             with: [
                 'organization' => $this->invitation->organization->name,
+                'greeting' => filled($this->invitation->name) ? 'Hola '.Str::before(trim($this->invitation->name), ' ').',' : 'Hola,',
                 'roles' => implode(', ', $this->invitation->roleLabels()),
                 'url' => Invitation::urlFor($this->token),
                 'expiresAt' => $this->invitation->expires_at

@@ -18,7 +18,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * Invitación para sumarse a una organización con ciertos roles.
  *
  * El token solo se guarda hasheado: el link se muestra una vez (al crear o
- * reenviar) y viaja por email/QR. Un solo uso; vence a los VALID_DAYS días.
+ * reenviar) y viaja por correo, WhatsApp o QR. Un solo uso; vence a los VALID_DAYS días.
  *
  * roles: [{role: 'tesorero', starts_on: '2026-01-01'|null, ends_on: '2027-12-31'|null}]
  *
@@ -77,17 +77,18 @@ class Invitation extends Model
     }
 
     /**
-     * La cuenta que ya tiene ese correo o celular (las sin verificar no cuentan: se reemplazan).
+     * La cuenta que ya tiene ese celular o ese correo verificado (primero el celular). Un dato sin verificar
+     * no cuenta: se libera al crear la cuenta.
      */
     public function existingUser(): ?User
     {
-        return User::query()
-            ->where(fn ($query) => $query->where(fn ($q) => $q->whereNotNull('phone_verified_at')->orWhereNotNull('email_verified_at'))
-                ->orWhereHas('memberships'))
-            ->where(fn ($query) => filled($this->phone)
-                ? $query->where('phone', $this->phone)
-                : $query->where('email', $this->email))
-            ->first();
+        foreach (['phone' => $this->phone, 'email' => $this->email] as $column => $value) {
+            if (filled($value) && ($user = User::query()->owning($column, $value)->first()) !== null) {
+                return $user;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -103,15 +104,29 @@ class Invitation extends Model
      */
     public function whatsappUrl(string $token): ?string
     {
-        if (blank($this->phone)) {
-            return null;
-        }
+        return blank($this->phone) ? null : self::whatsappLink($this->phone, $this->whatsappText($token));
+    }
 
+    /**
+     * Mensaje de WhatsApp con la invitación, escrito por quien invita (con el formato de WhatsApp).
+     */
+    public function whatsappText(string $token): string
+    {
         $first = Str::before(trim((string) $this->name), ' ');
-        $greeting = $first === '' ? 'Hola' : "Hola {$first}";
-        $text = "{$greeting}, te invito a sumarte a {$this->organization->name}. Creá tu cuenta desde este link: ".self::urlFor($token);
+        $organization = $this->organization;
 
-        return 'https://wa.me/'.Phone::digits($this->phone).'?text='.rawurlencode($text);
+        return ($first === '' ? 'Hola' : "Hola {$first}").", te invito a sumarte a *{$organization->name}* en *Tuku*, "
+            ."la app de cuotas, asistencia y avisos de clase.\n\n"
+            ."Creá tu cuenta desde este link:\n".self::urlFor($token)."\n\n"
+            .'Vence el '.$this->expires_at->timezone($organization->timezone)->format('d/m').' y sirve una sola vez.';
+    }
+
+    /**
+     * `wa.me` con el texto escrito: al número o, sin número, para elegir a quién mandarlo.
+     */
+    public static function whatsappLink(?string $phone, string $text): string
+    {
+        return 'https://wa.me/'.(filled($phone) ? Phone::digits($phone) : '').'?text='.rawurlencode($text);
     }
 
     public function status(): InvitationStatus
