@@ -21,7 +21,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * Cargo de la cuenta corriente de un alumno. Inmutable: no se edita ni se borra;
  * se anula con motivo (VoidCharge) y, si hace falta, se carga uno nuevo.
  */
-#[Fillable(['organization_id', 'student_id', 'enrollment_id', 'group_id', 'season_id', 'fee_concept_id', 'tariff_id', 'period', 'period_start', 'period_end', 'description', 'base_amount', 'quantity', 'unit_amount', 'final_amount', 'issued_on', 'due_on', 'unique_key', 'voided_at', 'void_reason', 'voided_by', 'created_by'])]
+#[Fillable(['organization_id', 'student_id', 'enrollment_id', 'group_id', 'season_id', 'fee_concept_id', 'tariff_id', 'period', 'period_start', 'period_end', 'description', 'base_amount', 'quantity', 'unit_amount', 'final_amount', 'issued_on', 'due_on', 'unique_key', 'voided_at', 'void_reason', 'voided_by', 'waived_amount', 'created_by'])]
 class Charge extends Model
 {
     /** @use HasFactory<ChargeFactory> */
@@ -33,9 +33,9 @@ class Charge extends Model
     protected static function booted(): void
     {
         static::updating(function (Charge $charge): void {
-            // Al anular se puede liberar la clave para volver a emitir el período.
             $allowed = match (true) {
-                $charge->isDirty('voided_at') => [...self::VOID_FIELDS, 'unique_key'],
+                // Al anular se puede liberar la clave; al condonar queda lo condonado.
+                $charge->isDirty('voided_at') => [...self::VOID_FIELDS, 'unique_key', 'waived_amount'],
                 default => self::VOID_FIELDS,
             };
 
@@ -62,25 +62,26 @@ class Charge extends Model
             'issued_on' => 'date',
             'due_on' => 'date',
             'voided_at' => 'datetime',
+            'waived_amount' => 'integer',
         ];
     }
 
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['description', 'final_amount', 'voided_at', 'void_reason'])
+            ->logOnly(['description', 'final_amount', 'voided_at', 'void_reason', 'waived_amount'])
             ->logOnlyDirty()
             ->useLogName('billing');
     }
 
     /**
-     * Estado calculado: anulado, vencido (pasó el vencimiento más los días de
+     * Estado calculado: anulado o condonado, vencido (pasó el vencimiento más los días de
      * gracia, en fecha local de la organización), pagado (no falta nada) o pendiente.
      */
     public function status(): ChargeStatus
     {
         if ($this->voided_at !== null) {
-            return ChargeStatus::Voided;
+            return $this->isWaived() ? ChargeStatus::Waived : ChargeStatus::Voided;
         }
 
         if ($this->pendingAmount() === 0) {
@@ -134,6 +135,14 @@ class Charge extends Model
     public function isVoided(): bool
     {
         return $this->voided_at !== null;
+    }
+
+    /**
+     * Condonado: se anuló lo que faltaba pagar (`waived_amount`) con motivo; lo pagado sigue siendo ingreso.
+     */
+    public function isWaived(): bool
+    {
+        return $this->voided_at !== null && $this->waived_amount !== null;
     }
 
     /**
@@ -235,6 +244,16 @@ class Charge extends Model
     public function adjustments(): HasMany
     {
         return $this->hasMany(ChargeAdjustment::class)->orderBy('id');
+    }
+
+    /**
+     * Condonaciones (la vigente y las deshechas), la última primero.
+     *
+     * @return HasMany<ChargeCondonation, $this>
+     */
+    public function condonations(): HasMany
+    {
+        return $this->hasMany(ChargeCondonation::class)->orderByDesc('id');
     }
 
     /**

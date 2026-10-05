@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Students\RelationManagers;
 
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\WaiveChargeAction;
 use App\Models\Charge;
 use App\Support\Money;
 use Filament\Resources\RelationManagers\RelationManager;
@@ -12,7 +13,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Cuenta del jugador: sus cargos con ajustes y el saldo. Solo lectura (se opera desde Cargos).
+ * Cuenta del jugador: sus cargos con ajustes y el saldo. No se cargan ni editan cargos acá (se opera
+ * desde Cargos); sí se condona lo pendiente (por ejemplo, al darle de baja), con el permiso.
  */
 class ChargesRelationManager extends RelationManager
 {
@@ -47,6 +49,8 @@ class ChargesRelationManager extends RelationManager
                 MoneyColumn::make('pending')->label('Pendiente')
                     ->state(fn (Charge $record) => $record->isVoided() ? null : $record->pendingAmount()),
             ])
-            ->defaultSort('due_on', 'desc');
+            ->defaultSort('due_on', 'desc')
+            ->recordActions([WaiveChargeAction::make(), WaiveChargeAction::undo()])
+            ->toolbarActions([WaiveChargeAction::bulk()]);
     }
 }

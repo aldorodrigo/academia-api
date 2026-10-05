@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Attendance\AttendanceAccess;
 use App\Actions\Billing\PaymentReportAccess;
+use App\Actions\Billing\WaiveCharges;
 use App\Enums\Feature;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsureCanConfigureOrganization;
@@ -48,7 +49,12 @@ class CurrentOrganizationController extends Controller
                 'membership' => [
                     'roles' => $roles,
                     // Permisos que usa la app para mostrar secciones (ej. informes).
-                    'permissions' => collect(['view_reports' => 'View:Reports'])
+                    'permissions' => collect([
+                        'view_reports' => 'View:Reports',
+                        // Bajas y condonación (docs/PLAN_BAJAS.md).
+                        'withdraw_students' => WithdrawalController::WITHDRAW_PERMISSION,
+                        'waive_charges' => WaiveCharges::PERMISSION,
+                    ])
                         ->filter(fn (string $permission) => $user->can($permission))
                         ->keys()
                         ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))

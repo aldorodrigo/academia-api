@@ -17,6 +17,11 @@
             <label>Hasta<br><x-filament::input.wrapper><x-filament::input type="date" wire:model.live="to" /></x-filament::input.wrapper></label>
         @elseif ($tab === 'morosos')
             <label>Meses de atraso (mínimo)<br><x-filament::input.wrapper><x-filament::input type="number" min="1" wire:model.live="minMonths" /></x-filament::input.wrapper></label>
+            <label>Dados de baja<br><x-filament::input.wrapper><x-filament::input.select wire:model.live="withdrawn">
+                <option value="">Todos</option>
+                <option value="exclude">Solo los que siguen</option>
+                <option value="only">Solo dados de baja</option>
+            </x-filament::input.select></x-filament::input.wrapper></label>
         @endif
         <x-filament::button tag="a" :href="$report['links']['pdf_url']" target="_blank" icon="heroicon-o-document-text" color="gray">PDF</x-filament::button>
         <x-filament::button tag="a" :href="$report['links']['xlsx_url']" icon="heroicon-o-table-cells" color="gray">Excel</x-filament::button>
@@ -69,7 +74,12 @@
                     @forelse ($data['families'] as $family)
                         <tr style="border-bottom: 1px solid rgba(0,0,0,.05);">
                             <td style="padding:.5rem 0;">{{ $family['family'] }}</td>
-                            <td>{{ implode(', ', $family['students']) }}</td>
+                            <td>
+                                {{ implode(', ', $family['students']) }}
+                                @foreach ($family['withdrawn'] ?? [] as $withdrawn)
+                                    <div style="font-size:.8rem;opacity:.75;">{{ $withdrawn['student'] }}: baja{{ $withdrawn['on'] ? ' el '.\Carbon\Carbon::parse($withdrawn['on'])->format('d/m/Y') : '' }}</div>
+                                @endforeach
+                            </td>
                             @if ($tab === 'saldos')
                                 <td style="text-align:right;">{{ $this->money($family['pending']) }}</td>
                                 <td style="text-align:right;">{{ $this->money($family['overdue']) }}</td>
