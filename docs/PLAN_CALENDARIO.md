@@ -120,6 +120,16 @@ avisamos a las familias."). Si el push es de otra organización: "Esto es de {or
 - "Ver calendario" en `NextClassesList`.
 - Push `event_*`/`days_off*` abren su ruta; en primer plano invalidan providers + SnackBar.
 
+### Sincronizar con Google Calendar o el Calendario de Apple (pedido del 2026-10-05)
+- Suscripción iCal por usuario (`GET me/calendar-feed`, `GET /calendario/{token}.ics`): un calendario más en Google,
+  iPhone/Mac u Outlook que se actualiza solo, con todas las organizaciones del usuario. Sin permisos del teléfono ni
+  eventos duplicados (cada elemento tiene un `UID` estable y las suspensiones salen como canceladas).
+- `/calendario/sincronizar` (botón en el calendario): "Google Calendar" y "Calendario de iPhone" (primero el del
+  sistema), "Copiar link" para Outlook y otros, aviso de que el link es personal y que Google tarda unas horas en
+  actualizar (los cambios urgentes llegan igual por aviso), y "Generar un link nuevo" que anula el anterior.
+- API: tabla `calendar_feeds` (usuario, hash del token, creado/anulado por y cuándo), generador iCal propio (sin
+  paquete) que recorre las organizaciones con `CurrentOrganization::run`, throttle por IP.
+
 ## 3. App — archivos
 
 **Nuevo `lib/features/calendar/`:**

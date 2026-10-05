@@ -1486,8 +1486,9 @@ fechas y horas locales de la organización.
 ### `GET calendar?from=2026-09-28&to=2026-11-08`
 
 Lo que el usuario ve en esas fechas (hasta 42 días, dentro de hoy ± 365; si no, `422` "Elegí un rango de hasta 6
-semanas."). Filtros opcionales: `student_id` (un hijo a cargo, si no `404`) o `group_id` (un grupo en el que toma
-asistencia, si no `404`).
+semanas."). Filtros opcionales: `student_id` (un hijo a cargo, si no `404`), `group_id` (un grupo en el que toma
+asistencia, si no `404`) y `types` (`classes,bookings,events`, por defecto todos; las listas no pedidas vienen
+vacías; la tarjeta de próximos eventos del inicio pide solo `events`).
 
 ```json
 {
@@ -1612,6 +1613,47 @@ ya no corresponden (solo las que siguen suspendidas por este evento y no empezar
 `{ "reason": "Se pasó para el sábado." }` (opcional) → el evento cancelado. En un día sin clase, las clases que siguen
 suspendidas por él y no empezaron vuelven a quedar programadas (y vuelven a contar para las cuotas). Una clase que el
 técnico ya reanudó o reprogramó a mano no es más del evento. Sin `can_cancel` → `403`. No hay `DELETE`.
+
+### Sincronizar con Google Calendar o el Calendario de Apple
+
+Cada usuario tiene un link personal de suscripción (iCal, RFC 5545) que Google Calendar, el Calendario de iPhone y
+Mac, Outlook y otros agregan como un calendario más y actualizan solos (Google cada varias horas; Apple según su
+ajuste). No se escribe en el calendario del teléfono ni se piden permisos.
+
+#### `GET me/calendar-feed` (token, sin `X-Organization`)
+
+```json
+{
+  "data": {
+    "url": "https://api.tukuha.app/calendario/3f9c…e1.ics",
+    "webcal_url": "webcal://api.tukuha.app/calendario/3f9c…e1.ics",
+    "google_url": "https://calendar.google.com/calendar/r?cid=webcal%3A%2F%2Fapi.tukuha.app%2Fcalendario%2F3f9c…e1.ics"
+  }
+}
+```
+
+El link se crea la primera vez que se pide (token aleatorio de 40 caracteres, guardado con hash; quién y cuándo).
+
+#### `POST me/calendar-feed/reset`
+
+Anula el link anterior (deja de actualizarse en los calendarios donde estaba) y devuelve uno nuevo, como el `GET`.
+
+#### `GET /calendario/{token}.ics` (público, fuera de `/api/v1`, con throttle)
+
+`text/calendar; charset=utf-8`. Lo que el usuario ve en el calendario de **todas sus organizaciones** (cada evento
+dice de cuál), desde 30 días atrás hasta 120 días adelante:
+
+- `X-WR-CALNAME`: "Tuku" (o "Tuku · Club Jakare" si tiene una sola organización); `REFRESH-INTERVAL` y
+  `X-PUBLISHED-TTL` de 6 horas; `VTIMEZONE` de la organización.
+- Clases: `SUMMARY` "Fútbol · Sub-10 (Mateo)" (para el tutor, con sus hijos; para el técnico, sin), `LOCATION` la
+  cancha y la sede, `DESCRIPTION` con la organización y, en las recuperaciones, qué clase recuperan. Suspendidas y
+  reprogramadas: `STATUS:CANCELLED` y `SUMMARY` "Suspendida: Fútbol · Sub-10 (Lluvia)".
+- Particulares: "Clase particular con Carlos Gómez" / "Particular: Lucas Ortiz".
+- Eventos: título, lugar y detalles; los de todo el día como `VALUE=DATE`; cancelados con `STATUS:CANCELLED`.
+- Días sin clase: un evento de todo el día "Sin clases: Vacaciones de primavera".
+- `UID` estable por elemento (`clase-81@tukuha.app`, `evento-7@tukuha.app`…) para que los cambios se actualicen en
+  vez de duplicarse; `SEQUENCE` sube con cada cambio.
+- Nunca datos médicos ni de pagos. Token inválido o anulado → `404`.
 
 ### Push
 
