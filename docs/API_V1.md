@@ -2021,6 +2021,7 @@ vigente o próxima) en sus grupos. `search` opcional (nombre, apellido o documen
   `approves_transfers`: `true` si quien cobra valida comprobantes (la transferencia queda aprobada al registrarla).
 - `confirmers` *(2026-10-05)*: quiénes aprueban la transferencia si no la aprueba quien la registra
   (`[{ "id": 2, "name": "Óscar Giménez" }]`, los que validan comprobantes sin quien cobra). La app los nombra.
+- `reopeners` *(2026-10-05)*: quiénes pueden reabrir su caja si está cerrada (mismo formato; ver `GET me/cash-box`).
 - Alumno fuera de su alcance → `404`.
 
 #### `POST collections`
@@ -2062,8 +2063,9 @@ vigente o próxima) en sus grupos. `search` opcional (nombre, apellido o documen
 - Pago en **efectivo**, fecha de hoy, en la caja de quien cobra (se crea con el primer cobro). Se imputa a las cuotas
   elegidas que sigan pendientes, en orden de vencimiento y con pronto pago; lo que sobra (`credit`) queda a favor de la
   familia. `applied`: lo imputado a cuotas.
-- Caja cerrada → `422` "Tu caja está cerrada. Hablá con quien maneja las cuentas del club." (con la palabra de la
-  organización). Sin permiso → `403`.
+- Caja cerrada → `422` "Tu caja está cerrada. Hablá con Óscar Giménez para reabrirla." (con dos, "con Óscar Giménez o
+  Ana Duarte"; con más o sin nadie, "con quien maneja las cuentas del club", con la palabra de la organización; los
+  nombres son `reopeners`). Sin permiso → `403`.
 - Avisa a la familia: "Recibimos tu pago de ₲ 285.000 en efectivo (cobró Juan Pérez). Recibo N° 000124." (a cada tutor
   con cuenta y al alumno adulto con cuenta: en "Avisos", push si tiene la app instalada y correo si tiene uno).
 - `notice` *(2026-10-05)*: a quién le llega el recibo y por dónde, **de verdad** (como `notice.reach` de la baja):
@@ -2121,7 +2123,8 @@ La transferencia que la familia le mandó a quien cobra (captura de WhatsApp). E
     ],
     "deposits": [ { "…": "depósito" } ],
     "deposit_accounts": [{ "id": 1, "name": "Caja", "type": "caja" }, { "id": 2, "name": "Banco Itaú", "type": "banco" }],
-    "confirmers": [{ "id": 2, "name": "Óscar Giménez" }]
+    "confirmers": [{ "id": 2, "name": "Óscar Giménez" }],
+    "reopeners": [{ "id": 2, "name": "Óscar Giménez" }]
   }
 }
 ```
@@ -2130,6 +2133,10 @@ La transferencia que la familia le mandó a quien cobra (captura de WhatsApp). E
   admin o quien tenga el permiso), **sin quien deposita**. La app los nombra: uno → "La plata sigue en tu caja hasta que
   Óscar Giménez confirme que llegó"; dos → "…hasta que Óscar Giménez o Ana Duarte lo confirmen"; más (o ninguno) →
   "…hasta que alguien de la academia lo confirme" (con la palabra de la organización).
+- `reopeners` *(2026-10-05)*: quiénes pueden reabrir una caja cerrada (miembros activos que editan cuentas: el admin
+  y quien tenga el permiso de cuentas, por defecto el tesorero y el protesorero), **sin quien la tiene**. La app los
+  nombra con la caja cerrada: uno → "Hablá con Óscar Giménez para reabrirla"; dos → "…con Óscar Giménez o Ana Duarte…";
+  más o ninguno → "…con quien maneja las cuentas del club…" (con la palabra de la organización).
 - Sin caja todavía: `id` y `name` `null`, `active` `true`, todo en 0 y listas vacías (salvo `deposit_accounts`).
 - `available` = `balance` − `pending_deposits` (lo que puede depositar).
 - `movements`: los últimos 50, del más nuevo al más viejo. `kind`: `cobro`, `deposito`, `anulacion` u `otro`;

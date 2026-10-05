@@ -384,7 +384,8 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - **Depósito:** quien cobra informa que dejó la plata en una cuenta del club (Caja, banco o billetera); queda **por
   confirmar** y la plata sigue en su caja hasta que lo confirma alguien que valida comprobantes; la app nombra a quién
   ("…hasta que Óscar Giménez confirme que llegó", con dos "…o Ana Duarte lo confirmen", con más "…hasta que alguien de
-  la academia lo confirme"), nunca "el tesorero" fijo: puede no haber tesorero. Quien valida comprobantes lo confirma (transferencia de su caja a esa
+  la academia lo confirme"), nunca "el tesorero" fijo: puede no haber tesorero. Con la caja cerrada, la app nombra a quién
+  la puede reabrir (quienes editan cuentas, sin el titular): "Hablá con Óscar Giménez para reabrirla". Quien valida comprobantes lo confirma (transferencia de su caja a esa
   cuenta, con la fecha del depósito) o lo rechaza con motivo; en los dos casos se le avisa. No se deposita más de lo
   disponible (saldo menos lo que ya está por confirmar). Anular un pago cobrado así saca la plata de su caja.
 - **Transferencia que la familia le mandó al club** (la captura de WhatsApp): quien cobra en efectivo también la

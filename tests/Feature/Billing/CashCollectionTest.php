@@ -248,7 +248,7 @@ describe('cobrar', function () {
 
         MoneyAccount::ensureCashBoxOf($this->coach, $this->jakare)->update(['is_active' => false]);
         collectFrom($this->coach)->assertUnprocessable()
-            ->assertJsonPath('errors.amount.0', 'Tu caja está cerrada. Hablá con quien maneja las cuentas del club.');
+            ->assertJsonPath('errors.amount.0', 'Tu caja está cerrada. Hablá con Laura Gómez para reabrirla.');
         expect(Payment::query()->count())->toBe(0);
     });
 });
@@ -910,6 +910,31 @@ describe('quién confirma (N10) y Mi caja (N11)', function () {
             'proof' => UploadedFile::fake()->image('captura.jpg'),
         ])->assertCreated()
             ->assertJsonPath('message', 'Transferencia registrada. Queda en revisión hasta que Laura Gómez la apruebe.');
+    });
+
+    it('la caja cerrada nombra a quién puede reabrirla, sin quien la tiene', function () {
+        $oscar = memberOf($this->jakare, ['name' => 'Óscar Giménez']);
+        app(RoleAssigner::class)->assign($this->jakare, $oscar, OrganizationRole::Admin);
+        $reopeners = fn (User $user) => collect(cashApi($user, 'GET', 'me/cash-box')->assertOk()->json('data.reopeners'))->pluck('name')->sort()->values()->all();
+
+        // Reabren quienes editan cuentas: el admin y, por defecto, el tesorero.
+        expect($reopeners($this->coach))->toBe(['Laura Gómez', 'Óscar Giménez'])
+            ->and($reopeners($oscar))->toBe(['Laura Gómez']);
+
+        MoneyAccount::ensureCashBoxOf($this->coach, $this->jakare)->update(['is_active' => false]);
+        collectFrom($this->coach)->assertUnprocessable()
+            ->assertJsonPath('errors.amount.0', 'Tu caja está cerrada. Hablá con Laura Gómez o Óscar Giménez para reabrirla.');
+    });
+
+    it('el texto de la caja cerrada: uno, dos o el genérico', function () {
+        expect(CashCollectionAccess::closedBoxMessage([['name' => 'Óscar Giménez']], $this->jakare))
+            ->toBe('Tu caja está cerrada. Hablá con Óscar Giménez para reabrirla.')
+            ->and(CashCollectionAccess::closedBoxMessage([['name' => 'Óscar Giménez'], ['name' => 'Ana Duarte']], $this->jakare))
+            ->toBe('Tu caja está cerrada. Hablá con Óscar Giménez o Ana Duarte para reabrirla.')
+            ->and(CashCollectionAccess::closedBoxMessage([['name' => 'A'], ['name' => 'B'], ['name' => 'C']], $this->jakare))
+            ->toBe('Tu caja está cerrada. Hablá con quien maneja las cuentas del club para reabrirla.')
+            ->and(CashCollectionAccess::closedBoxMessage([], $this->jakare))
+            ->toBe('Tu caja está cerrada. Hablá con quien maneja las cuentas del club para reabrirla.');
     });
 
     it('GET organization manda el saldo de la caja personal', function () {

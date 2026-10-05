@@ -138,7 +138,7 @@ notificación y una cuenta para él."
 - **Técnico que se va con plata:** al desactivar su membresía no entra más a la app, pero su caja sigue con el saldo y
   el nombre (se ve en Cuentas y en "Efectivo" como "ya no está en el club"). Cuando devuelve la plata, una transferencia
   a la Caja; si no la devuelve, un gasto desde su caja ("Faltante de caja"). No se borra nada.
-- **Caja cerrada** (cuenta inactiva): no puede cobrar ("Tu caja está cerrada. Hablá con quien maneja las cuentas del club.") pero sí depositar
+- **Caja cerrada** (cuenta inactiva): no puede cobrar ("Tu caja está cerrada. Hablá con Óscar Giménez para reabrirla.", con `reopeners`: quienes editan cuentas) pero sí depositar
   lo que tiene.
 - **Alumno de otro grupo / de otra organización:** `404` (tenancy y alcance por grupos).
 - **Clases particulares:** `POST teacher/payments` no cambia (sigue entrando en la cuenta del perfil del profesor).

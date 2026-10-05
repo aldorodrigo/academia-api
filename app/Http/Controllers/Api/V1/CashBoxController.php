@@ -46,6 +46,7 @@ class CashBoxController extends Controller
                 'movements' => [], 'deposits' => [], 'deposit_accounts' => $accounts,
                 'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $this->current->get()),
                 'confirmers' => PaymentReportAccess::confirmers($this->current->get(), $user),
+                'reopeners' => CashCollectionAccess::reopeners($this->current->get(), $user),
             ]]);
         }
 
@@ -68,6 +69,8 @@ class CashBoxController extends Controller
             'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $this->current->get()),
             // Quiénes confirman los depósitos (los que validan comprobantes, sin quien deposita): la app los nombra.
             'confirmers' => PaymentReportAccess::confirmers($this->current->get(), $user),
+            // Quiénes pueden reabrir la caja si está cerrada (editan cuentas, sin quien la tiene).
+            'reopeners' => CashCollectionAccess::reopeners($this->current->get(), $user),
         ]]);
     }
 

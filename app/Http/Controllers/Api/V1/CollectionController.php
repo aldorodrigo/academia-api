@@ -121,6 +121,8 @@ class CollectionController extends Controller
                 'approves_transfers' => PaymentReportAccess::canReview($user, $this->current->get()),
                 // Si no la aprueba al registrarla: quiénes la aprueban (la app los nombra).
                 'confirmers' => PaymentReportAccess::confirmers($this->current->get(), $user),
+                // Con la caja cerrada: quiénes la reabren (la app los nombra).
+                'reopeners' => CashCollectionAccess::reopeners($this->current->get(), $user),
                 // Cobra directo a la Caja: el efectivo entra en una cuenta del club (por defecto la Caja).
                 ...self::collectTarget($user, $this->current->get()),
             ],
