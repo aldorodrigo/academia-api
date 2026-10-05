@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\Gender;
+use App\Enums\GuardianRelationship;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Support\Phone;
 use Database\Factories\GuardianFactory;
@@ -83,6 +85,22 @@ class Guardian extends Model
     public function invitations(): HasMany
     {
         return $this->hasMany(Invitation::class);
+    }
+
+    /**
+     * Su género: el que eligió en "Mi cuenta" o, si no, el que se deduce del parentesco con sus chicos
+     * (Madre → femenino, Padre → masculino; Tutor/a u Otro no dicen nada). No se le pregunta.
+     */
+    public function gender(): ?Gender
+    {
+        if ($this->user?->gender !== null) {
+            return $this->user->gender;
+        }
+
+        return $this->students()->withoutGlobalScopes()->get()
+            ->map(fn (Student $student) => GuardianRelationship::parse($student->pivot->relationship)->gender())
+            ->filter()
+            ->first();
     }
 
     /**

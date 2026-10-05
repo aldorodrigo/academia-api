@@ -11,6 +11,7 @@ use App\Models\Student;
 use App\Models\User;
 use App\Notifications\DropoutReported;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -108,7 +109,7 @@ class ReportDropout
 
         activity('academic')->performedOn($enrollment)->causedBy($by)
             ->withProperties(['student_id' => $enrollment->student_id, 'note' => $enrollment->dropout_note, 'source' => $source])
-            ->log($source === self::GUARDIAN ? 'Aviso: deja el club' : 'Aviso: dejó de venir');
+            ->log($source === self::GUARDIAN ? 'Aviso: deja '.Vocabulary::the($enrollment->organization->typeNoun()) : 'Aviso: dejó de venir');
     }
 
     private function notifyDeciders(Enrollment $enrollment, User $by): void

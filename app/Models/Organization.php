@@ -7,7 +7,9 @@ use App\Actions\Organizations\EnsureFeeConcepts;
 use App\Actions\Organizations\EnsureMoneyAccounts;
 use App\Actions\Organizations\EnsureOrganizationRoles;
 use App\Enums\Feature;
+use App\Enums\Gender;
 use App\Enums\OrganizationType;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -19,7 +21,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'features', 'billing', 'class_reminder_hours', 'instructor_reminder_hours', 'suspended_at', 'suspension_reason', 'self_service', 'onboarding_skipped', 'onboarding_dismissed_at', 'onboarding_completed_at'])]
+#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'terminology_feminine', 'features', 'billing', 'class_reminder_hours', 'instructor_reminder_hours', 'suspended_at', 'suspension_reason', 'self_service', 'onboarding_skipped', 'onboarding_dismissed_at', 'onboarding_completed_at'])]
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
@@ -39,6 +41,9 @@ class Organization extends Model
         // Cancha, sala o aula de un lugar.
         'space' => 'Cancha',
     ];
+
+    /** Palabras que nombran personas: tienen forma femenina y masculina. */
+    public const PERSON_TERMS = ['student', 'instructor', 'guardian'];
 
     /**
      * Configuración de cobros por defecto (ver billing()).
@@ -85,6 +90,7 @@ class Organization extends Model
         return [
             'type' => OrganizationType::class,
             'terminology' => 'array',
+            'terminology_feminine' => 'array',
             'terminology_confirmed_at' => 'datetime',
             'features' => 'array',
             'billing' => 'array',
@@ -373,8 +379,52 @@ class Organization extends Model
         return in_array($feature->value, $this->features ?? [], true);
     }
 
-    public function term(string $key): string
+    /**
+     * La palabra del vocabulario (term('group') → "Categoría"). Con $gender, la forma para una persona
+     * concreta de las palabras de persona: term('instructor', Gender::Female) → "Técnica".
+     */
+    public function term(string $key, ?Gender $gender = null): string
     {
-        return $this->terminology[$key] ?? self::DEFAULT_TERMINOLOGY[$key] ?? $key;
+        $word = $this->terminology[$key] ?? self::DEFAULT_TERMINOLOGY[$key] ?? $key;
+
+        return $gender !== null && in_array($key, self::PERSON_TERMS, true)
+            ? Vocabulary::forPerson($word, $gender, $this->terminology_feminine[$key] ?? null)
+            : $word;
+    }
+
+    /**
+     * Plural para un grupo de personas: femenino solo si son todas mujeres (Vocabulary::forPeople).
+     *
+     * @param  iterable<?Gender>  $genders
+     */
+    public function termForPeople(string $key, iterable $genders): string
+    {
+        return Vocabulary::forPeople($this->term($key), $genders, $this->terminology_feminine[$key] ?? null);
+    }
+
+    /**
+     * Qué es la organización ("club", "academia", "escuela", "comisión"), para "del club" / "de la academia".
+     */
+    public function typeNoun(): string
+    {
+        return ($this->type ?? OrganizationType::Club)->noun();
+    }
+
+    /**
+     * Las palabras con su plural, género, artículo y (las de persona) sus formas femenina y masculina,
+     * más la de la organización ("organization": club, academia…). La app concuerda con esto.
+     *
+     * @return array<string, array<string, string>>
+     */
+    public function vocabulary(): array
+    {
+        return collect(array_keys(self::DEFAULT_TERMINOLOGY))
+            ->mapWithKeys(fn (string $key) => [$key => Vocabulary::describe(
+                $this->term($key),
+                person: in_array($key, self::PERSON_TERMS, true),
+                feminine: $this->terminology_feminine[$key] ?? null,
+            )])
+            ->put('organization', Vocabulary::describe($this->typeNoun()))
+            ->all();
     }
 }

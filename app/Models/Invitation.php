@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Gender;
 use App\Enums\InvitationStatus;
 use App\Enums\OrganizationRole;
 use App\Models\Concerns\BelongsToOrganization;
@@ -24,7 +25,7 @@ use Spatie\Activitylog\Support\LogOptions;
  *
  * guardian_id: invitación enviada a un tutor cargado; al aceptarla se vincula a la cuenta.
  */
-#[Fillable(['organization_id', 'email', 'phone', 'name', 'roles', 'group_ids', 'guardian_id', 'token_hash', 'invited_by', 'expires_at', 'accepted_at', 'accepted_user_id', 'revoked_at'])]
+#[Fillable(['organization_id', 'email', 'phone', 'name', 'roles', 'group_ids', 'guardian_id', 'token_hash', 'invited_by', 'expires_at', 'accepted_at', 'accepted_user_id', 'revoked_at', 'gender'])]
 #[Hidden(['token_hash'])]
 class Invitation extends Model
 {
@@ -36,6 +37,7 @@ class Invitation extends Model
     {
         return [
             'roles' => 'array',
+            'gender' => Gender::class,
             'group_ids' => 'array',
             'expires_at' => 'datetime',
             'accepted_at' => 'datetime',
@@ -158,9 +160,22 @@ class Invitation extends Model
      */
     public function roleLabels(): array
     {
+        $gender = $this->personGender();
+
         return collect($this->roles)
-            ->map(fn (array $role) => OrganizationRole::labelFor($role['role'], $this->organization))
+            ->map(fn (array $role) => OrganizationRole::labelFor($role['role'], $this->organization, $gender))
             ->all();
+    }
+
+    /**
+     * El género de quien se invita, para nombrarlo ("Te invitaron como Técnica"): el que se cargó en la
+     * invitación; si no, el de su cuenta (si ya tiene) o el que sale del parentesco (invitación de tutor).
+     */
+    public function personGender(): ?Gender
+    {
+        return $this->gender
+            ?? $this->existingUser()?->genderIn($this->organization)
+            ?? $this->guardian?->gender();
     }
 
     /**

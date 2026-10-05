@@ -83,7 +83,7 @@ class SeasonTransfer extends Page
             Repeater::make('rows')
                 ->label(fn (Get $get) => count($get('rows') ?? []) === 0
                     ? 'No hay '.Terms::plural('student', 'Jugador').' para pasar en esa temporada.'
-                    : 'Revisá '.Terms::gendered('group', 'Categoría', 'el', 'la').' '.Terms::singular('group', 'Categoría').' de cada uno; se sugiere por edad.')
+                    : 'Revisá '.Terms::the('group', 'Categoría').' de cada '.Terms::gendered('student', 'Jugador', 'uno', 'una').'; se sugiere por edad.')
                 ->addable(false)
                 ->deletable(false)
                 ->reorderable(false)

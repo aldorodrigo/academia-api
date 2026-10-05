@@ -2,13 +2,16 @@
 
 namespace App\Filament\Resources\Members\Tables;
 
+use App\Enums\Gender;
 use App\Enums\MembershipStatus;
+use App\Filament\Support\GenderField;
 use App\Filament\Support\RoleFields;
 use App\Models\Membership;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\RoleAssignment;
 use App\Support\Roles\RoleAssigner;
+use App\Support\Vocabulary;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
@@ -41,7 +44,9 @@ class MembersTable
                     ->badge(),
                 TextColumn::make('status')
                     ->label('Estado')
-                    ->formatStateUsing(fn (MembershipStatus $state) => $state === MembershipStatus::Active ? 'Activo' : 'Inactivo')
+                    ->formatStateUsing(fn (MembershipStatus $state, Membership $record) => $state === MembershipStatus::Active
+                        ? Vocabulary::agree('miembro', $record->user->genderIn(self::organization()), 'Activo', 'Activa')
+                        : Vocabulary::agree('miembro', $record->user->genderIn(self::organization()), 'Inactivo', 'Inactiva'))
                     ->color(fn (MembershipStatus $state) => $state === MembershipStatus::Active ? 'success' : 'gray')
                     ->badge(),
             ])
@@ -86,6 +91,17 @@ class MembersTable
                             $assignment = self::activeAssignments($record)->firstWhere('id', (int) $data['assignment']);
                             app(RoleAssigner::class)->end($assignment);
                             Notification::make()->title('Rol quitado')->success()->send();
+                        }),
+                    Action::make('gender')
+                        ->label('Género')
+                        ->icon(Heroicon::OutlinedUser)
+                        ->authorize('update')
+                        ->modalDescription('Opcional, para nombrarla bien ("Técnica", "Tesorera"). Es el mismo que la persona elige en "Mi cuenta" de la app.')
+                        ->fillForm(fn (Membership $record) => ['gender' => $record->user->gender])
+                        ->schema([GenderField::make()->helperText(null)])
+                        ->action(function (Membership $record, array $data) {
+                            $record->user->forceFill(['gender' => Gender::parse($data['gender'] ?? null)])->save();
+                            Notification::make()->title('Guardado')->success()->send();
                         }),
                     Action::make('history')
                         ->label('Historial de roles')

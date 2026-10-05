@@ -4,6 +4,7 @@ namespace App\Actions\Enrollments;
 
 use App\Actions\Students\RegisterStudent;
 use App\Enums\EnrollmentStatus;
+use App\Enums\Gender;
 use App\Enums\GuardianRelationship;
 use App\Exceptions\ImportRowException;
 use App\Models\Enrollment;
@@ -15,6 +16,7 @@ use App\Models\Season;
 use App\Models\Student;
 use App\Models\User;
 use App\Notifications\EnrollmentRequested;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -35,7 +37,7 @@ class SubmitEnrollmentRequest
     ) {}
 
     /**
-     * @param  array{first_name: string, last_name: string, birth_date: string, document: string, relationship?: ?string, season_id: int, group_id: int, notes?: ?string, medical?: ?array<string, ?string>}  $data
+     * @param  array{first_name: string, last_name: string, birth_date: string, document: string, relationship?: ?string, gender?: ?string, season_id: int, group_id: int, notes?: ?string, medical?: ?array<string, ?string>}  $data
      */
     public function handle(Organization $organization, User $user, array $data): EnrollmentRequest
     {
@@ -48,7 +50,7 @@ class SubmitEnrollmentRequest
             'birth_date' => CarbonImmutable::parse($data['birth_date'])->toDateString(),
         ];
 
-        $this->ensureNotRepeated($user, $child);
+        $this->ensureNotRepeated($organization, $user, $child);
         // También los archivados (ej. una solicitud rechazada): vuelve el mismo alumno, con su historial.
         $existing = Student::findExisting($child['document'], $child['first_name'], $child['last_name'], $child['birth_date'], withTrashed: true);
         $wasArchived = $existing?->trashed() ?? false;
@@ -58,12 +60,13 @@ class SubmitEnrollmentRequest
         $this->ensureNotEnrolled($user, $existing, $previous, $season, $group);
 
         $relationship = GuardianRelationship::parse($data['relationship'] ?? null);
+        $gender = Gender::parse($data['gender'] ?? null);
         $medical = collect($data['medical'] ?? [])->only(self::MEDICAL_FIELDS)
             ->map(fn ($value) => filled($value) ? trim((string) $value) : null)
             ->filter()
             ->all();
 
-        $request = DB::transaction(function () use ($organization, $user, $data, $season, $group, $child, $existing, $wasArchived, $previous, $relationship, $medical) {
+        $request = DB::transaction(function () use ($organization, $user, $data, $season, $group, $child, $existing, $wasArchived, $previous, $relationship, $medical, $gender) {
             // Al chico de otra familia (ya cargado, con tutores) el tutor se le vincula recién al confirmar:
             // hasta entonces no ve sus datos.
             $linkNow = $existing === null
@@ -73,7 +76,8 @@ class SubmitEnrollmentRequest
             try {
                 $student = $this->register->handle(
                     $organization,
-                    $existing ? self::studentData($existing) : $child,
+                    // El género (opcional) solo completa el que falta.
+                    [...($existing ? self::studentData($existing) : $child), 'gender' => $existing?->gender ?? $gender],
                     $group,
                     $season,
                     EnrollmentStatus::Pending,
@@ -97,6 +101,7 @@ class SubmitEnrollmentRequest
                 'organization_id' => $organization->id,
                 'user_id' => $user->id,
                 'relationship' => $relationship,
+                'gender' => $gender,
                 'season_id' => $season->id,
                 'group_id' => $group->id,
                 'notes' => filled($data['notes'] ?? null) ? trim($data['notes']) : null,
@@ -164,13 +169,13 @@ class SubmitEnrollmentRequest
      *
      * @param  array{first_name: string, last_name: string, document: string, birth_date: string}  $child
      */
-    private function ensureNotRepeated(User $user, array $child): void
+    private function ensureNotRepeated(Organization $organization, User $user, array $child): void
     {
         $repeated = EnrollmentRequest::query()->pending()->where('document', $child['document'])->first();
 
         if ($repeated !== null) {
             throw ValidationException::withMessages(['document' => $repeated->user_id === $user->id
-                ? "Ya mandaste una solicitud para {$child['first_name']}; esperá a que el club la confirme."
+                ? "Ya mandaste una solicitud para {$child['first_name']}; esperá a que ".Vocabulary::the($organization->typeNoun()).' la confirme.'
                 : 'Ya hay una solicitud por confirmar con ese documento.']);
         }
     }
@@ -187,7 +192,7 @@ class SubmitEnrollmentRequest
 
         if ($previous !== null && ! $previous->trashed() && $previous->status !== EnrollmentStatus::Withdrawn) {
             throw ValidationException::withMessages([
-                'document' => "Ese documento ya tiene inscripción en {$group->name} ({$season->name}). Consultá con el club.",
+                'document' => "Ese documento ya tiene inscripción en {$group->name} ({$season->name}). Consultá con ".Vocabulary::the($group->organization->typeNoun()).'.',
             ]);
         }
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\ReviewPaymentReport;
 use App\Actions\Billing\SubmitPaymentReport;
+use App\Filament\Support\Terms;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\PaymentReportResource;
 use App\Http\Resources\Api\V1\ReviewPaymentReportResource;
@@ -127,12 +128,13 @@ class PaymentReportController extends Controller
     public function reject(Request $request, int $report, ReviewPaymentReport $review): ReviewPaymentReportResource
     {
         $this->authorizeReview($request);
+        $report = $this->find($report);
         $data = $request->validate(
             ['reason' => ['required', 'string', 'max:500']],
-            ['reason.required' => 'Contale al tutor por qué no lo aprobás.'],
+            ['reason.required' => 'Contale '.Terms::toPerson('guardian', 'Tutor', $report->reporterGender()).' por qué no lo aprobás.'],
         );
 
-        $report = $review->reject($this->find($report), $request->user(), $data['reason']);
+        $report = $review->reject($report, $request->user(), $data['reason']);
 
         return new ReviewPaymentReportResource($report->load(['family.students', 'user', 'moneyAccount', 'payment']));
     }

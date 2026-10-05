@@ -2,6 +2,7 @@
 
 namespace App\Actions\Billing;
 
+use App\Filament\Support\Terms;
 use App\Models\Charge;
 use App\Models\Family;
 use App\Models\Guardian;
@@ -9,6 +10,7 @@ use App\Models\PaymentReport;
 use App\Models\Student;
 use App\Models\User;
 use App\Notifications\PaymentReported;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
@@ -99,7 +101,7 @@ class SubmitPaymentReport
             throw ValidationException::withMessages(['guardian_id' => 'Elegí un tutor de la familia.']);
         }
         if ($moneyAccountId !== null && ! PaymentReportAccess::clubTransferAccounts()->contains('id', $moneyAccountId)) {
-            throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta bancaria o billetera del club.']);
+            throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta bancaria o billetera '.Vocabulary::of(Terms::organization()).'.']);
         }
 
         $organization = $student->organization;
@@ -176,7 +178,7 @@ class SubmitPaymentReport
             ->pluck('family_id')->filter()->unique()->values();
 
         if ($students->isEmpty() || $families->isEmpty()) {
-            throw ValidationException::withMessages(['charge_ids' => 'No tenés alumnos a cargo con cuotas en este club.']);
+            throw ValidationException::withMessages(['charge_ids' => 'No tenés '.Terms::plural('student', 'alumno').' a cargo con cuotas en '.Vocabulary::gendered(Terms::organization(), 'este', 'esta').' '.Terms::organization().'.']);
         }
 
         if ($families->count() > 1) {

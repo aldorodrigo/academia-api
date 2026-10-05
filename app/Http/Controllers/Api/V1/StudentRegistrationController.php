@@ -6,6 +6,7 @@ use App\Actions\Enrollments\EnrollmentRequestAccess;
 use App\Actions\Invitations\CreateInvitation;
 use App\Actions\Students\RegisterStudent;
 use App\Enums\EnrollmentStatus;
+use App\Enums\Gender;
 use App\Enums\GuardianRelationship;
 use App\Enums\MidPeriod;
 use App\Exceptions\ImportRowException;
@@ -15,6 +16,7 @@ use App\Models\Invitation;
 use App\Models\Student;
 use App\Support\Phone;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -42,6 +44,7 @@ class StudentRegistrationController extends Controller
             'season_id' => ['required', 'integer'],
             'group_id' => ['required', 'integer'],
             'mid_period' => ['nullable', Rule::enum(MidPeriod::class)],
+            'gender' => ['nullable', Rule::enum(Gender::class)],
             'guardian.first_name' => ['required', 'string', 'max:100'],
             'guardian.last_name' => ['nullable', 'string', 'max:100'],
             'guardian.phone' => ['required', 'string', 'max:30'],
@@ -54,9 +57,9 @@ class StudentRegistrationController extends Controller
             'birth_date.before' => 'La fecha de nacimiento tiene que ser pasada.',
             'document.required' => 'Ingresá el número de documento.',
             'document.regex' => 'Ingresá el número de documento, sin espacios.',
-            'guardian.first_name.required' => 'Ingresá el nombre del tutor.',
-            'guardian.phone.required' => 'Ingresá el celular del tutor.',
-            'guardian.email.email' => 'El correo del tutor no es válido.',
+            'guardian.first_name.required' => 'Ingresá el nombre '.Vocabulary::of($organization->term('guardian')).'.',
+            'guardian.phone.required' => 'Ingresá el celular '.Vocabulary::of($organization->term('guardian')).'.',
+            'guardian.email.email' => 'El correo '.Vocabulary::of($organization->term('guardian')).' no es válido.',
         ]);
 
         if (Phone::mobile($data['guardian']['phone']) === null) {
@@ -73,6 +76,7 @@ class StudentRegistrationController extends Controller
                     'last_name' => trim($data['last_name']),
                     'document' => trim($data['document']),
                     'birth_date' => CarbonImmutable::parse($data['birth_date']),
+                    'gender' => $data['gender'] ?? null,
                 ],
                 $group,
                 $season,

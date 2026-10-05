@@ -47,6 +47,10 @@ class CurrentOrganizationController extends Controller
                 'currency' => $organization->currency,
                 'timezone' => $organization->timezone,
                 'terminology' => array_merge($organization::DEFAULT_TERMINOLOGY, $organization->terminology ?? []),
+                // Formas femeninas que ajustó la organización (vacío = las de la regla) y, por palabra, plural,
+                // género, artículo y formas de persona; también "organization" (club, academia…). Ver PLAN_GENERO.md.
+                'terminology_feminine' => (object) ($organization->terminology_feminine ?? []),
+                'vocabulary' => $organization->vocabulary(),
                 'features' => $organization->features ?? [],
                 'membership' => [
                     'roles' => $roles,

@@ -71,7 +71,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::delete('auth/token', [AuthTokenController::class, 'destroy'])->name('auth.token.destroy');
-        Route::get('me', MeController::class)->name('me');
+        Route::get('me', [MeController::class, 'show'])->name('me');
+        Route::patch('me', [MeController::class, 'update'])->name('me.update');
 
         // Código de la cuenta (WhatsApp o correo) y alta del club (sin organización activa).
         Route::post('auth/verify', [RegisterController::class, 'verify'])->middleware('throttle:10,1')->name('auth.verify');

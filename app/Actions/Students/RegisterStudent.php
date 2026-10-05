@@ -6,6 +6,7 @@ use App\Actions\Billing\GenerateEnrollmentCharge;
 use App\Actions\Billing\IssueSeasonCharges;
 use App\Actions\Invitations\CreateInvitation;
 use App\Enums\EnrollmentStatus;
+use App\Enums\Gender;
 use App\Enums\GuardianRelationship;
 use App\Enums\MidPeriod;
 use App\Exceptions\ImportRowException;
@@ -42,7 +43,7 @@ class RegisterStudent
     ) {}
 
     /**
-     * @param  array{first_name: string, last_name: string, birth_date: CarbonImmutable|string, document?: ?string, shirt_size?: ?string, position?: ?string, notes?: ?string, user_id?: ?int}  $data
+     * @param  array{first_name: string, last_name: string, birth_date: CarbonImmutable|string, gender?: Gender|string|null, document?: ?string, shirt_size?: ?string, position?: ?string, notes?: ?string, user_id?: ?int}  $data
      * @param  list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string, invite?: bool, user_id?: ?int}>  $guardians  con `user_id` queda vinculado a esa cuenta (sin invitación)
      * @param  EnrollmentStatus|null  $status  null: se mantiene el de una inscripción existente (o Activo si es nueva)
      * @param  bool  $mustBeNew  el formulario "Nuevo jugador" no reutiliza un jugador existente (la importación sí)
@@ -89,11 +90,8 @@ class RegisterStudent
      */
     private function minorWithoutGuardian(Organization $organization): string
     {
-        $student = $organization->term('student');
-        $guardian = $organization->term('guardian');
-
-        return Vocabulary::gendered($student, 'El', 'La').' '.mb_strtolower($student)
-            .' es menor de edad: cargá al menos '.Vocabulary::gendered($guardian, 'un', 'una').' '.mb_strtolower($guardian).'.';
+        return ucfirst(Vocabulary::the($organization->term('student')))
+            .' es menor de edad: cargá al menos '.Vocabulary::a($organization->term('guardian')).'.';
     }
 
     /**
@@ -120,6 +118,8 @@ class RegisterStudent
         $student->fill(array_filter([
             ...collect($data)->only(['first_name', 'last_name', 'document', 'shirt_size', 'position', 'notes', 'user_id'])->all(),
             'birth_date' => $birthDate,
+            // Opcional: sin dato no pisa el que ya tenía.
+            'gender' => Gender::parse($data['gender'] ?? null),
         ], fn ($value) => $value !== null))->save();
 
         return $student;

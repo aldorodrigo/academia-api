@@ -67,6 +67,11 @@ class AcceptInvitation
                 throw ValidationException::withMessages(['password' => 'La contraseña no es correcta.']);
             }
 
+            // El género que cargó quien invitó, si la persona todavía no eligió el suyo en "Mi cuenta".
+            if ($invitation->gender !== null && $user->gender === null) {
+                $user->forceFill(['gender' => $invitation->gender])->save();
+            }
+
             $organization = $invitation->organization;
 
             $organization->memberships()->updateOrCreate(

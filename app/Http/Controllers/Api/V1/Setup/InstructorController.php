@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Setup;
 
 use App\Actions\Invitations\CreateInvitation;
 use App\Actions\Onboarding\ManageInstructors;
+use App\Enums\Gender;
 use App\Enums\InvitationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Group;
@@ -17,6 +18,7 @@ use App\Support\Vocabulary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 
 /**
  * Paso 4 de la guía: técnicos (invitados con sus categorías) y el admin que también da clases.
@@ -36,6 +38,7 @@ class InstructorController extends Controller
             'email' => ['nullable', 'required_without:phone', 'email', 'max:255'],
             'group_ids' => ['nullable', 'array'],
             'group_ids.*' => ['integer'],
+            'gender' => ['nullable', Rule::enum(Gender::class)],
         ], [
             'name.required' => 'Ingresá el nombre.',
             'phone.required_without' => 'Ingresá el celular o el correo.',
@@ -49,6 +52,7 @@ class InstructorController extends Controller
             $data['email'] ?? null,
             $data['group_ids'] ?? [],
             $data['phone'] ?? null,
+            Gender::parse($data['gender'] ?? null),
         );
 
         // Un técnico que ya existe y queda con dos categorías a la vez: aviso.
@@ -72,8 +76,7 @@ class InstructorController extends Controller
     {
         // "Yo también doy clases" pide elegir al menos una (no se dan todas por defecto).
         $mustChoose = $request->boolean('teaches') && Group::query()->where('is_active', true)->exists();
-        $term = $current->get()->term('group');
-        $group = Vocabulary::gendered($term, 'un', 'una').' '.mb_strtolower($term);
+        $group = Vocabulary::a($current->get()->term('group'));
 
         $data = $request->validate([
             'teaches' => ['required', 'boolean'],

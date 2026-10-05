@@ -8,6 +8,7 @@ use App\Actions\Enrollments\WithdrawEnrollment;
 use App\Enums\EnrollmentStatus;
 use App\Models\Enrollment;
 use App\Support\Money;
+use App\Support\Vocabulary;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\DatePicker;
@@ -39,7 +40,7 @@ class WithdrawalActions
             ->modalDescription(fn (Enrollment $record) => self::effect($record))
             ->fillForm(fn (Enrollment $record) => [
                 'ended_on' => $record->organization->today()->toDateString(),
-                'withdrawal_reason' => $record->dropout_note ?? ($record->hasDropoutReport() ? ($record->dropout_source === 'guardian' ? 'Deja el club' : 'Dejó de venir') : null),
+                'withdrawal_reason' => $record->dropout_note ?? ($record->hasDropoutReport() ? ($record->dropout_source === 'guardian' ? 'Deja '.Vocabulary::the($record->organization->typeNoun()) : 'Dejó de venir') : null),
                 'notify' => WithdrawEnrollment::noticeRecipients($record->student)->isNotEmpty(),
                 'message' => WithdrawEnrollment::defaultNotice($record),
             ])
@@ -150,7 +151,7 @@ class WithdrawalActions
             $guardian = $record->dropout_source === 'guardian';
             $by = $record->dropoutReportedBy?->name ?? ($guardian ? 'La familia' : 'El técnico');
 
-            return "{$by} avisó que ".($guardian ? 'deja el club' : 'dejó de venir')
+            return "{$by} avisó que ".($guardian ? 'deja '.Vocabulary::the($record->organization->typeNoun()) : 'dejó de venir')
                 ." ({$record->dropout_reported_at->setTimezone($record->organization->timezone)->format('d/m')})"
                 .($record->dropout_note ? ": {$record->dropout_note}" : '');
         }
@@ -167,7 +168,7 @@ class WithdrawalActions
             DatePicker::make('ended_on')->label('Fecha de baja')->required()
                 ->maxDate(fn () => filament()->getTenant()->today()),
             Textarea::make('withdrawal_reason')->label('Motivo')->required()->maxLength(255)
-                ->placeholder('Ej.: se mudó, dejó de venir, cambió de club'),
+                ->placeholder('Ej.: se mudó, dejó de venir, cambió de '.Terms::organization()),
         ];
     }
 

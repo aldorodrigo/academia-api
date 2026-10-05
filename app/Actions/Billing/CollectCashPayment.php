@@ -3,6 +3,7 @@
 namespace App\Actions\Billing;
 
 use App\Enums\PaymentMethod;
+use App\Filament\Support\Terms;
 use App\Models\Family;
 use App\Models\Guardian;
 use App\Models\MoneyAccount;
@@ -52,7 +53,7 @@ class CollectCashPayment
 
             $family = Family::ensureFor($student);
             if ($payer !== null && $payer->family_id !== $family->id) {
-                throw ValidationException::withMessages(['guardian_id' => 'Elegí un tutor de la familia.']);
+                throw ValidationException::withMessages(['guardian_id' => 'Elegí '.Terms::a('guardian', 'tutor').' de la familia.']);
             }
 
             $today = $organization->today();

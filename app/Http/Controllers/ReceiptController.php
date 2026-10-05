@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Payment;
 use App\Support\Money;
+use App\Support\Vocabulary;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Facades\URL;
 use Symfony\Component\HttpFoundation\Response;
@@ -28,14 +29,30 @@ class ReceiptController extends Controller
             ->with(['organization', 'family', 'guardian', 'moneyAccount', 'allocations.charge.student'])
             ->findOrFail($payment);
 
-        $pdf = Pdf::loadView('receipts.show', [
-            'payment' => $payment,
-            'organization' => $payment->organization,
-            'allocations' => $payment->originalAllocations(),
-            'credit' => $payment->creditGenerated(),
-            'money' => fn (int $amount) => Money::pyg($amount),
-        ]);
+        $pdf = Pdf::loadView('receipts.show', self::viewData($payment));
 
         return $pdf->stream("recibo-{$payment->receiptLabel()}.pdf");
+    }
+
+    /**
+     * Lo que muestra el recibo. La columna de los alumnos nombra a cada uno: "Jugadora" si son todas chicas,
+     * "Jugador" si hay algún varón (o la palabra del club si no se cargó el género).
+     *
+     * @return array<string, mixed>
+     */
+    public static function viewData(Payment $payment): array
+    {
+        $allocations = $payment->originalAllocations();
+
+        return [
+            'payment' => $payment,
+            'organization' => $payment->organization,
+            'allocations' => $allocations,
+            'studentTerm' => $payment->organization->term('student', Vocabulary::groupGender(
+                collect($allocations)->map(fn ($allocation) => $allocation->charge->student?->gender),
+            )),
+            'credit' => $payment->creditGenerated(),
+            'money' => fn (int $amount) => Money::pyg($amount),
+        ];
     }
 }

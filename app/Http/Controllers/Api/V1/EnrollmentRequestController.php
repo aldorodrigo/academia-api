@@ -6,14 +6,17 @@ use App\Actions\Enrollments\EnrollmentRequestAccess;
 use App\Actions\Enrollments\ReviewEnrollmentRequest;
 use App\Actions\Enrollments\SubmitEnrollmentRequest;
 use App\Enums\EnrollmentRequestStatus;
+use App\Enums\Gender;
 use App\Enums\GuardianRelationship;
 use App\Enums\MidPeriod;
+use App\Filament\Support\Terms;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\EnrollmentRequestResource;
 use App\Http\Resources\Api\V1\ReviewEnrollmentRequestResource;
 use App\Models\EnrollmentRequest;
 use App\Models\Group;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -49,6 +52,7 @@ class EnrollmentRequestController extends Controller
             'birth_date' => ['required', 'date', 'before:'.$today->toDateString(), 'after:'.$today->subYears(100)->toDateString()],
             'document' => ['required', 'string', 'max:20', 'regex:/^[\w.\-]+$/u'],
             'relationship' => ['nullable', Rule::enum(GuardianRelationship::class)],
+            'gender' => ['nullable', Rule::enum(Gender::class)],
             'season_id' => ['required', 'integer'],
             'group_id' => ['required', 'integer'],
             'notes' => ['nullable', 'string', 'max:500'],
@@ -63,7 +67,7 @@ class EnrollmentRequestController extends Controller
             'document.required' => 'Ingresá el número de documento.',
             'document.regex' => 'Ingresá el número de documento, sin espacios.',
             'season_id.required' => 'Elegí la temporada.',
-            'group_id.required' => 'Elegí la categoría.',
+            'group_id.required' => 'Elegí '.Vocabulary::the($this->current->get()->term('group')).'.',
         ]);
 
         $enrollmentRequest = $submit->handle($this->current->get(), $request->user(), $data);
@@ -131,7 +135,7 @@ class EnrollmentRequestController extends Controller
             $group = Group::query()->find($data['group_id']);
 
             if ($group === null || ! EnrollmentRequestAccess::canReviewGroup($request->user(), $group)) {
-                throw ValidationException::withMessages(['group_id' => 'Elegí una de las categorías que podés confirmar.']);
+                throw ValidationException::withMessages(['group_id' => 'Elegí '.Terms::gendered('group', 'categoría', 'uno', 'una').' de '.Terms::the('group', 'categoría', plural: true).' que podés confirmar.']);
             }
         }
 

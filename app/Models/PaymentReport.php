@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\Gender;
 use App\Enums\PaymentReportStatus;
 use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -150,5 +151,13 @@ class PaymentReport extends Model
     public function payment(): BelongsTo
     {
         return $this->belongsTo(Payment::class);
+    }
+
+    /**
+     * El género del tutor que informó el pago (para "Le avisamos a la tutora").
+     */
+    public function reporterGender(): ?Gender
+    {
+        return $this->guardian?->gender() ?? $this->user?->genderIn($this->organization);
     }
 }

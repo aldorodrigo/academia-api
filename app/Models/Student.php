@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\Gender;
 use App\Models\Concerns\BelongsToOrganization;
 use Database\Factories\StudentFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -23,7 +24,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 /**
  * Alumno. El nombre visible sale de term('student').
  */
-#[Fillable(['organization_id', 'family_id', 'user_id', 'first_name', 'last_name', 'document', 'birth_date', 'shirt_size', 'position', 'notes'])]
+#[Fillable(['organization_id', 'family_id', 'user_id', 'first_name', 'last_name', 'document', 'birth_date', 'shirt_size', 'position', 'notes', 'gender'])]
 class Student extends Model implements HasMedia
 {
     /** @use HasFactory<StudentFactory> */
@@ -33,7 +34,7 @@ class Student extends Model implements HasMedia
 
     protected function casts(): array
     {
-        return ['birth_date' => 'date'];
+        return ['birth_date' => 'date', 'gender' => Gender::class];
     }
 
     public function registerMediaCollections(): void

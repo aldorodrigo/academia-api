@@ -51,7 +51,7 @@ class Pending extends Card
             [self::allows('Update:Group'), $count['groups_without_instructor'], $n($count['groups_without_instructor'], "{$group} sin {$instructor}", "{$groups} sin {$instructor}"), fn () => GroupResource::getUrl('index'), 'gray'],
             [self::allows('Create:Invitation'), $count['expired_invitations'], $n($count['expired_invitations'], 'invitación vencida: reenviá el link', 'invitaciones vencidas: reenviá el link'), fn () => InvitationResource::getUrl('index'), 'warning'],
             [self::allows('Create:Invitation'), $count['invitations'], $n($count['invitations'], 'invitación sin aceptar', 'invitaciones sin aceptar'), fn () => InvitationResource::getUrl('index'), 'gray'],
-            [self::allows('Create:Invitation'), $count['guardians_without_app'], $n($count['guardians_without_app'], Terms::singular('guardian', 'tutor').' sin la app: invitalo', "{$guardians} sin la app: invitalos"), fn () => GuardianResource::getUrl('index'), 'gray'],
+            [self::allows('Create:Invitation'), $count['guardians_without_app'], $n($count['guardians_without_app'], Terms::singular('guardian', 'tutor').' sin la app: '.Terms::gendered('guardian', 'tutor', 'invitalo', 'invitala'), "{$guardians} sin la app: ".Terms::gendered('guardian', 'tutor', 'invitalos', 'invitalas')), fn () => GuardianResource::getUrl('index'), 'gray'],
             [self::allows('Update:Expense'), $count['pending_expenses'], $n($count['pending_expenses'], 'gasto por confirmar', 'gastos por confirmar'), fn () => ExpenseResource::getUrl('index'), 'gray'],
         ])
             ->filter(fn (array $item) => $item[0] && $item[1] > 0)

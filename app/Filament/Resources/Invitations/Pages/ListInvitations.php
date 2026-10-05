@@ -3,9 +3,11 @@
 namespace App\Filament\Resources\Invitations\Pages;
 
 use App\Actions\Invitations\CreateInvitation;
+use App\Enums\Gender;
 use App\Filament\Actions\ShowInvitationLinkAction;
 use App\Filament\Resources\Invitations\InvitationResource;
 use App\Filament\Support\ContactField;
+use App\Filament\Support\GenderField;
 use App\Filament\Support\RoleFields;
 use App\Models\Invitation;
 use Filament\Actions\Action;
@@ -30,6 +32,7 @@ class ListInvitations extends ListRecords
                 ->modalSubmitActionLabel('Crear invitación')
                 ->schema([
                     ContactField::make(),
+                    GenderField::make(),
                     Repeater::make('roles')
                         ->label('Roles')
                         ->schema(RoleFields::make())
@@ -47,6 +50,7 @@ class ListInvitations extends ListRecords
                         array_values($data['roles']),
                         auth()->user(),
                         phone: $contact['phone'],
+                        gender: Gender::parse($data['gender'] ?? null),
                     );
 
                     $this->replaceMountedAction('showLink', ['token' => $token, 'phone' => $invitation->phone]);
