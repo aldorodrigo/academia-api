@@ -34,16 +34,19 @@ class AgendaController extends Controller
             ->orderBy('birth_date')
             ->get();
 
-        $items = [];
-
-        foreach ($students as $student) {
-            $groups = $student->currentEnrollments->pluck('group')->filter()->unique('id');
-            $next = $this->nextClass($sessions, $groups, $student, $today, $now);
-
-            if ($next !== null) {
-                $items[] = $this->item($request, $next, $student, $now);
-            }
-        }
+        // Por fecha y hora de inicio; a la misma hora, del mayor al menor.
+        $items = $students
+            ->map(fn (Student $student) => [$student, $this->nextClass(
+                $sessions,
+                $student->currentEnrollments->pluck('group')->filter()->unique('id'),
+                $student,
+                $today,
+                $now,
+            )])
+            ->filter(fn (array $pair) => $pair[1] !== null)
+            ->sortBy(fn (array $pair) => $pair[1]->startsAt()->getTimestamp())
+            ->map(fn (array $pair) => $this->item($request, $pair[1], $pair[0], $now))
+            ->values();
 
         return response()->json(['data' => $items]);
     }

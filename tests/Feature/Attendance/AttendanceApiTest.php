@@ -270,6 +270,30 @@ describe('tutor', function () {
         expect(Attendance::query()->withoutGlobalScopes()->sole()->guardian_response)->toBe(GuardianResponse::NotGoing);
     });
 
+    it('ordena las próximas clases por fecha y hora, no por la edad de los hijos', function () {
+        // Thiago (el mayor) va a Sub-12 el lunes 18:30; Mateo, a Sub-10 el lunes 17:00.
+        $thiago = attendanceStudent('Thiago', 'Benítez', $this->sub12);
+        $thiago->update(['birth_date' => '2014-03-01']);
+        $this->mateo->update(['birth_date' => '2018-05-01']);
+        $thiago->guardians()->attach($this->mateo->guardians()->first(), ['relationship' => 'madre']);
+
+        attendanceApi($this->tutor, 'GET', 'agenda')
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.student.first_name', 'Mateo')
+            ->assertJsonPath('data.0.class.starts_at', '17:00')
+            ->assertJsonPath('data.1.student.first_name', 'Thiago')
+            ->assertJsonPath('data.1.class.starts_at', '18:30');
+
+        // Terminada la de Mateo, su próxima es el miércoles: Thiago (hoy 18:30) pasa primero.
+        $this->travelTo(CarbonImmutable::parse('2026-09-28 18:40', 'America/Asuncion'));
+
+        attendanceApi($this->tutor, 'GET', 'agenda')
+            ->assertJsonPath('data.0.student.first_name', 'Thiago')
+            ->assertJsonPath('data.0.class.date', '2026-09-28')
+            ->assertJsonPath('data.1.student.first_name', 'Mateo')
+            ->assertJsonPath('data.1.class.date', '2026-09-30');
+    });
+
     it('después del horario pasa a la clase siguiente; no responde por hijos ajenos', function () {
         $this->travelTo(CarbonImmutable::parse('2026-09-28 19:00', 'America/Asuncion'));
 

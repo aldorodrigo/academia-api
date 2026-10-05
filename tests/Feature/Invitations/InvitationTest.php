@@ -1,5 +1,6 @@
 <?php
 
+use App\Actions\Auth\RegisterUser;
 use App\Actions\Invitations\CreateInvitation;
 use App\Enums\InvitationStatus;
 use App\Mail\InvitationMail;
@@ -7,8 +8,10 @@ use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\RoleAssignment;
 use App\Models\User;
+use App\Providers\AppServiceProvider;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
+use Spatie\Activitylog\Models\Activity;
 
 beforeEach(function () {
     Mail::fake();
@@ -32,6 +35,7 @@ function acceptPayload(array $overrides = []): array
         'password' => 'secreta123',
         'password_confirmation' => 'secreta123',
         'device_name' => 'app',
+        'terms' => true,
     ], $overrides);
 }
 
@@ -81,16 +85,44 @@ it('con celular y correo le llega por correo y se comparte por WhatsApp con la m
         ."Vence el {$expires} y sirve una sola vez."
     )->and($invitation->whatsappUrl($token))->toBe('https://wa.me/595981555444?text='.rawurlencode($invitation->whatsappText($token)));
 
-    // Una nueva al mismo correo (o al mismo celular) reemplaza a la pendiente.
-    app(CreateInvitation::class)->handle($this->jakare, 'ana@test.com', [['role' => 'tutor']]);
-    expect($invitation->fresh()->revoked_at)->not->toBeNull();
+    // Una nueva al mismo correo (o al mismo celular) reemplaza a la pendiente: es la misma, con un link nuevo.
+    [$nueva] = app(CreateInvitation::class)->handle($this->jakare, 'ana@test.com', [['role' => 'tutor']]);
+    expect($nueva->id)->toBe($invitation->id)
+        ->and(Invitation::findByToken($token))->toBeNull();
 });
 
-it('una invitación nueva revoca la pendiente anterior de la misma persona', function () {
-    [$vieja] = invite($this->jakare);
-    invite($this->jakare);
+it('una invitación nueva a la misma persona reutiliza la pendiente con un link nuevo', function () {
+    [$vieja, $token] = invite($this->jakare);
+    $this->travel(3)->days();
+    [$nueva, $nuevoToken] = invite($this->jakare, roles: [['role' => 'tutor']]);
 
-    expect($vieja->fresh()->status())->toBe(InvitationStatus::Revoked);
+    expect($nueva->id)->toBe($vieja->id)
+        ->and(Invitation::withoutGlobalScopes()->count())->toBe(1)
+        ->and($nueva->fresh()->status())->toBe(InvitationStatus::Pending)
+        ->and($nueva->fresh()->roles)->toBe([['role' => 'tutor', 'starts_on' => null, 'ends_on' => null]])
+        ->and($nueva->fresh()->expires_at->toDateString())->toBe(now()->addDays(Invitation::VALID_DAYS)->toDateString());
+    $this->getJson("/api/v1/invitations/{$token}")->assertNotFound();
+    $this->getJson("/api/v1/invitations/{$nuevoToken}")->assertOk();
+
+    // No se borra nada: lo que tenía antes queda en el historial.
+    $change = Activity::query()->where('log_name', 'invitations')->where('subject_id', $vieja->id)
+        ->where('description', 'updated')->sole();
+    expect($change->attribute_changes['old']['roles'])->toHaveCount(2)
+        ->and($change->attribute_changes['attributes']['roles'])->toHaveCount(1);
+});
+
+it('reenviar renueva la misma invitación (aunque esté vencida) y el link anterior deja de servir', function () {
+    [$invitation, $token] = invite($this->jakare);
+    $this->travel(Invitation::VALID_DAYS + 1)->days();
+    expect($invitation->fresh()->status())->toBe(InvitationStatus::Expired);
+
+    $nuevo = app(CreateInvitation::class)->resend($invitation);
+
+    expect(Invitation::withoutGlobalScopes()->count())->toBe(1)
+        ->and(Invitation::findByToken($nuevo)->id)->toBe($invitation->id)
+        ->and(Invitation::findByToken($token))->toBeNull()
+        ->and($invitation->fresh()->status())->toBe(InvitationStatus::Pending);
+    Mail::assertQueued(InvitationMail::class, 2);
 });
 
 it('un cargo de comisión sin fin de mandato no se puede invitar', function () {
@@ -158,6 +190,23 @@ it('valida nombre y contraseña para una cuenta nueva', function () {
     ]))->assertUnprocessable()->assertJsonValidationErrors(['name', 'password']);
 });
 
+it('una cuenta nueva tiene que aceptar los términos, como en el registro', function () {
+    [, $token] = invite($this->jakare);
+
+    $this->postJson("/api/v1/invitations/{$token}/accept", acceptPayload(['terms' => false]))
+        ->assertUnprocessable()
+        ->assertJsonPath('errors.terms.0', 'Tenés que aceptar los términos.');
+    $payload = acceptPayload();
+    unset($payload['terms']);
+    $this->postJson("/api/v1/invitations/{$token}/accept", $payload)->assertJsonValidationErrors('terms');
+
+    $this->postJson("/api/v1/invitations/{$token}/accept", acceptPayload())->assertCreated();
+
+    $user = User::query()->where('email', 'ana@test.com')->sole();
+    expect($user->terms_accepted_at)->not->toBeNull()
+        ->and($user->terms_version)->toBe(RegisterUser::TERMS_VERSION);
+});
+
 it('con cuenta existente pide su contraseña y no crea otro usuario', function () {
     $ana = memberOf($this->ajena, ['email' => 'ana@test.com', 'password' => 'mi-clave-1']);
     [, $token] = invite($this->jakare, roles: [['role' => 'tutor']]);
@@ -193,4 +242,43 @@ it('una invitación de una organización no da acceso a otra', function () {
     $this->withToken($token)
         ->getJson('/api/v1/organization', ['X-Organization' => 'ajena'])
         ->assertForbidden();
+});
+
+describe('límite de intentos', function () {
+    it('varias familias desde el mismo wifi aceptan sus invitaciones a la vez', function () {
+        foreach (range(1, 30) as $family) {
+            [, $token] = invite($this->jakare, "familia{$family}@test.com", [['role' => 'tutor']]);
+
+            $this->getJson("/api/v1/invitations/{$token}")->assertOk();
+            $this->postJson("/api/v1/invitations/{$token}/accept", acceptPayload())->assertCreated();
+        }
+
+        expect(User::query()->where('email', 'like', 'familia%')->count())->toBe(30);
+    });
+
+    it('limita los intentos sobre una misma invitación', function () {
+        [, $token] = invite($this->jakare);
+        [, $other] = invite($this->jakare, 'pedro@test.com');
+
+        foreach (range(1, AppServiceProvider::INVITATION_ATTEMPTS) as $attempt) {
+            $this->getJson("/api/v1/invitations/{$token}")->assertOk();
+        }
+
+        $this->postJson("/api/v1/invitations/{$token}/accept", acceptPayload())
+            ->assertTooManyRequests()
+            ->assertJsonPath('message', 'Demasiados intentos. Probá de nuevo en unos minutos.');
+        // Las otras invitaciones siguen andando desde la misma IP.
+        $this->getJson("/api/v1/invitations/{$other}")->assertOk();
+    });
+
+    it('frena a quien prueba links al azar desde una IP', function () {
+        foreach (range(1, AppServiceProvider::INVITATION_ATTEMPTS_PER_IP) as $attempt) {
+            $this->getJson('/api/v1/invitations/azar'.$attempt)->assertNotFound();
+        }
+
+        $this->getJson('/api/v1/invitations/azar-otro')->assertTooManyRequests();
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.0.2'])
+            ->getJson('/api/v1/invitations/azar-otro')
+            ->assertNotFound();
+    });
 });

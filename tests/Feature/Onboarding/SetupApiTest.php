@@ -415,13 +415,30 @@ describe('técnicos', function () {
             ->and($this->admin->instructedGroups()->count())->toBe(0);
     });
 
-    it('reenviar da un link nuevo y borrar revoca', function () {
-        $id = setupApi('POST', 'setup/instructors', ['name' => 'Marta', 'email' => 'marta@test.com', 'group_ids' => [$this->sub8->id]])
-            ->json('data.invitation_id');
+    it('reenviar da un link nuevo en la misma invitación y borrar revoca', function () {
+        $created = setupApi('POST', 'setup/instructors', ['name' => 'Marta', 'email' => 'marta@test.com', 'group_ids' => [$this->sub8->id]]);
+        $id = $created->json('data.invitation_id');
+        $this->travel(Invitation::VALID_DAYS + 1)->days();
+        setupApi('GET', 'setup/instructors')->assertJsonPath('data.instructors.0.status', 'vencida');
 
         $link = setupApi('POST', "setup/invitations/{$id}/resend")->assertOk()->json('data.link');
         $nueva = Invitation::findByToken(str($link)->afterLast('/')->toString());
-        expect($nueva->group_ids)->toBe([$this->sub8->id])->and($nueva->name)->toBe('Marta');
+        expect($nueva->id)->toBe($id)
+            ->and($nueva->group_ids)->toBe([$this->sub8->id])
+            ->and($nueva->name)->toBe('Marta')
+            ->and(Invitation::findByToken(str($created->json('data.link'))->afterLast('/')->toString()))->toBeNull();
+
+        // En el paso 4 sigue una sola, otra vez pendiente.
+        setupApi('GET', 'setup/instructors')
+            ->assertJsonCount(1, 'data.instructors')
+            ->assertJsonPath('data.instructors.0.invitation_id', $id)
+            ->assertJsonPath('data.instructors.0.status', 'invitado');
+
+        // Invitarla de nuevo desde el formulario tampoco la duplica.
+        setupApi('POST', 'setup/instructors', ['name' => 'Marta Ríos', 'email' => 'marta@test.com', 'group_ids' => [$this->sub8->id]])
+            ->assertCreated()
+            ->assertJsonPath('data.invitation_id', $id);
+        setupApi('GET', 'setup/instructors')->assertJsonCount(1, 'data.instructors');
 
         setupApi('DELETE', "setup/invitations/{$nueva->id}")->assertNoContent();
         setupApi('GET', 'setup/instructors')->assertJsonCount(0, 'data.instructors');

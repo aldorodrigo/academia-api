@@ -46,7 +46,8 @@ class Invitation extends Model
     public function getActivitylogOptions(): LogOptions
     {
         return LogOptions::defaults()
-            ->logOnly(['email', 'roles', 'expires_at', 'accepted_at', 'accepted_user_id', 'revoked_at'])
+            // Al reenviar o invitar de nuevo se reutiliza la misma fila: el historial queda acá (nunca se borra).
+            ->logOnly(['email', 'phone', 'name', 'roles', 'group_ids', 'guardian_id', 'invited_by', 'expires_at', 'accepted_at', 'accepted_user_id', 'revoked_at'])
             ->logOnlyDirty()
             ->useLogName('invitations');
     }

@@ -37,6 +37,8 @@ Muestra la invitación antes de aceptarla.
 
 - Si la invitación no existe, ya fue usada o venció, responde `404 {message: "La invitación no es válida o ya venció."}`.
 - `user_exists` indica si ya hay una cuenta con ese email. Si es `true`, la app pide solo la contraseña.
+- Límite (este endpoint y `accept`): 15 pedidos por minuto **por invitación** y 120 por minuto por IP (varias familias
+  en el mismo wifi aceptan a la vez). Al superarlo, `429 {message: "Demasiados intentos. Probá de nuevo en unos minutos."}`.
 
 ### `POST invitations/{token}/accept` (público, con throttle)
 
@@ -46,6 +48,7 @@ Muestra la invitación antes de aceptarla.
 | `password` | Siempre. Si la cuenta es nueva, mínimo 8 caracteres; si ya existe, la contraseña actual |
 | `password_confirmation` | Obligatorio si `user_exists = false` |
 | `device_name` | Siempre |
+| `terms` | `true`, obligatorio si `user_exists = false` (como en `auth/register`: `422` "Tenés que aceptar los términos."); se guarda la versión y la fecha |
 
 Respuesta `201 {token, organization: "jakare"}`.
 
@@ -512,7 +515,8 @@ Grupos del técnico: `[{ "id", "name", "program", "schedules", "students_count" 
 
 #### `GET agenda`
 
-La próxima clase de cada alumno a cargo (hoy o en los próximos 7 días; la de hoy se muestra hasta que termina).
+La próxima clase de cada alumno a cargo (hoy o en los próximos 7 días; la de hoy se muestra hasta que termina),
+ordenadas por fecha y hora de inicio.
 
 ```json
 {
@@ -1289,7 +1293,7 @@ del usuario actual y sus categorías.
 
 #### `POST setup/invitations/{id}/resend` · `DELETE setup/invitations/{id}`
 
-Reenviar → `{ "link": "…", "whatsapp_url": "…" }` (token nuevo, 14 días más; `whatsapp_url` solo si la invitación es a un celular). Borrar → `204` (revoca la invitación pendiente).
+Reenviar → `{ "link": "…", "whatsapp_url": "…" }` (token nuevo, 14 días más; `whatsapp_url` solo si la invitación es a un celular). Es la **misma** invitación (mismo `invitation_id`, no se suma otra a la lista): el link anterior deja de servir. Invitar otra vez a la misma persona (`POST setup/instructors`, o "Invitar"/"Reenviar invitación" en el panel) también reutiliza su invitación pendiente o vencida. Nada se borra: los datos anteriores quedan en el historial de la invitación y, si hubiera otra abierta a la misma persona, queda revocada. Borrar → `204` (revoca la invitación pendiente; no se elimina).
 
 ### Invitaciones (se amplía)
 
