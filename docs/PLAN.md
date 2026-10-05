@@ -87,8 +87,11 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Reporte de asistencia por alumno y por grupo.
 
 ### 3.5 Eventos, torneos y partidos *(Fase 2)*
+- **Primera entrega: calendario de actividades** (plan del 2026-10-04 en `PLAN_CALENDARIO.md`): clases, recuperaciones
+  y particulares en un calendario, más eventos **solo publicados** (sin confirmación ni costo) y días sin clase que
+  suspenden solos las clases. Publican técnico (sus grupos), administrador, secretario y tesorero (y suplentes).
 - Tipos de evento: torneo, amistoso, festival, reunión de padres, cena.
-- Convocatoria: el padre **confirma o rechaza** la asistencia.
+- Convocatoria *(después)*: el padre **confirma o rechaza** la asistencia.
 - Costo opcional, que genera un cargo a las familias convocadas.
 - Resultados y fixture *(futuro)*.
 
@@ -233,7 +236,7 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 - Eventos y torneos con confirmación de los padres.
 - ~~Comprobante de pago subido por el padre + validación del tesorero~~ (hecho: «Comprobantes de transferencia», §10).
 - Actividades para tus hijos, etapas A y B (`PLAN_ACTIVIDADES.md`): actividades publicadas por la organización y solicitud de inscripción online.
-- Calendario, encuestas y preferencias de notificación.
+- Calendario de actividades (`PLAN_CALENDARIO.md`), encuestas y preferencias de notificación.
 
 ### Fase 3 — Recaudación e informes
 - Rifas e indumentaria.
