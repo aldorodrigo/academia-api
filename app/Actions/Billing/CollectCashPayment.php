@@ -6,6 +6,7 @@ use App\Enums\PaymentMethod;
 use App\Models\Family;
 use App\Models\Guardian;
 use App\Models\MoneyAccount;
+use App\Models\Organization;
 use App\Models\Payment;
 use App\Models\Student;
 use App\Models\User;
@@ -18,8 +19,10 @@ use Illuminate\Validation\ValidationException;
 /**
  * Cobro en efectivo desde la app: un pago normal (`RegisterPayment`) con fecha de hoy que
  * entra en la caja personal de quien cobra, imputado a las cuotas elegidas que sigan
- * pendientes (o a las más viejas). Avisa a la familia con el recibo. Un reintento con el
- * mismo `request_id` devuelve el mismo pago.
+ * pendientes (o a las más viejas). Si cobra directo a la Caja (`collects_to_org_cash` en su
+ * membresía), entra en la Caja del club o en la cuenta del club que elija, sin caja personal.
+ * El pago guarda siempre quién lo cobró (`created_by`). Avisa a la familia con el recibo. Un
+ * reintento con el mismo `request_id` devuelve el mismo pago.
  */
 class CollectCashPayment
 {
@@ -36,19 +39,17 @@ class CollectCashPayment
         ?Guardian $payer = null,
         ?string $notes = null,
         ?string $requestId = null,
+        ?int $moneyAccountId = null,
     ): Payment {
         $organization = $student->organization;
         $key = $requestId === null ? null : "cash-collection:{$organization->id}:{$by->id}:{$requestId}";
 
-        $collect = function () use ($by, $student, $amount, $chargeIds, $payer, $notes, $organization, $key): Payment {
+        $collect = function () use ($by, $student, $amount, $chargeIds, $payer, $notes, $organization, $key, $moneyAccountId): Payment {
             if ($key !== null && ($done = Cache::get($key)) !== null && ($payment = Payment::query()->find($done)) !== null) {
                 return $payment;
             }
 
-            $box = MoneyAccount::ensureCashBoxOf($by, $organization);
-            if (! $box->is_active) {
-                throw ValidationException::withMessages(['amount' => 'Tu caja está cerrada. Hablá con el tesorero.']);
-            }
+            $account = $this->account($by, $organization, $moneyAccountId);
 
             $family = Family::ensureFor($student);
             if ($payer !== null && $payer->family_id !== $family->id) {
@@ -68,7 +69,7 @@ class CollectCashPayment
 
             $payment = $this->register->handle(
                 $family,
-                $box,
+                $account,
                 $amount,
                 PaymentMethod::Cash,
                 $today,
@@ -89,6 +90,36 @@ class CollectCashPayment
 
         // Dos pedidos con el mismo request_id a la vez: el segundo espera y devuelve el primero.
         return $key === null ? $collect() : Cache::lock("{$key}:lock", 30)->block(10, $collect);
+    }
+
+    /**
+     * Dónde entra el efectivo: la cuenta del club elegida o la Caja si cobra directo; si no, su caja personal
+     * (abierta).
+     */
+    private function account(User $by, Organization $organization, ?int $moneyAccountId): MoneyAccount
+    {
+        if (CashCollectionAccess::collectsToOrgCash($by, $organization)) {
+            $account = $moneyAccountId === null
+                ? CashCollectionAccess::orgCash()
+                : CashCollectionAccess::collectAccounts()->firstWhere('id', $moneyAccountId);
+
+            if ($account === null) {
+                throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta del club.']);
+            }
+
+            return $account;
+        }
+
+        if ($moneyAccountId !== null) {
+            throw ValidationException::withMessages(['money_account_id' => 'Lo que cobrás queda en tu caja hasta que lo deposites.']);
+        }
+
+        $box = MoneyAccount::ensureCashBoxOf($by, $organization);
+        if (! $box->is_active) {
+            throw ValidationException::withMessages(['amount' => 'Tu caja está cerrada. Hablá con el tesorero.']);
+        }
+
+        return $box;
     }
 
     /**

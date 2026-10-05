@@ -159,6 +159,16 @@ class Payment extends Model
     }
 
     /**
+     * Quién lo cobró o lo registró.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
      * @return BelongsTo<User, $this>
      */
     public function voidedBy(): BelongsTo

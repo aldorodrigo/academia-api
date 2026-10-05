@@ -1,6 +1,8 @@
 <?php
 
+use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\VoidPayment;
+use App\Actions\Organizations\RegisterOrganization;
 use App\Actions\Treasury\TransferFunds;
 use App\Enums\CashDepositStatus;
 use App\Enums\OrganizationRole;
@@ -8,8 +10,10 @@ use App\Enums\PaymentMethod;
 use App\Enums\PaymentReportStatus;
 use App\Filament\Resources\CashDeposits\CashDepositResource;
 use App\Filament\Resources\CashDeposits\Pages\ManageCashDeposits;
+use App\Filament\Resources\Members\Pages\ListMembers;
 use App\Filament\Resources\MoneyAccounts\Pages\ListMoneyAccounts;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
+use App\Http\Controllers\ReceiptController;
 use App\Models\CashDeposit;
 use App\Models\Charge;
 use App\Models\Enrollment;
@@ -33,12 +37,14 @@ use App\Notifications\CashDepositReviewed;
 use App\Notifications\PaymentReceived;
 use App\Notifications\PaymentReported;
 use App\Notifications\PaymentReportReviewed;
+use App\Support\Money;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Livewire\Livewire;
+use Spatie\Activitylog\Models\Activity;
 use Spatie\Permission\PermissionRegistrar;
 
 beforeEach(function () {
@@ -681,5 +687,133 @@ describe('comprobantes rechazados en el estado de cuenta', function () {
 
         expect($recent->fresh()->isOpen())->toBeTrue()
             ->and($old->fresh()->isOpen())->toBeFalse();
+    });
+});
+
+describe('cobra directo a la Caja', function () {
+    beforeEach(function () {
+        // Óscar creó la academia (alta autoservicio): es el dueño y cobra directo a la Caja.
+        $this->owner = memberOf($this->jakare, ['name' => 'Óscar Benítez']);
+        app(RoleAssigner::class)->assign($this->jakare, $this->owner, OrganizationRole::Admin);
+        $this->jakare->forceFill(['owner_id' => $this->owner->id])->save();
+        $this->jakare->memberships()->where('user_id', $this->owner->id)->update(['collects_to_org_cash' => true]);
+    });
+
+    it('el dueño cobra a la Caja del club, sin caja propia ni depósito; queda quién cobró', function () {
+        cashApi($this->owner, 'GET', 'organization')->assertJsonPath('data.membership.collects_to_org_cash', true);
+        cashApi($this->owner, 'GET', "collections/students/{$this->mateo->id}")
+            ->assertOk()
+            ->assertJsonPath('data.collects_to_org_cash', true)
+            ->assertJsonPath('data.default_collect_account_id', $this->cash->id)
+            ->assertJsonPath('data.collect_accounts.*.name', ['Caja', 'Banco Itaú']);
+
+        collectFrom($this->owner)
+            ->assertCreated()
+            ->assertJsonPath('data.cash_box', null)
+            ->assertJsonPath('data.account.name', 'Caja');
+
+        $payment = Payment::query()->latest('id')->sole();
+        expect($payment->money_account_id)->toBe($this->cash->id)
+            ->and($payment->created_by)->toBe($this->owner->id)
+            ->and(MoneyAccount::cashBoxOf($this->owner, $this->jakare))->toBeNull()
+            ->and($this->cash->balance())->toBe(300000);
+
+        // Puede elegir otra cuenta del club, no una caja personal.
+        $coachBox = MoneyAccount::ensureCashBoxOf($this->coach, $this->jakare);
+        collectFrom($this->owner, ['charge_ids' => [], 'amount' => 1000, 'money_account_id' => $coachBox->id])
+            ->assertUnprocessable()->assertJsonValidationErrors('money_account_id');
+        collectFrom($this->owner, ['charge_ids' => [], 'amount' => 1000, 'money_account_id' => $this->bank->id])
+            ->assertCreated()->assertJsonPath('data.account.name', 'Banco Itaú');
+    });
+
+    it('los demás (también un segundo admin) rinden a su caja como siempre', function () {
+        $admin = memberOf($this->jakare, ['name' => 'Segundo Admin']);
+        app(RoleAssigner::class)->assign($this->jakare, $admin, OrganizationRole::Admin);
+
+        cashApi($this->coach, 'GET', "collections/students/{$this->mateo->id}")
+            ->assertJsonPath('data.collects_to_org_cash', false)
+            ->assertJsonPath('data.collect_accounts', []);
+        collectFrom($this->coach, ['money_account_id' => $this->cash->id])
+            ->assertUnprocessable()->assertJsonPath('errors.money_account_id.0', 'Lo que cobrás queda en tu caja hasta que lo deposites.');
+
+        collectFrom($admin)->assertCreated()->assertJsonPath('data.cash_box.name', 'Caja de Segundo Admin');
+        cashApi($admin, 'GET', 'me/cash-box')->assertJsonPath('data.collects_to_org_cash', false);
+    });
+
+    it('quien administra los miembros lo cambia; queda quién y la plata de la caja no se mueve', function () {
+        collectFrom($this->coach)->assertCreated();
+        $box = MoneyAccount::cashBoxOf($this->coach, $this->jakare);
+
+        // El tesorero valida comprobantes pero no administra miembros: no ve ni cambia quién cobra directo.
+        expect(cashApi($this->treasurer, 'GET', 'cash-boxes')->json('data'))->not->toHaveKey('collectors');
+        cashApi($this->treasurer, 'PUT', "cash-collectors/{$this->coach->id}", ['collects_to_org_cash' => true])->assertForbidden();
+
+        $collectors = cashApi($this->owner, 'GET', 'cash-boxes')->assertOk()->json('data.collectors');
+        expect(collect($collectors)->firstWhere('user_id', $this->owner->id))->toMatchArray(['collects_to_org_cash' => true, 'owner' => true])
+            ->and(collect($collectors)->firstWhere('user_id', $this->coach->id))->toMatchArray(['collects_to_org_cash' => false, 'owner' => false])
+            ->and(collect($collectors)->pluck('user_id'))->not->toContain($this->tutor->id);
+
+        cashApi($this->owner, 'PUT', "cash-collectors/{$this->coach->id}", ['collects_to_org_cash' => true])
+            ->assertOk()->assertJsonPath('data.collects_to_org_cash', true);
+        cashApi($this->owner, 'PUT', "cash-collectors/{$this->tutor->id}", ['collects_to_org_cash' => true])->assertNotFound();
+
+        $membership = $this->jakare->memberships()->where('user_id', $this->coach->id)->sole();
+        expect($membership->collects_to_org_cash_changed_by)->toBe($this->owner->id)
+            ->and($membership->collects_to_org_cash_changed_at)->not->toBeNull()
+            ->and(Activity::query()->where('description', 'Cobra directo a la Caja')->sole()->causer_id)->toBe($this->owner->id);
+
+        // Lo que tenía en su caja sigue ahí (lo deposita); lo nuevo va a la Caja.
+        expect($box->balance())->toBe(300000);
+        collectFrom($this->coach, ['charge_ids' => [], 'amount' => 5000])->assertCreated()->assertJsonPath('data.account.name', 'Caja');
+        expect($box->balance())->toBe(300000);
+        cashApi($this->coach, 'GET', 'me/cash-box')->assertJsonPath('data.available', 300000)->assertJsonPath('data.collects_to_org_cash', true);
+    });
+
+    it('al crear el club, el dueño cobra directo; quien acepta una invitación de técnico, no', function () {
+        $user = User::factory()->create(['name' => 'Nueva Dueña']);
+        $organization = app(RegisterOrganization::class)->handle($user, ['name' => 'Academia Nueva', 'type' => 'academy', 'slug' => 'academia-nueva']);
+
+        expect($organization->owner_id)->toBe($user->id)
+            ->and(CashCollectionAccess::collectsToOrgCash($user, $organization))->toBeTrue()
+            ->and(CashCollectionAccess::collectsToOrgCash($this->coach, $this->jakare))->toBeFalse();
+    });
+
+    it('en el panel: Miembros lo muestra y lo cambia; Registrar pago con efectivo propone la Caja', function () {
+        auth()->shouldUse('web');
+        $this->actingAs($this->owner, 'web');
+        filament()->setTenant($this->jakare);
+        app(CurrentOrganization::class)->set($this->jakare);
+
+        $coachMembership = $this->jakare->memberships()->where('user_id', $this->coach->id)->sole();
+        Livewire::test(ListMembers::class)
+            ->assertSee('Cobra directo a la Caja')
+            ->assertSee('Rinde lo que cobra')
+            ->callTableAction('collectsToOrgCash', $coachMembership)
+            ->assertHasNoTableActionErrors();
+        expect($coachMembership->fresh()->collects_to_org_cash)->toBeTrue();
+
+        Livewire::test(ManagePayments::class)
+            ->mountAction('register')
+            ->assertActionDataSet(['money_account_id' => $this->cash->id])
+            ->setActionData([
+                'family_id' => $this->family->id, 'amount' => 150000, 'method' => PaymentMethod::Cash->value,
+                'charge_ids' => [cashCharge($this->mateo, '2026-08')->id],
+            ])
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $payment = Payment::query()->latest('id')->sole();
+        expect($payment->money_account_id)->toBe($this->cash->id)->and($payment->created_by)->toBe($this->owner->id);
+
+        Livewire::test(ManagePayments::class)->assertSee('Óscar Benítez');
+        $this->get(ReceiptController::signedUrl($payment))->assertOk();
+        $html = view('receipts.show', [
+            'payment' => $payment->load(['organization', 'family', 'guardian', 'moneyAccount', 'creator', 'allocations.charge.student']),
+            'organization' => $payment->organization,
+            'allocations' => $payment->originalAllocations(),
+            'credit' => $payment->creditGenerated(),
+            'money' => fn (int $amount) => Money::pyg($amount),
+        ])->render();
+        expect($html)->toContain('Cobró: Óscar Benítez');
     });
 });

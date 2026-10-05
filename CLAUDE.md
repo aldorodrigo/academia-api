@@ -204,6 +204,12 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   donde entra un pago se elige de `PaymentReportAccess::paymentAccounts()` (sin cajas personales). La transferencia que
   la familia le manda a quien cobra: `SubmitPaymentReport::onBehalf()` (`registered_by_staff`; aprobada al instante si
   quien la registra valida comprobantes).
+- **Cobra directo a la Caja** (`PLAN_COBRO_EFECTIVO.md` §9): `memberships.collects_to_org_cash` por persona (por defecto
+  solo el dueño, `organizations.owner_id`: lo fijan `RegisterOrganization` y, en las de la plataforma, el primer admin
+  que acepta la invitación). `CashCollectionAccess::collectsToOrgCash()`/`orgCash()`/`collectors()`; lo cambia
+  `SetCollectsToOrgCash` (quién y cuándo + actividad) desde Miembros del panel o `PUT cash-collectors/{user}`. Con eso
+  `CollectCashPayment` y "Registrar pago" (Efectivo) van a la Caja del club o a la cuenta del club elegida, sin caja
+  personal. Quién cobró: `Payment::creator()` (lista de pagos, recibo, movimientos).
 - Informes: `App\Reports\*` (`data()` para API/panel, `pdf()`, `xlsx()` con openspout); descarga por ruta firmada
   `informes/{report}.{format}` (`ReportDownloadController`). Permiso `View:Reports`; la app lo recibe en
   `membership.permissions` como `view_reports`. Los jugadores sin familia cuentan como su propio grupo.

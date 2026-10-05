@@ -2,13 +2,18 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\PaymentReportAccess;
+use App\Actions\Billing\SetCollectsToOrgCash;
 use App\Actions\Treasury\CashDeposits;
 use App\Enums\MembershipStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\CashDepositResource;
 use App\Models\CashDeposit;
+use App\Models\Membership;
 use App\Models\MoneyAccount;
+use App\Models\Organization;
+use App\Models\User;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -46,7 +51,50 @@ class CashDepositController extends Controller
             'total' => (int) $boxes->sum('balance'),
             'boxes' => $boxes,
             'deposits' => CashDepositResource::collection($pending)->toArray($request),
+            // Quién cobra directo a la Caja: solo para quien administra los miembros.
+            ...(self::canManageCollectors($request->user(), $organization) ? [
+                'collectors' => CashCollectionAccess::collectors($organization)
+                    ->map(fn (Membership $membership) => $this->collector($membership, $organization))->values(),
+            ] : []),
         ]]);
+    }
+
+    /**
+     * "Cobra directo a la Caja" sí/no para una persona que cobra en efectivo.
+     */
+    public function updateCollector(Request $request, int $user, SetCollectsToOrgCash $set): JsonResponse
+    {
+        $organization = $this->current->get();
+        abort_unless(self::canManageCollectors($request->user(), $organization), 403, 'No podés cambiar cómo cobra cada uno.');
+        $data = $request->validate(['collects_to_org_cash' => ['required', 'boolean']]);
+
+        $membership = CashCollectionAccess::collectors($organization)->firstWhere('user_id', $user);
+        abort_if($membership === null, 404, 'No encontramos a esta persona entre quienes cobran.');
+
+        $membership = $set->handle($membership, (bool) $data['collects_to_org_cash'], $request->user());
+
+        return response()->json(['data' => $this->collector($membership, $organization)]);
+    }
+
+    /**
+     * Quien administra los miembros (permiso de editar miembros; el admin siempre).
+     */
+    public static function canManageCollectors(User $user, Organization $organization): bool
+    {
+        return $user->can('update', new Membership(['organization_id' => $organization->id]));
+    }
+
+    /**
+     * @return array{user_id: int, name: string, collects_to_org_cash: bool, owner: bool}
+     */
+    private function collector(Membership $membership, Organization $organization): array
+    {
+        return [
+            'user_id' => $membership->user_id,
+            'name' => $membership->user->name,
+            'collects_to_org_cash' => (bool) $membership->collects_to_org_cash,
+            'owner' => $organization->owner_id === $membership->user_id,
+        ];
     }
 
     public function confirm(Request $request, int $deposit, CashDeposits $deposits): CashDepositResource

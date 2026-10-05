@@ -15,11 +15,12 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['name', 'slug', 'type', 'country', 'currency', 'timezone', 'terminology', 'features', 'billing', 'class_reminder_hours', 'instructor_reminder_hours', 'suspended_at', 'suspension_reason', 'self_service', 'onboarding_skipped', 'onboarding_dismissed_at', 'onboarding_completed_at'])]
+#[Fillable(['name', 'slug', 'owner_id', 'type', 'country', 'currency', 'timezone', 'terminology', 'features', 'billing', 'class_reminder_hours', 'instructor_reminder_hours', 'suspended_at', 'suspension_reason', 'self_service', 'onboarding_skipped', 'onboarding_dismissed_at', 'onboarding_completed_at'])]
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
@@ -136,6 +137,16 @@ class Organization extends Model
     public function getRouteKeyName(): string
     {
         return 'slug';
+    }
+
+    /**
+     * Quien creó la organización (el dueño): cobra directo a la Caja por defecto.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function owner(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'owner_id');
     }
 
     /**

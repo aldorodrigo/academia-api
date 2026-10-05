@@ -70,6 +70,9 @@
     <p class="muted">
         Forma de pago: {{ $payment->method->label() }}{{ $payment->reference ? ' · Ref. '.$payment->reference : '' }}
         · Cuenta: {{ $payment->moneyAccount->name }}
+        @if ($payment->creator)
+            · Cobró: {{ $payment->creator->name }}
+        @endif
     </p>
     @if ($payment->isVoided())
         <p><strong>Anulado:</strong> {{ $payment->void_reason }}</p>

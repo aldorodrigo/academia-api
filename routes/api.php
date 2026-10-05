@@ -130,6 +130,7 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('cash-boxes', [CashDepositController::class, 'index'])->name('cash-boxes.index');
             Route::post('cash-deposits/{deposit}/confirm', [CashDepositController::class, 'confirm'])->whereNumber('deposit')->name('cash-deposits.confirm');
             Route::post('cash-deposits/{deposit}/reject', [CashDepositController::class, 'reject'])->whereNumber('deposit')->name('cash-deposits.reject');
+            Route::put('cash-collectors/{user}', [CashDepositController::class, 'updateCollector'])->whereNumber('user')->name('cash-collectors.update');
 
             Route::get('reports/balance', [ReportController::class, 'balance'])->name('reports.balance');
             Route::get('reports/balances', [ReportController::class, 'balances'])->name('reports.balances');

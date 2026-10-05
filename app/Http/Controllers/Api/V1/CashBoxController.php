@@ -41,6 +41,7 @@ class CashBoxController extends Controller
                 'id' => null, 'name' => null, 'active' => true,
                 'balance' => 0, 'pending_deposits' => 0, 'available' => 0,
                 'movements' => [], 'deposits' => [], 'deposit_accounts' => $accounts,
+                'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $this->current->get()),
             ]]);
         }
 
@@ -60,6 +61,7 @@ class CashBoxController extends Controller
             'movements' => $entries->map(fn (LedgerEntry $entry) => $this->movement($entry))->values(),
             'deposits' => CashDepositResource::collection($deposits)->toArray($request),
             'deposit_accounts' => $accounts,
+            'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $this->current->get()),
         ]]);
     }
 

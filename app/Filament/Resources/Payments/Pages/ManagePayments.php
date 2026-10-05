@@ -2,6 +2,7 @@
 
 namespace App\Filament\Resources\Payments\Pages;
 
+use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\RegisterPayment;
 use App\Enums\MoneyAccountType;
@@ -74,7 +75,8 @@ class ManagePayments extends ManageRecords
                     Select::make('method')->label('Método')->options(PaymentMethod::class)->default(PaymentMethod::Cash->value)->required()
                         ->live()
                         ->afterStateUpdated(fn (Get $get, Set $set) => $set('money_account_id', self::defaultAccount($get('method')))),
-                    // Efectivo: la caja de quien registra (como en la app); si no, la primera cuenta bancaria o billetera.
+                    // Efectivo: la caja de quien registra (como en la app) o la Caja del club si cobra directo; si no,
+                    // la primera cuenta bancaria o billetera.
                     // De las cajas personales solo se ve la propia; la Caja del club y las demás cuentas, siempre.
                     Select::make('money_account_id')->label('Cuenta')
                         ->options(fn () => self::accountOptions())
@@ -135,6 +137,11 @@ class ManagePayments extends ManageRecords
     {
         $own = MoneyAccount::cashBoxOf(auth()->user(), Filament::getTenant());
 
+        // Cobra directo a la Caja: su caja personal solo si todavía le queda algo (para no ofrecerla de más).
+        if (self::collectsToOrgCash() && ($own === null || $own->balance() === 0)) {
+            return PaymentReportAccess::paymentAccounts()->pluck('name', 'id')->all();
+        }
+
         // Unión (no `...`): el spread renumera las claves enteras (los ids).
         return [$own?->id ?? self::OWN_CASH_BOX => ($own?->name ?? 'Caja de '.auth()->user()->name).' (tu caja)']
             + PaymentReportAccess::paymentAccounts()->pluck('name', 'id')->all();
@@ -145,13 +152,21 @@ class ManagePayments extends ManageRecords
         $method = $method instanceof PaymentMethod ? $method : PaymentMethod::tryFrom((string) $method);
 
         if ($method === PaymentMethod::Cash) {
-            return MoneyAccount::cashBoxOf(auth()->user(), Filament::getTenant())?->id ?? self::OWN_CASH_BOX;
+            // Quien cobra directo a la Caja: la Caja del club; si no, su caja (lo deposita después).
+            return self::collectsToOrgCash()
+                ? CashCollectionAccess::orgCash()?->id
+                : (MoneyAccount::cashBoxOf(auth()->user(), Filament::getTenant())?->id ?? self::OWN_CASH_BOX);
         }
 
         $accounts = PaymentReportAccess::paymentAccounts();
 
         return ($accounts->first(fn (MoneyAccount $account) => in_array($account->type, [MoneyAccountType::Bank, MoneyAccountType::Wallet], true))
             ?? $accounts->first())?->id;
+    }
+
+    private static function collectsToOrgCash(): bool
+    {
+        return CashCollectionAccess::collectsToOrgCash(auth()->user(), Filament::getTenant());
     }
 
     /**

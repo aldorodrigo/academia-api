@@ -50,6 +50,8 @@ class CurrentOrganizationController extends Controller
                 'features' => $organization->features ?? [],
                 'membership' => [
                     'roles' => $roles,
+                    // Lo que cobra en efectivo entra directo a la Caja del club (docs/PLAN_COBRO_EFECTIVO.md §9).
+                    'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $organization),
                     // Permisos que usa la app para mostrar secciones (ej. informes).
                     'permissions' => collect([
                         'view_reports' => 'View:Reports',

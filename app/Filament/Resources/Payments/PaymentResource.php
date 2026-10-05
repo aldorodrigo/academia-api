@@ -48,7 +48,7 @@ class PaymentResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
-            ->modifyQueryUsing(fn (Builder $query) => $query->with(['family.students', 'moneyAccount', 'allocations.charge.student']))
+            ->modifyQueryUsing(fn (Builder $query) => $query->with(['family.students', 'moneyAccount', 'creator', 'allocations.charge.student']))
             ->columns([
                 TextColumn::make('receipt_number')->label('Recibo')
                     ->formatStateUsing(fn (Payment $record) => $record->receiptLabel())
@@ -67,6 +67,8 @@ class PaymentResource extends Resource
                     ->expandableLimitedList(),
                 TextColumn::make('method')->label('Método')->badge()->color('gray'),
                 TextColumn::make('moneyAccount.name')->label('Cuenta')->toggleable(isToggledHiddenByDefault: true),
+                // Con varias personas cobrando a la Caja, se sabe quién cobró qué.
+                TextColumn::make('creator.name')->label('Cobró')->toggleable(),
                 MoneyColumn::make('amount')->label('Monto'),
                 TextColumn::make('voided_at')->label('Estado')->badge()
                     ->state(fn (Payment $record) => $record->isVoided() ? 'Anulado' : 'Registrado')

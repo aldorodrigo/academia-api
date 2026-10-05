@@ -2,6 +2,8 @@
 
 namespace App\Filament\Resources\Members\Tables;
 
+use App\Actions\Billing\CashCollectionAccess;
+use App\Actions\Billing\SetCollectsToOrgCash;
 use App\Enums\MembershipStatus;
 use App\Filament\Support\RoleFields;
 use App\Models\Membership;
@@ -38,6 +40,15 @@ class MembersTable
                 TextColumn::make('roles')
                     ->label('Perfiles')
                     ->state(fn (Membership $record) => self::profiles($record))
+                    ->badge(),
+                // Solo para quienes cobran en efectivo: si lo cobrado entra directo a la Caja o lo rinden.
+                TextColumn::make('collects_to_org_cash')
+                    ->label('Efectivo')
+                    ->state(fn (Membership $record) => self::canCollect($record)
+                        ? ($record->collects_to_org_cash ? 'Cobra directo a la Caja' : 'Rinde lo que cobra')
+                        : null)
+                    ->description(fn (Membership $record) => $record->user_id === self::organization()->owner_id ? 'Creó la organización' : null)
+                    ->color(fn (Membership $record) => $record->collects_to_org_cash ? 'success' : 'gray')
                     ->badge(),
                 TextColumn::make('status')
                     ->label('Estado')
@@ -99,6 +110,22 @@ class MembersTable
                                 ->latest('id')
                                 ->get(),
                         ])),
+                    Action::make('collectsToOrgCash')
+                        ->label(fn (Membership $record) => $record->collects_to_org_cash ? 'Que rinda lo que cobra' : 'Que cobre directo a la Caja')
+                        ->icon(Heroicon::OutlinedBanknotes)
+                        ->authorize('update')
+                        ->visible(fn (Membership $record) => self::canCollect($record))
+                        ->requiresConfirmation()
+                        ->modalHeading(fn (Membership $record) => $record->collects_to_org_cash
+                            ? "{$record->user->name} rinde lo que cobra"
+                            : "{$record->user->name} cobra directo a la Caja")
+                        ->modalDescription(fn (Membership $record) => $record->collects_to_org_cash
+                            ? 'Lo que cobre en efectivo queda en su caja hasta que lo deposite y alguien confirme el depósito.'
+                            : 'Lo que cobre en efectivo entra directo en la Caja del club (o en la cuenta del club que elija), sin caja propia ni depósito. Lo que ya tiene en su caja sigue ahí hasta que lo deposite.')
+                        ->action(function (Membership $record): void {
+                            app(SetCollectsToOrgCash::class)->handle($record, ! $record->collects_to_org_cash, auth()->user());
+                            Notification::make()->success()->title($record->collects_to_org_cash ? 'Cobra directo a la Caja.' : 'Rinde lo que cobra.')->send();
+                        }),
                     Action::make('toggleStatus')
                         ->label(fn (Membership $record) => $record->status === MembershipStatus::Active ? 'Desactivar' : 'Activar')
                         ->icon(Heroicon::OutlinedPower)
@@ -111,6 +138,11 @@ class MembersTable
                         ])),
                 ]),
             ]);
+    }
+
+    private static function canCollect(Membership $record): bool
+    {
+        return $record->status === MembershipStatus::Active && $record->user !== null && CashCollectionAccess::canCollect($record->user);
     }
 
     /**

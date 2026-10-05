@@ -16,6 +16,7 @@ use App\Http\Resources\Api\V1\PaymentResource;
 use App\Models\Charge;
 use App\Models\Guardian;
 use App\Models\MoneyAccount;
+use App\Models\Organization;
 use App\Models\PaymentReport;
 use App\Models\Student;
 use App\Models\User;
@@ -117,6 +118,8 @@ class CollectionController extends Controller
                 'transfer_accounts' => PaymentReportAccess::clubTransferAccounts()
                     ->map(fn (MoneyAccount $account) => ['id' => $account->id, 'name' => $account->name])->values(),
                 'approves_transfers' => PaymentReportAccess::canReview($user, $this->current->get()),
+                // Cobra directo a la Caja: el efectivo entra en una cuenta del club (por defecto la Caja).
+                ...self::collectTarget($user, $this->current->get()),
             ],
         ]);
     }
@@ -189,6 +192,7 @@ class CollectionController extends Controller
             'guardian_id' => ['nullable', 'integer'],
             'notes' => ['nullable', 'string', 'max:500'],
             'request_id' => ['nullable', 'string', 'min:8', 'max:64', 'regex:/^[A-Za-z0-9_-]+$/'],
+            'money_account_id' => ['nullable', 'integer'],
         ], [
             'amount.required' => 'Ingresá el monto que cobraste.',
             'amount.min' => 'El monto tiene que ser mayor a cero.',
@@ -206,6 +210,7 @@ class CollectionController extends Controller
             $payer,
             $data['notes'] ?? null,
             $data['request_id'] ?? null,
+            isset($data['money_account_id']) ? (int) $data['money_account_id'] : null,
         );
         $payment->load(['allocations.charge.student']);
         $applied = (int) $payment->originalAllocations()->sum('amount');
@@ -215,10 +220,29 @@ class CollectionController extends Controller
                 'payment' => (new PaymentResource($payment))->toArray($request),
                 'applied' => $applied,
                 'credit' => $payment->creditGenerated(),
-                'cash_box' => $this->box($payment->moneyAccount),
+                // Cobrando directo a la Caja no hay caja personal.
+                'cash_box' => $payment->moneyAccount->isCashBox() ? $this->box($payment->moneyAccount) : null,
+                'account' => ['id' => $payment->moneyAccount->id, 'name' => $payment->moneyAccount->name],
                 'message' => 'Cobrado '.Money::pyg($payment->amount)->format().". Recibo N° {$payment->receiptLabel()}.",
             ],
         ], 201);
+    }
+
+    /**
+     * `collects_to_org_cash`, `collect_accounts` y `default_collect_account_id` (vacío si rinde a su caja).
+     *
+     * @return array{collects_to_org_cash: bool, collect_accounts: list<array<string, mixed>>, default_collect_account_id: ?int}
+     */
+    public static function collectTarget(User $user, Organization $organization): array
+    {
+        $direct = CashCollectionAccess::collectsToOrgCash($user, $organization);
+
+        return [
+            'collects_to_org_cash' => $direct,
+            'collect_accounts' => $direct ? CashCollectionAccess::collectAccounts()
+                ->map(fn (MoneyAccount $account) => ['id' => $account->id, 'name' => $account->name, 'type' => $account->type->value])->values()->all() : [],
+            'default_collect_account_id' => $direct ? CashCollectionAccess::orgCash()?->id : null,
+        ];
     }
 
     /**
