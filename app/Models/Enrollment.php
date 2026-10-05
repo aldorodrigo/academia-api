@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Inscripción = alumno + grupo + temporada. Cada una genera sus propios cargos (Sprint 3).
@@ -24,7 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Enrollment extends Model
 {
     /** @use HasFactory<EnrollmentFactory> */
-    use BelongsToOrganization, HasFactory;
+    use BelongsToOrganization, HasFactory, SoftDeletes;
 
     protected $attributes = ['status' => 'pendiente'];
 
@@ -60,8 +61,13 @@ class Enrollment extends Model
         });
 
         // Cargo de inscripción, si hay tarifa, y las cuotas de la temporada según su plan
-        // (alta, Inscribir, pase de temporada, importación). En el pase se encolan.
+        // (alta, Inscribir, pase de temporada, importación). En el pase se encolan. Una pendiente
+        // (ej. pedida desde la app) va a clases pero no se cobra hasta que se confirma.
         static::created(function (Enrollment $enrollment): void {
+            if ($enrollment->status === EnrollmentStatus::Pending) {
+                return;
+            }
+
             app(GenerateEnrollmentCharge::class)->handle($enrollment);
 
             if (! self::$deferSeasonCharges) {
@@ -81,7 +87,16 @@ class Enrollment extends Model
             if (in_array($enrollment->status, $paused, true)) {
                 app(VoidFutureCharges::class)->handle($enrollment);
             } elseif ($enrollment->isBillableStatus()) {
-                $returns = in_array($enrollment->getOriginal('status'), $paused, true);
+                $previous = $enrollment->getOriginal('status');
+
+                // Al confirmar una pendiente: el cargo de inscripción (una sola vez, idempotente) y las
+                // cuotas desde que empezó.
+                if ($previous === EnrollmentStatus::Pending) {
+                    app(GenerateEnrollmentCharge::class)->handle($enrollment);
+                }
+
+                // Al volver de una baja o suspensión: cuotas desde el período en curso.
+                $returns = in_array($previous, $paused, true);
 
                 app(IssueSeasonCharges::class)->forEnrollment($enrollment, from: $returns ? $enrollment->organization->today() : null);
             }

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Attendance\AttendanceAccess;
 use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\WaiveCharges;
+use App\Actions\Enrollments\EnrollmentRequestAccess;
 use App\Enums\Feature;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsureCanConfigureOrganization;
@@ -51,6 +52,7 @@ class CurrentOrganizationController extends Controller
                     // Permisos que usa la app para mostrar secciones (ej. informes).
                     'permissions' => collect([
                         'view_reports' => 'View:Reports',
+                        'create_students' => 'Create:Student',
                         // Bajas y condonación (docs/PLAN_BAJAS.md).
                         'withdraw_students' => WithdrawalController::WITHDRAW_PERMISSION,
                         'waive_charges' => WaiveCharges::PERMISSION,
@@ -59,6 +61,7 @@ class CurrentOrganizationController extends Controller
                         ->keys()
                         ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
                         ->when(PaymentReportAccess::canReview($user, $organization), fn ($permissions) => $permissions->push('review_payment_reports'))
+                        ->when(EnrollmentRequestAccess::canReviewAny($user), fn ($permissions) => $permissions->push('manage_enrollment_requests'))
                         ->when(
                             $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
                             fn ($permissions) => $permissions->push('teach_lessons'),

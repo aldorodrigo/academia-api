@@ -2,8 +2,10 @@
 
 namespace App\Http\Resources\Api\V1;
 
+use App\Actions\Enrollments\EnrollmentRequestAccess;
 use App\Models\Attendance;
 use App\Models\ClassSession;
+use App\Models\EnrollmentRequest;
 use App\Models\Schedule;
 use App\Models\Student;
 use Illuminate\Http\Request;
@@ -70,12 +72,16 @@ class ClassSessionResource extends JsonResource
         }
 
         $attendances = $this->attendances()->get()->keyBy('student_id');
+        // Nuevos que pidieron lugar desde la app: van a clases mientras el club confirma.
+        $pending = EnrollmentRequest::query()->pending()->where('group_id', $this->group_id)->pluck('id', 'student_id');
+        $canReview = $pending->isNotEmpty() && $request->user() !== null
+            && EnrollmentRequestAccess::canReviewGroup($request->user(), $this->group_id);
 
         return [
             ...$data,
             'editable' => $this->isEditable(),
             'can_waive_charge' => $this->canWaiveCharge(),
-            'students' => $this->students()->map(function (Student $student) use ($attendances) {
+            'students' => $this->students()->map(function (Student $student) use ($attendances, $pending, $canReview) {
                 /** @var Attendance|null $attendance */
                 $attendance = $attendances->get($student->id);
 
@@ -86,6 +92,9 @@ class ClassSessionResource extends JsonResource
                     'status' => $attendance?->status?->value,
                     'guardian_response' => $attendance?->guardian_response?->value,
                     'note' => $attendance?->note,
+                    'enrollment_request' => isset($pending[$student->id])
+                        ? ['id' => $pending[$student->id], 'can_review' => $canReview]
+                        : null,
                 ];
             })->values(),
         ];

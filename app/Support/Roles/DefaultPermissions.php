@@ -10,7 +10,8 @@ use Spatie\Permission\PermissionRegistrar;
 /**
  * Permisos con los que nace cada rol base (business-logic.md §2), para que la comisión vea lo
  * suyo sin que el administrador tenga que armarlo en Roles. El administrador los puede cambiar.
- * El admin no los necesita (pasa por Gate::before); técnico y tutor usan sus grupos e hijos.
+ * El admin no los necesita (pasa por Gate::before); el tutor usa sus hijos y el técnico sus grupos (más confirmar
+ * las inscripciones de la app en ellos).
  */
 class DefaultPermissions
 {
@@ -49,10 +50,14 @@ class DefaultPermissions
                 ...self::grant(self::PEOPLE, self::MANAGE),
                 ...self::grant(['Invitation'], ['ViewAny', 'View', 'Create', 'Update', 'Delete']),
                 ...self::grant([...self::ACADEMIC, 'Membership'], self::VIEW),
+                // Confirman las inscripciones que piden las familias desde la app.
+                'Manage:EnrollmentRequests',
             ],
             OrganizationRole::Member => ['View:Reports'],
             OrganizationRole::Auditor => [...self::grant(self::FINANCE, self::VIEW), 'View:Reports'],
-            OrganizationRole::Admin, OrganizationRole::Instructor, OrganizationRole::Guardian => [],
+            // El técnico confirma las inscripciones de la app en sus categorías.
+            OrganizationRole::Instructor => ['Confirm:GroupEnrollments'],
+            OrganizationRole::Admin, OrganizationRole::Guardian => [],
         };
     }
 

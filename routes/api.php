@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\V1\ClassController;
 use App\Http\Controllers\Api\V1\ClassResponseController;
 use App\Http\Controllers\Api\V1\CurrentOrganizationController;
 use App\Http\Controllers\Api\V1\DeviceController;
+use App\Http\Controllers\Api\V1\EnrollmentRequestController;
 use App\Http\Controllers\Api\V1\GroupController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\Lessons\BookingController;
@@ -29,6 +30,7 @@ use App\Http\Controllers\Api\V1\Setup\SiteController as SetupSiteController;
 use App\Http\Controllers\Api\V1\StudentAttendanceController;
 use App\Http\Controllers\Api\V1\StudentController;
 use App\Http\Controllers\Api\V1\TerminologyController;
+use App\Http\Controllers\Api\V1\StudentRegistrationController;
 use App\Http\Controllers\Api\V1\VenueController;
 use App\Http\Controllers\Api\V1\WithdrawalController;
 use App\Support\Onboarding\StepDrafts;
@@ -103,6 +105,16 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::post('charges/{charge}/unwaive', [WithdrawalController::class, 'unwaive'])->whereNumber('charge')->name('charges.unwaive');
             Route::post('students/{student}/leaving', [WithdrawalController::class, 'leaving'])->whereNumber('student')->name('students.leaving');
             Route::delete('students/{student}/leaving', [WithdrawalController::class, 'cancelLeaving'])->whereNumber('student')->name('students.leaving.cancel');
+            // Inscripción desde la app: el tutor la pide (entra ya, pendiente) y quien tiene permiso la confirma o rechaza.
+            // "Cargar alumno" (quien puede crear alumnos): alta directa e invitación del tutor.
+            Route::post('students', StudentRegistrationController::class)->middleware('throttle:30,1')->name('students.store');
+            Route::get('enrollment-requests/options', [EnrollmentRequestController::class, 'options'])->name('enrollment-requests.options');
+            Route::post('enrollment-requests', [EnrollmentRequestController::class, 'store'])->middleware('throttle:10,1')->name('enrollment-requests.store');
+            Route::get('enrollment-requests', [EnrollmentRequestController::class, 'index'])->name('enrollment-requests.index');
+            Route::delete('enrollment-requests/{id}', [EnrollmentRequestController::class, 'destroy'])->whereNumber('id')->name('enrollment-requests.destroy');
+            Route::get('enrollment-requests/review', [EnrollmentRequestController::class, 'review'])->name('enrollment-requests.review');
+            Route::post('enrollment-requests/{id}/approve', [EnrollmentRequestController::class, 'approve'])->whereNumber('id')->name('enrollment-requests.approve');
+            Route::post('enrollment-requests/{id}/reject', [EnrollmentRequestController::class, 'reject'])->whereNumber('id')->name('enrollment-requests.reject');
 
             Route::get('reports/balance', [ReportController::class, 'balance'])->name('reports.balance');
             Route::get('reports/balances', [ReportController::class, 'balances'])->name('reports.balances');

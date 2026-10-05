@@ -306,7 +306,7 @@ it('un adulto se puede crear sin tutores', function () {
 
     Livewire::test(CreateStudent::class)
         ->fillForm([
-            'first_name' => 'Laura', 'last_name' => 'Ríos', 'birth_date' => now()->subYears(30)->toDateString(),
+            'first_name' => 'Laura', 'last_name' => 'Ríos', 'document' => '3111222', 'birth_date' => now()->subYears(30)->toDateString(),
             'group_id' => $group->id, 'guardians' => [],
         ])
         ->call('create')

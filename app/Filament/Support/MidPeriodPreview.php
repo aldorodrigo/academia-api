@@ -74,16 +74,30 @@ class MidPeriodPreview
         $season = filled($get('season_id')) ? Season::query()->find($get('season_id')) : null;
         $group = filled($get('group_id')) ? Group::query()->find($get('group_id')) : null;
 
-        if ($season === null || $group === null || ! $season->hasFeePlan() || $season->chargesAfterPeriod()
-            || ! $season->billingUnit()->allowsMidway()) {
+        if ($season === null || $group === null) {
             return null;
         }
 
         $enrolledOn = filled($get('enrolled_on'))
             ? CarbonImmutable::parse($get('enrolled_on'))->startOfDay()
             : filament()->getTenant()->today();
+        $period = self::periodStarted($season, $group, $enrolledOn);
+
+        return $period !== null ? [$season, $group, $period, $enrolledOn] : null;
+    }
+
+    /**
+     * El período en curso si alguien que se inscribe ese día entra cuando ya empezó (y el plan permite
+     * cobrar a mitad); si no, null. La usa también la aprobación de solicitudes de inscripción.
+     */
+    public static function periodStarted(Season $season, Group $group, CarbonImmutable $enrolledOn): ?BillingPeriod
+    {
+        if (! $season->hasFeePlan() || $season->chargesAfterPeriod() || ! $season->billingUnit()->allowsMidway()) {
+            return null;
+        }
+
         $period = app(SeasonPeriods::class)->containing($season, $group, $enrolledOn);
 
-        return $period !== null && $enrolledOn->gt($period->start) ? [$season, $group, $period, $enrolledOn] : null;
+        return $period !== null && $enrolledOn->gt($period->start) ? $period : null;
     }
 }

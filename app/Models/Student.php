@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Spatie\MediaLibrary\HasMedia;
 use Spatie\MediaLibrary\InteractsWithMedia;
@@ -26,7 +27,7 @@ use Spatie\MediaLibrary\InteractsWithMedia;
 class Student extends Model implements HasMedia
 {
     /** @use HasFactory<StudentFactory> */
-    use BelongsToOrganization, HasFactory, InteractsWithMedia;
+    use BelongsToOrganization, HasFactory, InteractsWithMedia, SoftDeletes;
 
     public const ADULT_AGE = 18;
 
@@ -63,16 +64,18 @@ class Student extends Model implements HasMedia
 
     /**
      * El mismo chico ya cargado: por documento o por nombre + apellido + fecha de nacimiento.
+     * Con $withTrashed también los archivados (el alta los restaura en vez de crear otro con el mismo documento).
      */
-    public static function findExisting(?string $document, ?string $firstName, ?string $lastName, mixed $birthDate): ?self
+    public static function findExisting(?string $document, ?string $firstName, ?string $lastName, mixed $birthDate, bool $withTrashed = false): ?self
     {
-        $byDocument = filled($document) ? static::query()->where('document', trim($document))->first() : null;
+        $query = fn () => static::query()->when($withTrashed, fn (Builder $query) => $query->withTrashed()->orderByRaw('deleted_at IS NOT NULL'));
+        $byDocument = filled($document) ? $query()->where('document', trim($document))->first() : null;
 
         if ($byDocument !== null || blank($firstName) || blank($lastName) || blank($birthDate)) {
             return $byDocument;
         }
 
-        return static::query()
+        return $query()
             ->where('first_name', trim($firstName))
             ->where('last_name', trim($lastName))
             ->whereDate('birth_date', Carbon::parse($birthDate)->toDateString())

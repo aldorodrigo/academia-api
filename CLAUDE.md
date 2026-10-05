@@ -129,6 +129,14 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Alta de jugador: `App\Actions\Students\RegisterStudent` (datos + inscripción + tutores + invitación). La usan
   el formulario "Nuevo jugador" y la importación (`ImportStudentRow` adapta la fila; el importer corre en cola y
   recibe `organization_id` en `options`).
+- Inscripción desde la app ("entra ya, se confirma después"): `SubmitEnrollmentRequest` da de alta con `RegisterStudent`
+  en `pendiente` (va a clases: `ClassSession::enrollmentsQuery()` suma las pendientes con `EnrollmentRequest` por
+  confirmar; no se cobra) y guarda la `EnrollmentRequest`; `ReviewEnrollmentRequest` confirma (pendiente → activo: el
+  modelo emite inscripción y cuotas) o rechaza/cancela (deshace el alta). `EnrollmentRequestAccess`: quién confirma
+  (`Manage:EnrollmentRequests` en todas, `Confirm:GroupEnrollments` en las categorías del técnico; `reviewable()`),
+  opciones, cupo y mitad de período (`MidPeriodPreview::periodStarted`). "Cargar alumno" de la app: `POST students`
+  (`StudentRegistrationController`, `Create:Student`, invitación del tutor con `whatsapp_url`). Panel: "Solicitudes de
+  inscripción" en Académico. Plan: `docs/PLAN_INSCRIPCION_TUTOR.md` (5e le suma el link público).
 - Familia: automática e invisible (`Family::syncFor($student)`), sin menú ni campo en el panel.
 - Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season, $program)`.
 - Campos de inscripción (alta, acción "Inscribir", pestaña Inscripciones): `App\Filament\Support\EnrollmentForm`.
@@ -137,7 +145,10 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `QueueEnrollmentCharges`, avisa al terminar).
 - Nueva temporada: asistente `CreateSeason` (`Seasons\Support\SeasonPlanSteps` y `SeasonPlan`: valores por defecto,
   copia, resumen, cuotas de ejemplo, tarifas). "Configurar cobro" y "Cambiar monto": `SeasonActions`.
-- Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
+- Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento; `withTrashed: true` incluye archivados).
+- **Soft delete** en `Student`, `Enrollment` y `Attendance`: `delete()` archiva. En consultas con `DB::table` filtrá
+  `deleted_at`. El alta (`RegisterStudent`) restaura al archivado con el mismo documento (y una inscripción archivada);
+  la unicidad de `enrollments` cuenta solo las vigentes (columna generada `not_deleted`).
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms` (fuera del panel usa la
   organización activa). Nada de "jugador", "categoría" o "técnico" fijos en textos: van con `Terms` o `term()`.
 - Vocabulario por deporte (`docs/PLAN_VOCABULARIO.md`): `VocabularySuggestion` propone las palabras de la primera

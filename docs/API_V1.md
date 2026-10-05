@@ -1673,3 +1673,237 @@ no está condonada o falta el motivo.
 - `dropout_reported` (`route: "/bajas"`): "Aviso de baja". Ejemplo: "Rosa Zárate (familia) avisó que Matías Zárate
   deja el club: «…». Decidí si le das la baja."
 - `student_withdrawn` (`route: "/inicio"`): "Baja de Matías", con el mensaje que eligió quien dio la baja.
+
+## Inscripción desde la app
+
+**"Entra ya, se confirma después".** Un miembro activo (normalmente un tutor) pide la inscripción de un hijo: el chico
+queda dado de alta (`RegisterStudent`) con la inscripción **`pendiente`**, aparece en "Mis hijos" y en las clases del
+técnico de esa categoría como "Nuevo, por confirmar" y se le toma asistencia, pero **no se cobra**. Quien confirma
+(secretario, técnico de la categoría o admin) la confirma —se emiten el cargo de inscripción y las cuotas según el plan,
+con `MidPeriod`— o la rechaza con motivo —sale de la lista—. Si quien la pide puede confirmar en esa categoría, **se
+confirma sola**. Siempre queda quién la confirmó o la rechazó. Quien puede crear alumnos también los **carga directo**
+desde la app (`POST students`). Plan: `docs/PLAN_INSCRIPCION_TUTOR.md`. Todo con token + `X-Organization`.
+
+### Objeto solicitud
+
+```json
+{
+  "id": 18,
+  "status": "pendiente",
+  "status_label": "Por confirmar",
+  "child": {
+    "first_name": "Sofía",
+    "last_name": "Benítez",
+    "full_name": "Sofía Benítez",
+    "birth_date": "2018-07-02",
+    "document": "7123456"
+  },
+  "relationship": "madre",
+  "has_medical": true,
+  "notes": null,
+  "season": { "id": 1, "name": "2026", "starts_on": "2026-02-01", "ends_on": "2026-11-30" },
+  "group": { "id": 3, "name": "Sub-8", "program": { "id": 1, "name": "Fútbol" } },
+  "rejection_reason": null,
+  "student_id": 40,
+  "created_at": "2026-10-04T10:15:00-03:00",
+  "reviewed_at": null,
+  "reviewed_by": null,
+  "self_approved": false
+}
+```
+
+- `status`: `pendiente` ("Por confirmar"), `aprobada` ("Aprobada"), `rechazada` ("No aprobada") o `cancelada` ("Cancelada").
+- `relationship`: `padre`, `madre`, `tutor`, `abuelo` u `otro`.
+- `has_medical`: si cargó la ficha médica (los datos no se devuelven: pasan a la ficha del alumno al confirmar).
+- `student_id`: el alumno (existe desde que se pide; `null` si la solicitud se rechazó o canceló y el alta quedó archivada).
+- `reviewed_by`: nombre de quien la confirmó o la rechazó; `self_approved: true` si se confirmó sola.
+
+### Tutor
+
+#### `GET enrollment-requests/options?birth_date=2018-07-02`
+
+Dónde se puede inscribir: una opción por disciplina y temporada vigente o próxima, con sus categorías activas.
+`birth_date` es opcional; con ella llega `suggested_group_id` (por año de nacimiento, solo en disciplinas con ese
+criterio; `null` si no hay una sola que corresponda).
+
+```json
+{
+  "data": [
+    {
+      "program": { "id": 1, "name": "Fútbol" },
+      "season": { "id": 1, "name": "2026", "starts_on": "2026-02-01", "ends_on": "2026-11-30" },
+      "suggested_group_id": 3,
+      "groups": [
+        {
+          "id": 3,
+          "name": "Sub-8",
+          "capacity": 20,
+          "spots_left": 3,
+          "full": false,
+          "suggested": true,
+          "schedules": [{ "weekday": 1, "starts_at": "17:00", "ends_at": "18:30" }]
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `capacity` y `spots_left` son `null` si la categoría no tiene cupo. Ocupan las inscripciones `activo`, `becado` o
+  `pendiente` de esa temporada. Con `full: true` se puede pedir igual (el club decide).
+- Sin opciones (`data: []`): el club todavía no tiene una temporada abierta con categorías.
+
+#### `POST enrollment-requests` (con throttle)
+
+```json
+{
+  "first_name": "Sofía",
+  "last_name": "Benítez",
+  "birth_date": "2018-07-02",
+  "document": "7123456",
+  "relationship": "madre",
+  "season_id": 1,
+  "group_id": 3,
+  "notes": "Es su primer año.",
+  "medical": {
+    "blood_type": "O+",
+    "allergies": "Penicilina",
+    "conditions": null,
+    "medications": null,
+    "emergency_contact_name": "Ana Benítez",
+    "emergency_contact_phone": "0981123456"
+  }
+}
+```
+
+→ `201` con la solicitud: `pendiente` o, si quien la pide puede confirmar en esa categoría, `aprobada` con
+`self_approved: true`. Obligatorios: nombre, apellido, fecha de nacimiento (pasada), **documento** (hasta 20; letras,
+números, puntos o guiones), `season_id` (vigente o próxima) y `group_id` (activa, de una disciplina de la temporada).
+Opcionales: `relationship` (por defecto `tutor`), `notes` (hasta 500) y `medical`. Errores `422` (en `document`):
+- "Ya mandaste una solicitud para Sofía; esperá a que el club la confirme." / "Ya hay una solicitud por confirmar con
+  ese documento." (otra pendiente con el mismo documento).
+- "Sofía ya tiene inscripción en Fútbol (2026)." (ya es su hijo y está inscripto en esa disciplina y temporada).
+- "Ese documento ya tiene inscripción en Sub-8 (2026). Consultá con el club." (ya está en esa categoría). Una baja sí se
+  puede volver a pedir: vuelve desde hoy y no se cobran los meses que estuvo afuera.
+
+Al pedir, el chico queda en "Mis hijos" (inscripción `pendiente`) y en las clases de la categoría. Si ya estaba cargado
+en el club con otra familia, va a clases pero el tutor se le vincula (y ve sus datos) recién al confirmar. Avisa por
+push (y correo) a quienes pueden confirmar en esa categoría.
+
+#### `GET enrollment-requests`
+
+Las solicitudes del usuario: pendientes y las no aprobadas de los últimos 30 días, de la más nueva a la más vieja.
+
+#### `DELETE enrollment-requests/{id}`
+
+Cancela una solicitud propia pendiente → `204` (el chico sale de la lista, como al rechazar). Ya revisada → `422`.
+
+### Quien confirma (permiso `manage_enrollment_requests` en `GET organization`)
+
+Confirman: con "Confirmar inscripciones de la app (todas las categorías)" (`Manage:EnrollmentRequests`; secretario y
+prosecretario por defecto, el admin siempre) o con "Confirmar inscripciones de la app en sus categorías"
+(`Confirm:GroupEnrollments`; el técnico por defecto, solo donde es técnico). Los dos se editan por rol. Las de otras
+categorías responden `404`.
+
+#### En la clase (`GET classes/{id}`) y en el mes del grupo (`GET groups/{id}`)
+
+Cada alumno suma `"enrollment_request": { "id": 18, "can_review": true }` si es un nuevo por confirmar (`null` si no):
+la app muestra "Nuevo, por confirmar" y, con `can_review`, "Confirmar inscripción" y "Rechazar". En el mes en curso,
+`GET groups/{id}` incluye a los nuevos por confirmar aunque todavía no hayan tenido clase.
+
+#### `GET enrollment-requests/review?status=pendiente`
+
+`status` opcional (`pendiente` por defecto, de la más vieja a la más nueva; `todos` para las últimas 50). Solo las que
+puede confirmar. Cada solicitud suma:
+
+```json
+{
+  "requested_by": { "name": "Ana Benítez", "phone": "0981 123 456", "email": null },
+  "age": 8,
+  "existing_student": { "id": 12, "full_name": "Sofía Benítez", "guardians": ["Carlos Benítez"] },
+  "group_options": [
+    { "id": 3, "name": "Sub-8", "capacity": 20, "spots_left": 0, "full": true, "suggested": true }
+  ],
+  "mid_period": {
+    "label": "Se inscribe a mitad de mes: se cobra",
+    "default": "completo",
+    "options": [
+      { "value": "completo", "label": "El mes completo" },
+      { "value": "proporcional", "label": "Lo que falta del mes (proporcional)" },
+      { "value": "proximo", "label": "Desde el mes que viene" }
+    ]
+  }
+}
+```
+
+- `age`: edad de hoy.
+- `existing_student`: el chico ya estaba cargado con otra familia; al confirmar se le suma este tutor.
+- `group_options`: categorías activas de la disciplina que puede confirmar, con el cupo (sin contar el lugar que ya
+  ocupa esta solicitud) y la sugerida por edad.
+- `mid_period`: `null` si el período en curso no empezó (o la temporada no tiene plan).
+
+#### `POST enrollment-requests/{id}/approve`
+
+`{ "group_id": 3, "mid_period": "proporcional", "over_capacity": true }` (todo opcional: por defecto la categoría
+pedida y lo del plan) → la solicitud aprobada. La inscripción pasa a `activo`: se emiten el cargo de inscripción y las
+cuotas desde el día en que empezó a ir. Errores `422`:
+- `over_capacity`: "Sub-8 está completa (20 de 20). Confirmá para inscribirla igual." (cupo lleno sin confirmar).
+- `group_id`: "Elegí una categoría de Fútbol." / "Elegí una de las categorías que podés confirmar." ·
+  `status`: "Esta solicitud ya fue revisada." · `season_id`: "La temporada 2026 ya terminó."
+
+Push al tutor (salvo que se haya confirmado sola): "Aprobamos la inscripción de Sofía en Sub-8 · Fútbol (2026). Ya ves
+sus clases y sus cuotas en la app."
+
+#### `POST enrollment-requests/{id}/reject`
+
+`{ "reason": "No hay lugar en Sub-8 este año." }` (obligatorio) → la solicitud rechazada. El chico sale de la lista sin
+borrar nada: se **archiva** (soft delete) la inscripción pendiente (o vuelve a la baja que tenía) y, si el alumno lo
+creó o restauró la solicitud y no tiene nada más, también el alumno y sus asistencias. Si se vuelve a pedir el mismo
+documento, se restaura el mismo alumno con su historial. Ya revisada → `422`. Push al tutor: "El club no aprobó la inscripción de Sofía: No hay lugar en Sub-8 este año."
+
+### Cargar alumno (permiso `create_students` en `GET organization`)
+
+#### `POST students`
+
+Alta directa (sin solicitud) por quien puede crear alumnos (`Create:Student`), con `RegisterStudent` como "Nuevo
+jugador" del panel:
+
+```json
+{
+  "first_name": "Sofía",
+  "last_name": "Benítez",
+  "birth_date": "2018-07-02",
+  "document": "7123456",
+  "season_id": 1,
+  "group_id": 3,
+  "mid_period": null,
+  "guardian": { "first_name": "Rosa", "last_name": "Aquino", "phone": "0981 222 333", "email": null, "relationship": "madre" }
+}
+```
+
+→ `201`:
+
+```json
+{
+  "data": {
+    "student": { "id": 41, "full_name": "Sofía Benítez", "place": "Sub-8 · Fútbol (2026)" },
+    "guardian": { "name": "Rosa Aquino", "has_account": false },
+    "invitation": {
+      "link": "https://tukuha.app/invitacion/…",
+      "whatsapp_url": "https://wa.me/595981222333?text=…",
+      "expires_on": "2026-10-18"
+    }
+  }
+}
+```
+
+Inscripción `activo` con sus cuotas. El tutor (celular obligatorio y válido, correo opcional) se reutiliza si ya existe;
+si todavía no usa la app recibe una invitación (por correo si tiene; la app la manda por WhatsApp con `whatsapp_url`,
+sin la API de WhatsApp). `invitation: null` si ya usa la app. Ya cargado (mismo documento) → `422` en `document`. Sin
+permiso → `403`.
+
+### Push
+
+Con copia por correo a quien tenga un correo para copias.
+`data`: `{ "type": "enrollment_request", "route": "/solicitudes" }` para quien confirma;
+`{ "type": "enrollment_request_reviewed", "route": "/hijos/12" }` (aprobada) o `"/hijos"` (no aprobada) para el tutor.

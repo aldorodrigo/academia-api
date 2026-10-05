@@ -56,10 +56,12 @@ class StudentForm
                         }
                     }]),
                 TextInput::make('last_name')->label('Apellido')->required()->maxLength(255)->live(onBlur: true),
+                // Obligatorio al cargar uno nuevo (evita duplicados); los que ya estaban sin documento se siguen editando.
                 TextInput::make('document')->label('Documento')->maxLength(30)
+                    ->required(fn (string $operation) => $operation === 'create')
                     ->live(onBlur: true)
                     ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, ?Student $record) => $rule
-                        ->where('organization_id', filament()->getTenant()?->getKey()))
+                        ->where('organization_id', filament()->getTenant()?->getKey())->whereNull('deleted_at'))
                     ->validationMessages(['unique' => fn (string $operation) => $operation === 'create'
                         ? self::ALREADY_LOADED
                         : 'Ya hay '.Terms::gendered('student', 'Jugador', 'otro', 'otra').' '.Terms::singular('student', 'Jugador').' con este documento.']),

@@ -1,6 +1,7 @@
 <?php
 
 declare(strict_types=1);
+use App\Filament\Resources\EnrollmentRequests\EnrollmentRequestResource;
 use App\Filament\Resources\PaymentReports\PaymentReportResource;
 use BezhanSalleh\FilamentShield\Resources\Roles\RoleResource;
 use Filament\Pages\Dashboard;
@@ -198,6 +199,8 @@ return [
         'exclude' => [
             // Se accede con el permiso "Validar comprobantes de pago" (o el cargo de tesorero).
             PaymentReportResource::class,
+            // Se accede con "Gestionar solicitudes de inscripción" (o quien puede crear inscripciones).
+            EnrollmentRequestResource::class,
         ],
     ],
 
@@ -267,6 +270,10 @@ return [
         'Review:PaymentReports' => 'Validar comprobantes de pago',
         // Condonar lo que falta pagar de cuotas (por ejemplo, la deuda de un alumno dado de baja), con motivo.
         'Waive:Charge' => 'Condonar deudas',
+        // Confirmar o rechazar las inscripciones que piden las familias desde la app (secretario y prosecretario).
+        'Manage:EnrollmentRequests' => 'Confirmar inscripciones de la app (todas las categorías)',
+        // Lo mismo, solo en las categorías donde es técnico (el técnico, por defecto).
+        'Confirm:GroupEnrollments' => 'Confirmar inscripciones de la app en sus categorías',
     ],
 
     /*
