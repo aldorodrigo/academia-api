@@ -1429,3 +1429,203 @@ código de la copia, invitaciones a celular y correo).
   porque los antivirus de correo abren los links solos.
 - **Vista previa de los links:** la app web tiene las etiquetas `og:` de Tuku (título, descripción y la tarjeta
   `https://tukuha.app/brand/tuku-tarjeta-redes.png`), que WhatsApp muestra al compartir una invitación.
+
+## Calendario de actividades (contrato, 2026-10-04)
+
+Plan en `PLAN_CALENDARIO.md`. Un calendario con lo que ya existe (clases, recuperaciones, suspendidas,
+reprogramadas y clases particulares) más **eventos** publicados (torneo, amistoso, festival, reunión) y **días sin
+clase** (feriado, vacaciones, lluvia), que suspenden solas las clases de los grupos elegidos. Los eventos son solo
+informativos: sin confirmación ni costo (eso queda para más adelante, PLAN.md §3.5). Todo con token + organización;
+fechas y horas locales de la organización.
+
+### `GET organization` (se amplía)
+
+`membership.permissions` suma `"publish_events"`: administrador, secretario, prosecretario, tesorero y protesorero
+(para cualquier grupo o todo el club) y técnicos con grupos (solo para sus grupos).
+
+### Objeto evento
+
+```json
+{
+  "id": 7,
+  "kind": "sin_clase",
+  "category": "feriado",
+  "category_label": "Feriado",
+  "title": "Día de la Independencia",
+  "description": null,
+  "starts_on": "2026-05-14",
+  "ends_on": "2026-05-15",
+  "starts_at": null,
+  "ends_at": null,
+  "venue": null,
+  "place": null,
+  "audience": {
+    "everyone": false,
+    "groups": [{ "id": 4, "name": "Sub-10", "program": { "id": 1, "name": "Fútbol" } }]
+  },
+  "waive_charge": true,
+  "cancelled": false,
+  "cancel_reason": null,
+  "created_by": { "name": "Ana Benítez" },
+  "created_at": "2026-10-02T21:14:00-03:00",
+  "can_edit": true,
+  "can_cancel": true
+}
+```
+
+- `kind`: `evento` o `sin_clase`. `category`: para `evento`, `torneo`, `amistoso`, `festival`, `reunion` u `otro`;
+  para `sin_clase`, `feriado`, `vacaciones`, `lluvia` u `otro`.
+- `starts_on`–`ends_on`: días que abarca (iguales si es un solo día). `starts_at`/`ends_at` `null` = todo el día
+  (un día sin clase es siempre todo el día).
+- `venue` (`{ "id", "name" }`, una sede de `GET venues`) o `place` (texto libre); los dos pueden ser `null`.
+- `audience.everyone`: todo el club; si no, `groups`.
+- `waive_charge`: solo en `sin_clase`; las clases suspendidas no se cobran (como "No cobrar esta clase").
+- `cancelled`: un evento no se borra, se cancela (sigue en el calendario tachado, con `cancel_reason`).
+- `can_edit`/`can_cancel`: quien lo publicó o alguien que publica para todo el club.
+
+### `GET calendar?from=2026-09-28&to=2026-11-08`
+
+Lo que el usuario ve en esas fechas (hasta 42 días, dentro de hoy ± 365; si no, `422` "Elegí un rango de hasta 6
+semanas."). Filtros opcionales: `student_id` (un hijo a cargo, si no `404`) o `group_id` (un grupo en el que toma
+asistencia, si no `404`).
+
+```json
+{
+  "data": {
+    "from": "2026-09-28",
+    "to": "2026-11-08",
+    "classes": [
+      {
+        "id": 81, "date": "2026-10-05", "starts_at": "17:00", "ends_at": "18:30",
+        "venue": { "name": "Cancha 1" },
+        "group": { "id": 4, "name": "Sub-10", "program": { "id": 1, "name": "Fútbol" } },
+        "status": "programada", "suspension_reason": null, "charge_waived": false, "is_makeup": false,
+        "rescheduled_to": null, "rescheduled_from": null, "attendance_taken": false,
+        "day_off_id": null,
+        "can_take_attendance": false,
+        "students": [
+          { "id": 12, "first_name": "Mateo", "response": "va", "can_respond": true, "attendance": null }
+        ]
+      }
+    ],
+    "bookings": [ { "…": "objeto reserva del Sprint 5c", "as": "student" } ],
+    "events": [ { "…": "objeto evento" } ]
+  }
+}
+```
+
+- `classes`: las de los grupos que dirige y las de los grupos de sus hijos (sin `counts`). Suma `day_off_id` (el día
+  sin clase que la suspendió, o `null`), `can_take_attendance` y `students`: sus hijos en esa clase con la respuesta
+  ("¿Lo llevás?"), si todavía puede responder y la asistencia ya tomada (`presente`, `ausente`, `justificado` o
+  `null`). Vacío si no tiene hijos en el grupo.
+- `bookings`: solo con el módulo `private_lessons`, sin las canceladas. `as`: `student` (suya o de un hijo) o
+  `teacher` (vista del profesor, con `pack` y `credit`).
+- `events`: los de todo el club y los de sus grupos (los que dirige y los de sus hijos), también los cancelados.
+  Quien publica para todo el club ve todos.
+
+### `GET events/{id}`
+
+El evento, más `affected_classes` en un día sin clase: las clases que suspendió y el usuario puede ver
+(`[{ "id", "date", "starts_at", "ends_at", "group" }]`). `404` si no lo puede ver.
+
+### Publicar (permiso `publish_events`)
+
+#### `GET events/options`
+
+```json
+{
+  "data": {
+    "can_target_organization": true,
+    "groups": [{ "id": 4, "name": "Sub-10", "program": { "id": 1, "name": "Fútbol" } }],
+    "venues": [{ "id": 1, "name": "Cancha 1" }],
+    "categories": {
+      "evento": [{ "value": "torneo", "label": "Torneo" }, { "value": "amistoso", "label": "Amistoso" },
+                 { "value": "festival", "label": "Festival" }, { "value": "reunion", "label": "Reunión de padres" },
+                 { "value": "otro", "label": "Otro" }],
+      "sin_clase": [{ "value": "feriado", "label": "Feriado" }, { "value": "vacaciones", "label": "Vacaciones" },
+                    { "value": "lluvia", "label": "Lluvia" }, { "value": "otro", "label": "Otro" }]
+    }
+  }
+}
+```
+
+`groups`: los grupos activos para los que puede publicar (el técnico, solo los suyos; `can_target_organization` es
+`false`).
+
+#### `POST events`
+
+| Campo | |
+|---|---|
+| `kind` | `evento` o `sin_clase`, obligatorio |
+| `category` | una de `categories[kind]`, obligatoria |
+| `title` | obligatorio, hasta 120 |
+| `starts_on` | fecha, obligatoria; un día sin clase no puede empezar antes de hoy |
+| `ends_on` | fecha opcional (por defecto `starts_on`), no anterior a `starts_on`, hasta 92 días |
+| `starts_at`, `ends_at` | `HH:MM` opcionales (solo `evento`; los dos o ninguno; `ends_at` posterior) |
+| `venue_id` / `place` | opcionales (uno u otro; `place` hasta 120) |
+| `description` | opcional, hasta 1000 |
+| `for_everyone` | booleano; solo con `can_target_organization` |
+| `group_ids[]` | obligatorio si no es `for_everyone`; de `options.groups` |
+| `waive_charge` | booleano, solo `sin_clase` (se ignora si ninguna clase se puede dejar sin cobrar) |
+
+→ `201` con el evento. Errores `422`: "Elegí al menos un grupo.", "Solo podés publicar para tus grupos.",
+"La fecha de fin no puede ser anterior al inicio.", "Un día sin clase no puede empezar antes de hoy.",
+"Elegí hasta 92 días.". Sin permiso → `403`.
+
+**Día sin clase:** suspende las clases de esos grupos y días (las crea si todavía no existían) con el título como
+motivo, como `POST classes/{id}/suspension` (con `waive_charge`, las mismas reglas de cuotas). No toca las clases que
+ya empezaron o tienen asistencia, las reprogramadas ni las que ya estaban suspendidas. Las clases que se generen
+después en esos días (grupo u horario nuevo) nacen suspendidas. No salen avisos de día de clase de las suspendidas.
+
+#### `POST events/preview`
+
+Mismo cuerpo que `POST events` (y `event_id` al editar), sin guardar nada:
+
+```json
+{
+  "data": {
+    "recipients": { "families": 48, "instructors": 3 },
+    "classes": {
+      "suspended": 12, "skipped_started": 2, "already_off": 1,
+      "items": [{ "date": "2026-07-07", "starts_at": "17:00", "group": { "id": 4, "name": "Sub-10" } }]
+    },
+    "can_waive_charge": true
+  }
+}
+```
+
+- `recipients`: a cuántas familias y técnicos les llega (sin contar a quien publica).
+- `classes` solo en `sin_clase` (`null` en `evento`): las que se suspenden (`items`, hasta 50), las que no se tocan
+  porque ya empezaron o tienen asistencia y las que ya estaban suspendidas o reprogramadas. Al editar, `suspended`
+  cuenta el resultado final.
+- `can_waive_charge`: alguna de esas clases es de una temporada por día de entrenamiento (mostrar "No cobrar").
+
+#### `PUT events/{id}`
+
+Mismo cuerpo que `POST events` (salvo `kind`, que no cambia) más `notify` (por defecto `true`) → el evento. En un día
+sin clase vuelve a calcular: suspende los días o grupos nuevos y vuelve a programar las clases que había suspendido y
+ya no corresponden (solo las que siguen suspendidas por este evento y no empezaron). Cancelado → `422`. Sin
+`can_edit` → `403`.
+
+#### `POST events/{id}/cancel`
+
+`{ "reason": "Se pasó para el sábado." }` (opcional) → el evento cancelado. En un día sin clase, las clases que siguen
+suspendidas por él y no empezaron vuelven a quedar programadas (y vuelven a contar para las cuotas). Una clase que el
+técnico ya reanudó o reprogramó a mano no es más del evento. Sin `can_cancel` → `403`. No hay `DELETE`.
+
+### Push
+
+Un aviso por persona (aunque tenga varios hijos o grupos), a los tutores y alumnos adultos de los inscriptos en esos
+grupos y a sus técnicos (todo el club: todos los miembros activos), nunca a quien publicó. Con copia por correo. Un
+día sin clase **no** manda además un `class_suspended` por cada clase. `data` lleva `organization` (slug).
+
+| `type` | Ejemplo | `route` |
+|---|---|---|
+| `event_published` | "Torneo: Apertura Sub-10" · "Sáb 11/10, 8:00 · Club Olimpia" | `/eventos/7` |
+| `event_changed` | "Cambió: Apertura Sub-10" · "Ahora es el dom 12/10, 9:00" | `/eventos/7` |
+| `event_cancelled` | "Se canceló: Apertura Sub-10 (sáb 11/10)" | `/eventos/7` |
+| `days_off` | "Sin clases del 7 al 18/7" · "Vacaciones de invierno. Mateo (Sub-10) no tiene clase." | `/calendario?fecha=2026-07-07` |
+| `days_off_cancelled` | "Vuelven las clases del 7 al 18/7" | `/calendario?fecha=2026-07-07` |
+
+`event_changed` solo si se pidió `notify` y cambió la fecha, la hora, el lugar o los grupos (a los grupos nuevos les
+llega `event_published`).
