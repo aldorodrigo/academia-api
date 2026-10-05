@@ -5,9 +5,11 @@ namespace App\Filament\Resources\Scholarships;
 use App\Actions\Billing\ScholarshipDecision;
 use App\Enums\ScholarshipStatus;
 use App\Filament\Resources\Scholarships\Pages\ManageScholarships;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\Charge;
 use App\Models\Scholarship;
+use App\Support\Vocabulary;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Textarea;
@@ -25,6 +27,8 @@ use UnitEnum;
  */
 class ScholarshipResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Scholarship::class;
 
     protected static ?string $slug = 'becas';
@@ -104,7 +108,8 @@ class ScholarshipResource extends Resource
             ->count();
 
         return $issued === 0 ? null
-            : "Hay {$issued} cuotas ya emitidas desde el {$scholarship->valid_from->format('d/m/Y')}: la beca no se aplica a esas. "
+            : 'Hay '.Vocabulary::count($issued, 'cuota ya emitida', 'cuotas ya emitidas')
+                ." desde el {$scholarship->valid_from->format('d/m/Y')}: la beca no se aplica a ".($issued === 1 ? 'esa' : 'esas').'. '
                 .'Si corresponde, anulalas en Cuotas con "Volver a emitirla" y se rehacen con la beca.';
     }
 

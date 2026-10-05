@@ -110,7 +110,7 @@ class ManageCharges extends ManageRecords
                     ->default(fn () => DueDate::next(Filament::getTenant(), Filament::getTenant()->today())->toDateString())
                     ->required(),
                 Radio::make('target')->label('A quién')
-                    ->options(['group' => 'Toda una '.Terms::singular('group', 'Categoría'), 'students' => ucfirst(Terms::plural('student', 'Jugador')).' puntuales'])
+                    ->options(['group' => Terms::gendered('group', 'Categoría', 'Todo', 'Toda').' '.Terms::a('group', 'Categoría'), 'students' => ucfirst(Terms::plural('student', 'Jugador')).' puntuales'])
                     ->default('group')
                     ->live(),
                 Select::make('group_id')->label(Terms::label('group', 'Categoría'))

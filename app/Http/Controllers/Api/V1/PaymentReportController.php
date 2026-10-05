@@ -3,19 +3,19 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Billing\PaymentReportAccess;
+use App\Actions\Billing\ReceiptNotice;
 use App\Actions\Billing\ReviewPaymentReport;
 use App\Actions\Billing\SubmitPaymentReport;
+use App\Filament\Support\Terms;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\PaymentReportResource;
 use App\Http\Resources\Api\V1\ReviewPaymentReportResource;
-use App\Models\MoneyAccount;
 use App\Models\PaymentReport;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -75,8 +75,8 @@ class PaymentReportController extends Controller
             throw ValidationException::withMessages(['status' => 'Este comprobante ya fue revisado.']);
         }
 
+        // Soft delete: queda el registro y el archivo, y deja de aparecer.
         $report->delete();
-        Storage::disk('local')->delete($report->proof_path);
 
         return response()->noContent();
     }
@@ -109,7 +109,7 @@ class PaymentReportController extends Controller
 
         $account = null;
         if (isset($data['money_account_id'])) {
-            $account = MoneyAccount::query()->where('is_active', true)->find($data['money_account_id']);
+            $account = PaymentReportAccess::paymentAccounts()->firstWhere('id', (int) $data['money_account_id']);
             if ($account === null) {
                 throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta activa.']);
             }
@@ -123,18 +123,21 @@ class PaymentReportController extends Controller
             isset($data['amount']) ? (int) $data['amount'] : null,
         );
 
-        return new ReviewPaymentReportResource($report->load(['family.students', 'user', 'moneyAccount', 'payment']));
+        // Si la registró alguien del club, a quién le llega el recibo (a quien no, WhatsApp con el link).
+        return (new ReviewPaymentReportResource($report->load(['family.students', 'user', 'moneyAccount', 'payment'])))
+            ->additional(['notice' => $report->registered_by_staff ? ReceiptNotice::toArray($report->payment) : null]);
     }
 
     public function reject(Request $request, int $report, ReviewPaymentReport $review): ReviewPaymentReportResource
     {
         $this->authorizeReview($request);
+        $report = $this->find($report);
         $data = $request->validate(
             ['reason' => ['required', 'string', 'max:500']],
-            ['reason.required' => 'Contale al tutor por qué no lo aprobás.'],
+            ['reason.required' => 'Contale '.Terms::toPerson('guardian', 'Tutor', $report->reporterGender()).' por qué no lo aprobás.'],
         );
 
-        $report = $review->reject($this->find($report), $request->user(), $data['reason']);
+        $report = $review->reject($report, $request->user(), $data['reason']);
 
         return new ReviewPaymentReportResource($report->load(['family.students', 'user', 'moneyAccount', 'payment']));
     }

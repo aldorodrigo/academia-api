@@ -47,8 +47,11 @@ class ReportController extends Controller
     public function delinquents(Request $request): JsonResponse
     {
         $this->authorizeReports($request);
-        $request->validate(['min_months' => ['nullable', 'integer', 'min:1', 'max:24']]);
-        $report = new DelinquentsReport($this->current->get(), (int) $request->input('min_months', 1));
+        $request->validate([
+            'min_months' => ['nullable', 'integer', 'min:1', 'max:24'],
+            'withdrawn' => ['nullable', 'in:'.implode(',', DelinquentsReport::WITHDRAWN_FILTERS)],
+        ]);
+        $report = new DelinquentsReport($this->current->get(), (int) $request->input('min_months', 1), $request->input('withdrawn'));
 
         return response()->json(['data' => [...$report->data(), ...$report->links()]]);
     }

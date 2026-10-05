@@ -178,7 +178,7 @@ describe('informes', function () {
         Role::query()->where('organization_id', $this->jakare->id)->where('name', 'tesorero')->sole()->givePermissionTo('View:Reports');
         $api = fn (User $user, string $uri) => $this->actingAs($user, 'sanctum')->getJson("/api/v1/{$uri}", ['X-Organization' => 'jakare']);
 
-        $api($treasurer, 'organization')->assertJsonPath('data.membership.permissions', ['view_reports', 'review_payment_reports']);
+        $api($treasurer, 'organization')->assertJsonPath('data.membership.permissions', ['view_reports', 'waive_charges', 'review_payment_reports', 'collect_payments']);
 
         $api($treasurer, 'reports/balances')
             ->assertOk()

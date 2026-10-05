@@ -3,6 +3,7 @@
 use App\Actions\Billing\RegisterPayment;
 use App\Actions\Billing\VoidPayment;
 use App\Enums\DiscountType;
+use App\Enums\Gender;
 use App\Enums\PaymentMethod;
 use App\Http\Controllers\ReceiptController;
 use App\Models\Charge;
@@ -202,6 +203,46 @@ describe('recibo', function () {
 
         $this->travel(31)->minutes();
         $this->get($url)->assertForbidden();
+    });
+
+    it('dice "Alumno" (o lo que usen) en vez de "Jugador"', function () {
+        $this->jakare->update(['terminology' => ['student' => 'Alumno']]);
+        $payment = pay(150000);
+
+        $html = view('receipts.show', [
+            'payment' => $payment->load(['organization', 'family', 'guardian', 'moneyAccount', 'allocations.charge.student']),
+            'organization' => $payment->organization,
+            'allocations' => $payment->originalAllocations(),
+            'credit' => $payment->creditGenerated(),
+            'money' => fn (int $amount) => Money::pyg($amount),
+        ])->render();
+
+        expect($html)->toContain('<th>Alumno</th>')->not->toContain('Jugador');
+    });
+
+    it('la columna nombra a los chicos según su género: Jugadora si son todas chicas', function () {
+        $render = fn (Payment $payment) => view('receipts.show', ReceiptController::viewData(
+            $payment->load(['organization', 'family', 'guardian', 'moneyAccount', 'allocations.charge.student']),
+        ))->render();
+
+        // Sin género cargado: la palabra del club.
+        $charge = fn (Student $student) => chargeOf($student, '2026-08-01');
+        $sofia = pay($charge($this->sofia)->pendingAmount(), [$charge($this->sofia)->id => $charge($this->sofia)->pendingAmount()]);
+        expect($render($sofia))->toContain('<th>Jugador</th>');
+
+        $this->sofia->update(['gender' => Gender::Female]);
+        expect($render($sofia->fresh()))->toContain('<th>Jugadora</th>');
+
+        // Mateo y Sofía en el mismo recibo: masculino genérico.
+        $this->mateo->update(['gender' => Gender::Male]);
+        $september = fn (Student $student) => chargeOf($student, '2026-09-01');
+        $amounts = [$september($this->mateo)->id => $september($this->mateo)->pendingAmount(), $september($this->sofia)->id => $september($this->sofia)->pendingAmount()];
+        $both = pay(array_sum($amounts), $amounts);
+        expect($render($both))->toContain('<th>Jugador</th>');
+
+        // Con "Alumna" como palabra del club y un varón: Alumno.
+        $this->jakare->update(['terminology' => ['student' => 'Alumna']]);
+        expect($render($both->fresh()))->toContain('<th>Alumno</th>');
     });
 
     it('monto en letras', function () {

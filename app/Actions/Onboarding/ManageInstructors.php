@@ -3,6 +3,7 @@
 namespace App\Actions\Onboarding;
 
 use App\Actions\Invitations\CreateInvitation;
+use App\Enums\Gender;
 use App\Enums\OrganizationRole;
 use App\Models\Group;
 use App\Models\Invitation;
@@ -28,7 +29,7 @@ class ManageInstructors
      * @param  list<int>  $groupIds
      * @return array{user: ?User, invitation: ?Invitation, token: ?string}
      */
-    public function invite(Organization $organization, User $actor, string $name, ?string $email, array $groupIds, ?string $phone = null): array
+    public function invite(Organization $organization, User $actor, string $name, ?string $email, array $groupIds, ?string $phone = null, ?Gender $gender = null): array
     {
         $phone = filled($phone) ? Phone::mobile($phone) : null;
         $email = $phone === null && filled($email) ? mb_strtolower(trim($email)) : null;
@@ -57,6 +58,7 @@ class ManageInstructors
             name: $name,
             groupIds: $groupIds,
             phone: $phone,
+            gender: $gender,
         );
 
         return ['user' => null, 'invitation' => $invitation, 'token' => $token];

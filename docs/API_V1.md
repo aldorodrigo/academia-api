@@ -37,6 +37,8 @@ Muestra la invitación antes de aceptarla.
 
 - Si la invitación no existe, ya fue usada o venció, responde `404 {message: "La invitación no es válida o ya venció."}`.
 - `user_exists` indica si ya hay una cuenta con ese email. Si es `true`, la app pide solo la contraseña.
+- Límite (este endpoint y `accept`): 15 pedidos por minuto **por invitación** y 120 por minuto por IP (varias familias
+  en el mismo wifi aceptan a la vez). Al superarlo, `429 {message: "Demasiados intentos. Probá de nuevo en unos minutos."}`.
 
 ### `POST invitations/{token}/accept` (público, con throttle)
 
@@ -46,6 +48,7 @@ Muestra la invitación antes de aceptarla.
 | `password` | Siempre. Si la cuenta es nueva, mínimo 8 caracteres; si ya existe, la contraseña actual |
 | `password_confirmation` | Obligatorio si `user_exists = false` |
 | `device_name` | Siempre |
+| `terms` | `true`, obligatorio si `user_exists = false` (como en `auth/register`: `422` "Tenés que aceptar los términos."); se guarda la versión y la fecha |
 
 Respuesta `201 {token, organization: "jakare"}`.
 
@@ -512,7 +515,8 @@ Grupos del técnico: `[{ "id", "name", "program", "schedules", "students_count" 
 
 #### `GET agenda`
 
-La próxima clase de cada alumno a cargo (hoy o en los próximos 7 días; la de hoy se muestra hasta que termina).
+La próxima clase de cada alumno a cargo (hoy o en los próximos 7 días; la de hoy se muestra hasta que termina),
+ordenadas por fecha y hora de inicio.
 
 ```json
 {
@@ -977,14 +981,17 @@ Lo que la app y el panel ofrecen como sugerencia:
   "data": {
     "organization_types": [
       { "value": "club", "label": "Club", "description": "Club o asociación deportiva",
-        "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Jugador", "instructor": "Técnico", "guardian": "Tutor" } },
+        "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Jugador", "instructor": "Técnico", "guardian": "Tutor", "space": "Cancha" } },
       { "value": "academy", "label": "Academia", "description": "Academia de deporte, danza, música o idiomas",
-        "terminology": { "program": "Disciplina", "group": "Grupo", "student": "Alumno", "instructor": "Profesor", "guardian": "Tutor" } }
+        "terminology": { "program": "Disciplina", "group": "Grupo", "student": "Alumno", "instructor": "Profesor", "guardian": "Tutor", "space": "Sala" } }
     ],
     "terminology_options": {
       "student": ["Jugador", "Alumno", "Alumna", "Atleta"],
       "instructor": ["Técnico", "Profesor", "Profesora", "Instructor", "Entrenador"],
-      "group": ["Categoría", "Grupo", "Nivel", "Clase"]
+      "group": ["Categoría", "Grupo", "Nivel", "Clase"],
+      "space": ["Cancha", "Sala", "Aula", "Espacio", "Pileta"],
+      "program": ["Disciplina", "Actividad", "Deporte", "Taller"],
+      "guardian": ["Tutor", "Responsable", "Encargado"]
     },
     "programs": [
       { "name": "Fútbol", "group_criterion": "birth_year" },
@@ -1011,7 +1018,8 @@ libre (o es una palabra reservada), `available: false` y `suggestion` con una al
 `201 { "data": { "slug": "club-jakare", "name": "Club Jakare", "type": "club" } }`.
 
 - Paraguay, ₲ y `America/Asuncion`. Crea los roles, los conceptos de cobro y la Caja, y deja al usuario como `admin`.
-- `terminology` es opcional (por defecto, la del tipo); `program` y `guardian` también se pueden mandar.
+- `terminology` es opcional (por defecto, la del tipo); `program`, `guardian` y `space` también se pueden mandar
+  (las claves válidas son las de `Organization::DEFAULT_TERMINOLOGY`; otra clave da `422`).
 - `403` si la cuenta no está verificada ("Verificá tu cuenta para crear un club."). `422` si el slug no está libre,
   es reservado o no tiene solo letras minúsculas, números y guiones (3 a 40 caracteres).
 - Después, `GET me` incluye la organización nueva.
@@ -1053,6 +1061,17 @@ Sin ese permiso, los endpoints de esta sección responden `403`.
   menos un técnico (con el rol vigente, invitado o el propio admin; bloqueado sin categorías).
 - `completed`: todos los pasos hechos u omitidos. `next`: el primer paso pendiente (`null` si está completa).
 - `dismissed`: la guía se cerró; no se abre sola, pero sigue la tarjeta del inicio hasta completarla.
+- La descripción de `programs` dice "… que ofrece el club / la academia / la escuela / la comisión" según el tipo.
+- `terminology_suggestion` (vocabulario por deporte, ver `PLAN_VOCABULARIO.md`): `null` o
+  `{ "programs": ["Fútbol"], "current": { "student": "Alumno", "instructor": "Profesor", "group": "Grupo", "space": "Sala" },
+  "suggested": { "student": "Jugador", "instructor": "Técnico", "group": "Categoría", "space": "Cancha" } }`.
+  Cada deporte con lo suyo: de equipo (Fútbol, Futsal, Básquet, Vóley, Handball, Hockey, Rugby) Jugador, Técnico,
+  Categoría y Cancha; Natación Alumno, Profesor, Nivel y Pileta; Tenis y Pádel Alumno, Profesor, Nivel y Cancha (se
+  compara sin tildes y por la primera palabra: "Fútbol 7"). Manda la primera disciplina elegida que tenga propuesta
+  (`programs` la trae). Solo las palabras que siguen como vinieron con el tipo y son distintas, y mientras el
+  vocabulario no esté confirmado. La app la muestra al guardar el paso 1 y, si se cierra sin contestar, la recuerda
+  en la tarjeta de la guía ("Elegí cómo les dicen", también con la guía completa) hasta que responda con
+  `PUT organization/terminology`.
 
 #### `PUT onboarding`
 
@@ -1061,6 +1080,37 @@ Sin ese permiso, los endpoints de esta sección responden `403`.
 #### `PUT onboarding/steps/{key}`
 
 `{ "skipped": true }` → el mismo objeto. `422` si el paso no se puede omitir.
+
+#### `GET onboarding/steps/groups/draft` · `PUT …` · `DELETE …`
+
+Borrador del paso 2 ("Se guarda solo"): lo que se está armando en categorías y horarios, en la API para retomarlo
+desde cualquier dispositivo, en la app o en el panel (el panel lo carga al abrir "Categorías y horarios" y guarda ahí
+cada cambio).
+
+- `GET` → `{ "data": { "draft": null | {...}, "updated_at": "2026-10-04T10:00:00-03:00" } }`.
+- `PUT` `{ "draft": { "program_id": 1, "ages": { "from": 5, "to": 16, "span": 2 }, "levels": ["Inicial"], "capacity": 20,
+  "groups": [ { "name": "Sub-8", "min_age": 7, "max_age": 8, "level": null,
+  "slots": [ { "weekdays": [2, 4], "starts_at": "17:00", "ends_at": "18:30", "venue_id": 11 } ] } ] } }` → el mismo
+  objeto. Se guarda solo lo que el paso entiende (hasta 40 categorías y 10 horarios cada una), también el cupo
+  (`capacity`, entero de 1 a 1000 o `null`; 422 si no), las edades y los niveles. La app manda los cambios con una
+  pausa de 800 ms y lo pendiente al salir de la pantalla; al retomar, el cupo vuelve al campo y se manda en cada
+  categoría de `POST setup/groups`.
+- `DELETE` → `204` (no hay nada a medio armar).
+- `POST setup/groups` (y el panel al crear) lo da por usado. Nunca se borra: queda como usado (soft delete).
+- Otra clave que `groups` → `404`. Sin `configure_organization` → `403`.
+
+#### `PUT organization/terminology`
+
+"Cómo les dicen" (la propuesta de deporte y "Mi cuenta" → "Cómo les dicen"):
+`{ "terminology": { "group": "Categoría", "instructor": "Técnico", "space": "Cancha" } }` →
+`{ "data": { "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Alumno", "instructor": "Técnico", "guardian": "Tutor", "space": "Cancha" } } }`.
+
+- Claves `program`, `group`, `student`, `instructor`, `guardian`, `space` (en singular, hasta 30 caracteres; se guarda
+  con mayúscula inicial). Las que no se mandan quedan igual; vacía o `null` = la del tipo.
+- `{ "terminology": {} }` = "Dejar como estaba": no cambia nada.
+- Siempre deja el vocabulario confirmado: `terminology_suggestion` no vuelve a aparecer. También se confirma al
+  cambiar el vocabulario en Configuración del panel y al crear la organización con palabras distintas de las del tipo.
+- Después, `GET organization` trae el vocabulario nuevo.
 
 ### Paso 1: disciplinas
 
@@ -1201,17 +1251,23 @@ El estado (aunque esté incompleto) →
 ```json
 {
   "data": {
-    "dates": { "ends_on": "2027-12-31", "name": "2027" },
+    "dates": { "ends_on": "2027-12-31", "name": "Temporada 2027" },
     "plan": { "fee_frequency": "mensual", "due_days": 9,
               "due_days_by_frequency": { "mensual": 9, "quincenal": 3, "semanal": 3, "diaria": 5 } },
     "kinds": [ { "value": "anual", "label": "Anual", "example": "1 ene – 31 dic" } ],
     "summary": "2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota mensual de ₲ 150.000, que vence el día 10 de cada mes. Inscripción ₲ 100.000. Cada cuota se crea al empezar cada mes.",
-    "examples": [ { "period": "enero 2027", "due_on": "10/01/2027", "amount": "₲ 150.000" } ],
+    "examples": [ { "period": "enero 2027", "due_on": "10/01/2027", "due_note": null, "amount": "₲ 150.000" } ],
     "due_example": "Por ejemplo, «Cuota enero 2027» vence el 10/01/2027.",
     "periods_count": 12
   }
 }
 ```
+
+- `examples[].due_note`: con la temporada ya empezada, la cuota del período en curso vence como para quien se inscribe
+  hoy (los mismos días para pagar desde que se inscribe: `max(vencimiento, hoy + due_days)`, la misma regla que las
+  cuotas) y `due_note` dice `"para los que se inscriben hoy"` (ej. inscripto el 03/01 con 9 días: vence el 12/01). Si
+  no cambia, `null`. Con `mid_period: proximo`, el período en curso no cambia.
+- El nombre sugerido de una temporada anual es "Temporada 2027" (la app no le antepone "Temporada" si ya lo dice).
 
 - `dates`: fin y nombre sugeridos para `kind` y `starts_on` (la app los aplica al cambiar la duración o el inicio).
 - `plan`: frecuencia y vencimiento sugeridos para `kind` (la app los aplica al cambiar la duración) y el vencimiento
@@ -1281,7 +1337,8 @@ En `GET setup/instructors`, cada técnico suma `"phone"` (o `null`) y `email` pu
 #### `PUT setup/instructors/me`
 
 `{ "teaches": true, "group_ids": [3, 4] }` → el objeto de `GET setup/instructors`. Asigna (o termina) el rol de técnico
-del usuario actual y sus categorías.
+del usuario actual y sus categorías. Con `teaches: true` hay que elegir al menos una (si hay categorías): `422` "Elegí
+al menos una categoría." (la app y el panel arrancan sin ninguna tildada).
 
 #### `PUT setup/instructors/{user_id}`
 
@@ -1289,7 +1346,7 @@ del usuario actual y sus categorías.
 
 #### `POST setup/invitations/{id}/resend` · `DELETE setup/invitations/{id}`
 
-Reenviar → `{ "link": "…", "whatsapp_url": "…" }` (token nuevo, 14 días más; `whatsapp_url` solo si la invitación es a un celular). Borrar → `204` (revoca la invitación pendiente).
+Reenviar → `{ "link": "…", "whatsapp_url": "…" }` (token nuevo, 14 días más; `whatsapp_url` solo si la invitación es a un celular). Es la **misma** invitación (mismo `invitation_id`, no se suma otra a la lista): el link anterior deja de servir. Invitar otra vez a la misma persona (`POST setup/instructors`, o "Invitar"/"Reenviar invitación" en el panel) también reutiliza su invitación pendiente o vencida. Nada se borra: los datos anteriores quedan en el historial de la invitación y, si hubiera otra abierta a la misma persona, queda revocada. Borrar → `204` (revoca la invitación pendiente; no se elimina).
 
 ### Invitaciones (se amplía)
 
@@ -1364,7 +1421,8 @@ de una familia → `422` "Elegí qué cuotas pagás."). Una cuota que ya está e
 
 #### `DELETE payment-reports/{id}`
 
-Retira un comprobante propio en revisión → `204`. Ya revisado → `422`.
+Retira un comprobante propio en revisión → `204` (soft delete: deja de aparecer; quedan el registro y el archivo). Ya
+revisado → `422`.
 
 ### Quien valida (permiso `review_payment_reports` en `GET organization`)
 
@@ -1390,12 +1448,15 @@ Retira un comprobante propio en revisión → `204`. Ya revisado → `422`.
 informada o la primera bancaria, la fecha y el monto del comprobante) → el comprobante aprobado. Registra el pago por
 transferencia (referencia y comprobante incluidos) imputado a las cuotas elegidas que sigan pendientes, del
 vencimiento más viejo al más nuevo; lo que sobra queda como saldo a favor. Ya revisado → `422`. Push al tutor:
-"Aprobamos tu pago de ₲ 210.000. Recibo N° 000124.".
+"Aprobamos tu pago de ₲ 210.000. Recibo N° 000124.". Si lo registró alguien del club (`registered_by`), el aviso va a la
+familia y la respuesta suma `notice` (como en `POST collections`: a quién le llega el recibo y WhatsApp para quien no
+tiene la app); si lo informó el tutor, `notice: null`.
 
 #### `POST payment-reports/{id}/reject`
 
 `{ "reason": "El comprobante no se lee." }` (obligatorio) → el comprobante rechazado. Ya revisado → `422`. Push al
-tutor: "No pudimos aprobar tu pago de ₲ 210.000: El comprobante no se lee.".
+tutor: "No pudimos aprobar tu pago de ₲ 210.000: El comprobante no se lee.". Si lo registró alguien del club, el motivo
+le llega a esa persona (no a la familia).
 
 ### Push
 
@@ -1429,3 +1490,813 @@ código de la copia, invitaciones a celular y correo).
   porque los antivirus de correo abren los links solos.
 - **Vista previa de los links:** la app web tiene las etiquetas `og:` de Tuku (título, descripción y la tarjeta
   `https://tukuha.app/brand/tuku-tarjeta-redes.png`), que WhatsApp muestra al compartir una invitación.
+
+## Bajas y condonación (implementado)
+
+La baja y la condonación se hacen en el panel (`docs/PLAN_BAJAS.md`, `business-logic.md` §3 y §5). La deuda de un
+alumno dado de baja queda como histórica hasta que se paga, se anula o se condona; la app la muestra marcada.
+
+### Técnico: "Dejó de venir"
+
+#### `GET groups/{id}?month=2026-06` (se amplía)
+
+Cada alumno de `students` suma `"dropout_reported_on": "2026-06-03"` (fecha local del aviso) o `null`.
+
+#### `POST groups/{id}/students/{student}/dropout`
+
+Avisa al club que el alumno dejó de venir (quien puede tomar asistencia en el grupo). No da la baja: la inscripción
+queda marcada y les llega un aviso (push `dropout_reported` con `route: "/inicio"`, y correo con "Ver en el panel") a
+quienes pueden darla. Avisar de nuevo cambia la nota sin volver a mandar el aviso.
+
+```json
+{ "note": "No viene hace 3 semanas" }
+```
+
+`note` es opcional (hasta 255). Responde `{ "data": { "dropout_reported_on": "2026-06-03" } }`. 404 si el grupo no
+es del técnico o el alumno no está activo o becado en el grupo (por ejemplo, ya dado de baja).
+
+#### `DELETE groups/{id}/students/{student}/dropout`
+
+Deshace el aviso ("Sigue viniendo"). Responde `{ "data": { "dropout_reported_on": null } }`.
+
+### Informes (permiso `view_reports`)
+
+#### `GET reports/delinquents?min_months=1&withdrawn=only` (se amplía)
+
+- Cada familia suma `withdrawn`: sus hijos dados de baja (ninguna inscripción sin baja en temporadas vigentes o
+  próximas), con la fecha de la última baja. Vacío si no hay.
+- `withdrawn` (opcional): `only` (familias con algún hijo dado de baja) o `exclude` (sin ninguno). Sin el parámetro,
+  todas; otro valor, 422. Viaja en los links de PDF y Excel, que suman la columna "Dados de baja".
+
+```json
+{
+  "family": "Familia Zárate",
+  "students": ["Matías"],
+  "overdue": 450000,
+  "oldest_due_on": "2026-04-10",
+  "months_overdue": 3,
+  "contact": { "name": "Rosa Zárate", "phone": "0981 222 333" },
+  "withdrawn": [{ "student_id": 9, "student": "Matías", "on": "2026-06-03" }]
+}
+```
+
+#### `GET reports/balances` (se amplía)
+
+Cada familia suma `withdrawn`, igual que en Morosos.
+
+### Cargos
+
+- `status` suma `condonado` ("Condonado"): se perdonó lo que faltaba pagar, con motivo y quién. Como las anuladas, no
+  aparece en `GET account` ni suma en saldos e informes. Si se deshace, vuelve.
+
+### `GET organization` (se amplía)
+
+`membership.permissions` suma `withdraw_students` (dar de baja: editar inscripciones; admin, secretario y
+prosecretario por defecto) y `waive_charges` (condonar y deshacer: admin, tesorero y presidente por defecto).
+
+### Tutor: "Deja el club"
+
+#### `POST students/{id}/leaving`
+
+El tutor (o el alumno adulto) avisa que el alumno deja el club. Marca todas sus inscripciones activas o becadas de
+temporadas vigentes o próximas y manda **un** aviso (push `dropout_reported`, `route: "/bajas"`, y correo) a quienes
+pueden dar de baja. No da la baja.
+
+```json
+{ "message": "Nos mudamos a Encarnación, ¡gracias por todo!" }
+```
+
+`message` es opcional (hasta 500). Responde `{ "data": { "leaving_reported_on": "2026-06-02" } }`. 404 si no es un
+alumno a su cargo; 422 si no tiene inscripciones vigentes.
+
+#### `DELETE students/{id}/leaving`
+
+Deshace el aviso. Responde `{ "data": { "leaving_reported_on": null } }`.
+
+#### `GET students` · `GET students/{id}` (se amplía)
+
+Cada alumno suma `"leaving_reported_on": "2026-06-02"` o `null`.
+
+### Quien da de baja (`withdraw_students`) o condona (`waive_charges`)
+
+#### `GET dropout-reports` (`withdraw_students`)
+
+Avisos de baja sin decidir, el más viejo primero.
+
+```json
+{
+  "data": [
+    {
+      "enrollment_id": 31,
+      "student": { "id": 9, "full_name": "Matías Zárate" },
+      "group": "Sub-10",
+      "program": "Fútbol",
+      "source": "guardian",
+      "reported_by": "Rosa Zárate",
+      "reported_on": "2026-06-02",
+      "note": "Nos mudamos a Encarnación"
+    }
+  ]
+}
+```
+
+`source`: `instructor` ("dejó de venir") o `guardian` ("deja el club").
+
+#### `GET staff/students/{id}` (`withdraw_students` o `waive_charges`)
+
+```json
+{
+  "data": {
+    "id": 9,
+    "full_name": "Matías Zárate",
+    "first_name": "Matías",
+    "enrollments": [
+      {
+        "id": 31, "program": "Fútbol", "group": "Sub-10", "season": "2026",
+        "status": "activo", "status_label": "Activo", "enrolled_on": "2026-04-01",
+        "ended_on": null, "withdrawal_reason": null, "can_withdraw": true,
+        "dropout_report": { "source": "guardian", "reported_by": "Rosa Zárate", "reported_on": "2026-06-02", "note": "…" }
+      }
+    ],
+    "notice": {
+      "recipients": 1,
+      "message": "Hola, te contamos que registramos la baja de Matías en Club Jakare. ¡Gracias por todo este tiempo compartido! Las puertas siempre van a estar abiertas: cuando quieran volver, escribinos y los esperamos con mucho gusto."
+    },
+    "charges": [
+      {
+        "…": "los campos de cada cargo de GET account",
+        "status": "condonado",
+        "pending_amount": 0,
+        "waiver": { "amount": 150000, "reason": "Dado de baja", "by": "Laura Gómez", "on": "2026-06-03" },
+        "can_waive": false,
+        "can_unwaive": true
+      }
+    ],
+    "balance": 300000
+  }
+}
+```
+
+- `enrollments`: las de temporadas vigentes o próximas. `can_withdraw`: no está de baja ni finalizada y el usuario
+  puede editarla.
+- `notice.recipients`: tutores con la app (y el alumno adulto con cuenta) que recibirían el aviso de baja;
+  `notice.message`: el mensaje sugerido.
+- `notice.reach` *(2026-10-05)*: a quién le llega y por dónde, de verdad (cada tutor y el alumno adulto con cuenta):
+
+  ```json
+  "reach": [
+    { "name": "Laura Benítez", "channels": ["app"], "phone": null, "whatsapp_phone": null },
+    { "name": "Pedro Benítez", "channels": [], "phone": "0981 222 333", "whatsapp_phone": "595981222333" }
+  ]
+  ```
+
+  `channels`: `app` (tiene cuenta: le queda en "Avisos", siempre), `push` (tiene la app instalada con notificaciones),
+  `mail` (tiene un correo para copias). Vacío = no tiene cuenta, no le llega: con `whatsapp_phone` (solo dígitos) la app
+  ofrece "Mandar por WhatsApp" (`https://wa.me/{whatsapp_phone}?text=…` con el mensaje como quedó). El texto lo arma la
+  app: "A Laura Benítez le llega en la app, como notificación en el celular y por correo." / "Pedro Benítez no tiene la
+  app: no le llega. Podés mandárselo por WhatsApp." El registro de actividad del aviso guarda estos canales.
+- `charges`: solo con `waive_charges` (si no, `null`). Son las cuotas sin anular y las condonadas, las más nuevas
+  primero. `balance` es lo que debe sin las próximas.
+
+#### `POST enrollments/{id}/withdraw` (`withdraw_students`)
+
+```json
+{ "ended_on": "2026-06-03", "reason": "Se mudó", "notify": true, "message": "Hola Rosa, ¡los esperamos cuando quieran volver!" }
+```
+
+- `ended_on`: entre la inscripción y hoy. `reason`: obligatorio (hasta 255).
+- `notify` y `message`: el aviso a la familia; `message` es obligatorio con `notify: true` (hasta 1000).
+- Responde `{ "data": { "status": "baja", "notified": 1 } }`. 422 si ya está de baja, la temporada terminó o la fecha
+  no vale. La deuda queda: solo se anulan las cuotas futuras sin pagos.
+
+#### `DELETE enrollments/{id}/dropout` (`withdraw_students`)
+
+"Sigue viniendo": descarta el aviso de baja. Responde `{ "data": { "dropout_report": null } }`.
+
+#### `POST charges/waive` (`waive_charges`)
+
+```json
+{ "charge_ids": [501, 502], "reason": "Dado de baja, lo decidió la comisión" }
+```
+
+Condona lo que falta pagar de cada cuota. Responde `{ "data": { "waived": 300000 } }`. 422 sin permiso, sin motivo o
+si alguna está anulada, pagada o ya condonada (no condona ninguna).
+
+#### `POST charges/{id}/unwaive` (`waive_charges`)
+
+`{ "reason": "Se condonó por error" }`. Deshace la condonación: la cuota vuelve a quedar pendiente por lo condonado y
+queda quién, cuándo y por qué. Responde la cuota como en `staff/students` (`waiver: null`, `can_waive: true`). 422 si
+no está condonada o falta el motivo.
+
+#### Push
+
+- `dropout_reported` (`route: "/bajas"`): "Aviso de baja". Ejemplo: "Rosa Zárate (familia) avisó que Matías Zárate
+  deja el club: «…». Decidí si le das la baja."
+- `student_withdrawn` (`route: "/inicio"`): "Baja de Matías", con el mensaje que eligió quien dio la baja.
+
+## Bandeja de avisos (2026-10-05)
+
+Cada aviso (push y su copia por correo) queda guardado para la cuenta, en la organización en la que se mandó: le
+llega aunque no tenga la app instalada con notificaciones ni un correo verificado. Con token + `X-Organization`.
+
+**No entran** los recordatorios de día de clase: `class_reminder` del tutor ("¿Lo llevás?" con "Sí, va" / "No va") y
+`class_today` del técnico ("Tomar asistencia"). Se repiten (hasta 3 por clase) y vencen al empezar la clase; siguen
+llegando por push y correo como siempre. Todo lo demás (bajas, comprobantes, depósitos, inscripciones, cambios de
+clase, clases particulares…) sí entra.
+
+### `GET me/notifications?page=1`
+
+Los avisos de la organización activa (y los que no son de ninguna), los más nuevos primero, de a 20.
+
+```json
+{
+  "data": [
+    {
+      "id": "9b1c6f0e-…",
+      "type": "student_withdrawn",
+      "title": "Baja de Matías",
+      "body": "Hola, te contamos que registramos la baja de Matías en Club Jakare. …",
+      "route": "/inicio",
+      "read_at": null,
+      "created_at": "2026-10-05T11:32:00-03:00"
+    }
+  ],
+  "meta": { "current_page": 1, "last_page": 1, "per_page": 20, "total": 1, "unread": 1 }
+}
+```
+
+- `type` y `route`: los mismos del push (`route` puede ser `null`). Fechas en la hora de la organización.
+- `meta.unread`: sin leer en la organización (para el contador del inicio y de "Mi cuenta").
+
+### `POST me/notifications/{id}/read`
+
+Lo marca leído y responde el aviso. 404 si no es de la cuenta o de otra organización.
+
+### `POST me/notifications/read-all`
+
+Marca leídos todos los de la organización activa. Responde `{ "data": { "unread": 0 } }`.
+
+## Inscripción desde la app
+
+**"Entra ya, se confirma después".** Un miembro activo (normalmente un tutor) pide la inscripción de un hijo: el chico
+queda dado de alta (`RegisterStudent`) con la inscripción **`pendiente`**, aparece en "Mis hijos" y en las clases del
+técnico de esa categoría como "Nuevo, por confirmar" y se le toma asistencia, pero **no se cobra**. Quien confirma
+(secretario, técnico de la categoría o admin) la confirma —se emiten el cargo de inscripción y las cuotas según el plan,
+con `MidPeriod`— o la rechaza con motivo —sale de la lista—. Si quien la pide puede confirmar en esa categoría, **se
+confirma sola**. Siempre queda quién la confirmó o la rechazó. Quien puede crear alumnos también los **carga directo**
+desde la app (`POST students`). Plan: `docs/PLAN_INSCRIPCION_TUTOR.md`. Todo con token + `X-Organization`.
+
+### Objeto solicitud
+
+```json
+{
+  "id": 18,
+  "status": "pendiente",
+  "status_label": "Por confirmar",
+  "child": {
+    "first_name": "Sofía",
+    "last_name": "Benítez",
+    "full_name": "Sofía Benítez",
+    "birth_date": "2018-07-02",
+    "document": "7123456"
+  },
+  "relationship": "madre",
+  "has_medical": true,
+  "notes": null,
+  "season": { "id": 1, "name": "2026", "starts_on": "2026-02-01", "ends_on": "2026-11-30" },
+  "group": { "id": 3, "name": "Sub-8", "program": { "id": 1, "name": "Fútbol" } },
+  "rejection_reason": null,
+  "student_id": 40,
+  "created_at": "2026-10-04T10:15:00-03:00",
+  "reviewed_at": null,
+  "reviewed_by": null,
+  "self_approved": false
+}
+```
+
+- `status`: `pendiente` ("Por confirmar"), `aprobada` ("Aprobada"), `rechazada` ("No aprobada") o `cancelada` ("Cancelada").
+- `relationship`: `padre`, `madre`, `tutor`, `abuelo`, `abuela`, `tio`, `tia` u `otro` (ver "Género y concordancia").
+- `has_medical`: si cargó la ficha médica (los datos no se devuelven: pasan a la ficha del alumno al confirmar).
+- `student_id`: el alumno (existe desde que se pide; `null` si la solicitud se rechazó o canceló y el alta quedó archivada).
+- `reviewed_by`: nombre de quien la confirmó o la rechazó; `self_approved: true` si se confirmó sola.
+
+### Tutor
+
+#### `GET enrollment-requests/options?birth_date=2018-07-02`
+
+Dónde se puede inscribir: una opción por disciplina y temporada vigente o próxima, con sus categorías activas.
+`birth_date` es opcional; con ella llega `suggested_group_id` (por año de nacimiento, solo en disciplinas con ese
+criterio; `null` si no hay una sola que corresponda).
+
+```json
+{
+  "data": [
+    {
+      "program": { "id": 1, "name": "Fútbol" },
+      "season": { "id": 1, "name": "2026", "starts_on": "2026-02-01", "ends_on": "2026-11-30" },
+      "suggested_group_id": 3,
+      "groups": [
+        {
+          "id": 3,
+          "name": "Sub-8",
+          "capacity": 20,
+          "spots_left": 3,
+          "full": false,
+          "suggested": true,
+          "schedules": [{ "weekday": 1, "starts_at": "17:00", "ends_at": "18:30" }]
+        }
+      ]
+    }
+  ]
+}
+```
+
+- `capacity` y `spots_left` son `null` si la categoría no tiene cupo. Ocupan las inscripciones `activo`, `becado` o
+  `pendiente` de esa temporada. Con `full: true` se puede pedir igual (el club decide).
+- Sin opciones (`data: []`): el club todavía no tiene una temporada abierta con categorías.
+
+#### `POST enrollment-requests` (con throttle)
+
+```json
+{
+  "first_name": "Sofía",
+  "last_name": "Benítez",
+  "birth_date": "2018-07-02",
+  "document": "7123456",
+  "relationship": "madre",
+  "season_id": 1,
+  "group_id": 3,
+  "notes": "Es su primer año.",
+  "medical": {
+    "blood_type": "O+",
+    "allergies": "Penicilina",
+    "conditions": null,
+    "medications": null,
+    "emergency_contact_name": "Ana Benítez",
+    "emergency_contact_phone": "0981123456"
+  }
+}
+```
+
+→ `201` con la solicitud: `pendiente` o, si quien la pide puede confirmar en esa categoría, `aprobada` con
+`self_approved: true`. Obligatorios: nombre, apellido, fecha de nacimiento (pasada), **documento** (hasta 20; letras,
+números, puntos o guiones), `season_id` (vigente o próxima) y `group_id` (activa, de una disciplina de la temporada).
+Opcionales: `relationship` (por defecto `tutor`), `notes` (hasta 500) y `medical`. Errores `422` (en `document`):
+- "Ya mandaste una solicitud para Sofía; esperá a que el club la confirme." / "Ya hay una solicitud por confirmar con
+  ese documento." (otra pendiente con el mismo documento).
+- "Sofía ya tiene inscripción en Fútbol (2026)." (ya es su hijo y está inscripto en esa disciplina y temporada).
+- "Ese documento ya tiene inscripción en Sub-8 (2026). Consultá con el club." (ya está en esa categoría). Una baja sí se
+  puede volver a pedir: vuelve desde hoy y no se cobran los meses que estuvo afuera.
+
+Al pedir, el chico queda en "Mis hijos" (inscripción `pendiente`) y en las clases de la categoría. Si ya estaba cargado
+en el club con otra familia, va a clases pero el tutor se le vincula (y ve sus datos) recién al confirmar. Avisa por
+push (y correo) a quienes pueden confirmar en esa categoría.
+
+#### `GET enrollment-requests`
+
+Las solicitudes del usuario: pendientes y las no aprobadas de los últimos 30 días, de la más nueva a la más vieja.
+
+#### `DELETE enrollment-requests/{id}`
+
+Cancela una solicitud propia pendiente → `204` (el chico sale de la lista, como al rechazar). Ya revisada → `422`.
+
+### Quien confirma (permiso `manage_enrollment_requests` en `GET organization`)
+
+Confirman: con "Confirmar inscripciones de la app (todas las categorías)" (`Manage:EnrollmentRequests`; secretario y
+prosecretario por defecto, el admin siempre) o con "Confirmar inscripciones de la app en sus categorías"
+(`Confirm:GroupEnrollments`; el técnico por defecto, solo donde es técnico). Los dos se editan por rol. Las de otras
+categorías responden `404`.
+
+#### En la clase (`GET classes/{id}`) y en el mes del grupo (`GET groups/{id}`)
+
+Cada alumno suma `"enrollment_request": { "id": 18, "can_review": true }` si es un nuevo por confirmar (`null` si no):
+la app muestra "Nuevo, por confirmar" y, con `can_review`, "Confirmar inscripción" y "Rechazar". En el mes en curso,
+`GET groups/{id}` incluye a los nuevos por confirmar aunque todavía no hayan tenido clase.
+
+#### `GET enrollment-requests/review?status=pendiente`
+
+`status` opcional (`pendiente` por defecto, de la más vieja a la más nueva; `todos` para las últimas 50). Solo las que
+puede confirmar. Cada solicitud suma:
+
+```json
+{
+  "requested_by": { "name": "Ana Benítez", "phone": "0981 123 456", "email": null },
+  "age": 8,
+  "existing_student": { "id": 12, "full_name": "Sofía Benítez", "guardians": ["Carlos Benítez"] },
+  "group_options": [
+    { "id": 3, "name": "Sub-8", "capacity": 20, "spots_left": 0, "full": true, "suggested": true }
+  ],
+  "mid_period": {
+    "label": "Se inscribe a mitad de mes: se cobra",
+    "default": "completo",
+    "options": [
+      { "value": "completo", "label": "El mes completo" },
+      { "value": "proporcional", "label": "Lo que falta del mes (proporcional)" },
+      { "value": "proximo", "label": "Desde el mes que viene" }
+    ]
+  }
+}
+```
+
+- `age`: edad de hoy.
+- `existing_student`: el chico ya estaba cargado con otra familia; al confirmar se le suma este tutor.
+- `group_options`: categorías activas de la disciplina que puede confirmar, con el cupo (sin contar el lugar que ya
+  ocupa esta solicitud) y la sugerida por edad.
+- `mid_period`: `null` si el período en curso no empezó (o la temporada no tiene plan).
+
+#### `POST enrollment-requests/{id}/approve`
+
+`{ "group_id": 3, "mid_period": "proporcional", "over_capacity": true }` (todo opcional: por defecto la categoría
+pedida y lo del plan) → la solicitud aprobada. La inscripción pasa a `activo`: se emiten el cargo de inscripción y las
+cuotas desde el día en que empezó a ir. Errores `422`:
+- `over_capacity`: "Sub-8 está completa (20 de 20). Confirmá para inscribirla igual." (cupo lleno sin confirmar).
+- `group_id`: "Elegí una categoría de Fútbol." / "Elegí una de las categorías que podés confirmar." ·
+  `status`: "Esta solicitud ya fue revisada." · `season_id`: "La temporada 2026 ya terminó."
+
+Push al tutor (salvo que se haya confirmado sola): "Aprobamos la inscripción de Sofía en Sub-8 · Fútbol (2026). Ya ves
+sus clases y sus cuotas en la app."
+
+#### `POST enrollment-requests/{id}/reject`
+
+`{ "reason": "No hay lugar en Sub-8 este año." }` (obligatorio) → la solicitud rechazada. El chico sale de la lista sin
+borrar nada: se **archiva** (soft delete) la inscripción pendiente (o vuelve a la baja que tenía) y, si el alumno lo
+creó o restauró la solicitud y no tiene nada más, también el alumno y sus asistencias. Si se vuelve a pedir el mismo
+documento, se restaura el mismo alumno con su historial. Ya revisada → `422`. Push al tutor: "El club no aprobó la inscripción de Sofía: No hay lugar en Sub-8 este año."
+
+### Cargar alumno (permiso `create_students` en `GET organization`)
+
+#### `POST students`
+
+Alta directa (sin solicitud) por quien puede crear alumnos (`Create:Student`), con `RegisterStudent` como "Nuevo
+jugador" del panel:
+
+```json
+{
+  "first_name": "Sofía",
+  "last_name": "Benítez",
+  "birth_date": "2018-07-02",
+  "document": "7123456",
+  "season_id": 1,
+  "group_id": 3,
+  "mid_period": null,
+  "guardian": { "first_name": "Rosa", "last_name": "Aquino", "phone": "0981 222 333", "email": null, "relationship": "madre" }
+}
+```
+
+→ `201`:
+
+```json
+{
+  "data": {
+    "student": { "id": 41, "full_name": "Sofía Benítez", "place": "Sub-8 · Fútbol (2026)" },
+    "guardian": { "name": "Rosa Aquino", "has_account": false },
+    "invitation": {
+      "link": "https://tukuha.app/invitacion/…",
+      "whatsapp_url": "https://wa.me/595981222333?text=…",
+      "expires_on": "2026-10-18"
+    }
+  }
+}
+```
+
+Inscripción `activo` con sus cuotas. El tutor (celular obligatorio y válido, correo opcional) se reutiliza si ya existe;
+si todavía no usa la app recibe una invitación (por correo si tiene; la app la manda por WhatsApp con `whatsapp_url`,
+sin la API de WhatsApp). `invitation: null` si ya usa la app. Ya cargado (mismo documento) → `422` en `document`. Sin
+permiso → `403`.
+
+### Push
+
+Con copia por correo a quien tenga un correo para copias.
+`data`: `{ "type": "enrollment_request", "route": "/solicitudes" }` para quien confirma;
+`{ "type": "enrollment_request_reviewed", "route": "/hijos/12" }` (aprobada) o `"/hijos"` (no aprobada) para el tutor.
+
+## Cobro en efectivo y caja del técnico
+
+Plan: `PLAN_COBRO_EFECTIVO.md`. Quien tiene el permiso **`collect_payments`** en `GET organization` (técnico, tesorero
+y protesorero por defecto; el admin siempre) cobra cuotas en efectivo desde la app. El pago entra en **su caja**
+("Caja de Juan Pérez", una cuenta del club con titular) y queda ahí hasta que la deposita en una cuenta del club; el
+depósito queda **por confirmar** hasta que lo confirma quien valida (`review_payment_reports`). Requieren token y
+organización; cobrar y depositar necesitan conexión.
+
+### Cobrar (permiso `collect_payments`)
+
+#### `GET collections/students?search=mateo`
+
+Alumnos que puede cobrar: todos si ve todos los alumnos (tesorero, secretario, admin); si no, los inscriptos (temporada
+vigente o próxima) en sus grupos. `search` opcional (nombre, apellido o documento). Máximo 200, por apellido.
+
+```json
+{ "data": [
+  { "id": 12, "full_name": "Mateo Benítez", "photo_url": null, "groups": ["Sub-10"],
+    "family": "Familia Benítez", "due_now": 300000, "overdue": 150000 }
+] }
+```
+
+- `due_now` / `overdue`: lo que debe hoy la familia (sin las próximas) y la parte vencida. `family` puede ser `null`.
+
+#### `GET collections/students/{id}`
+
+```json
+{
+  "data": {
+    "student": { "id": 12, "full_name": "Mateo Benítez" },
+    "family": { "id": 7, "name": "Familia Benítez", "students": ["Mateo", "Sofía"] },
+    "guardians": [{ "id": 3, "full_name": "Ana Benítez" }],
+    "credit": 0,
+    "charges": [
+      { "…": "cargo de GET account", "settle_amount": 135000,
+        "early_payment": { "amount": 15000, "label": "Pronto pago −10 %" }, "under_review": false }
+    ],
+    "cash_box": { "id": 9, "name": "Caja de Juan Pérez", "balance": 300000, "active": true }
+  }
+}
+```
+
+- `charges`: las cuotas pendientes de **toda la familia**, de la más vieja a la más nueva (incluye las próximas, con
+  `is_upcoming`). `settle_amount`: lo que la salda si se paga hoy (con el pronto pago, `early_payment`, si
+  corresponde). `under_review`: está en un comprobante de transferencia en revisión.
+- `family`: `null` si el alumno todavía no tiene cuotas (se crea al cobrar). `credit`: saldo a favor de la familia.
+- `cash_box`: la caja de quien cobra (`null` si todavía no cobró nunca). `active: false` = caja cerrada.
+- `transfer_accounts`: bancos y billeteras activas del club, para registrar una transferencia (`[{ "id", "name" }]`).
+  `approves_transfers`: `true` si quien cobra valida comprobantes (la transferencia queda aprobada al registrarla).
+- `confirmers` *(2026-10-05)*: quiénes aprueban la transferencia si no la aprueba quien la registra
+  (`[{ "id": 2, "name": "Óscar Giménez" }]`, los que validan comprobantes sin quien cobra). La app los nombra.
+- `reopeners` *(2026-10-05)*: quiénes pueden reabrir su caja si está cerrada (mismo formato; ver `GET me/cash-box`).
+- Alumno fuera de su alcance → `404`.
+
+#### `POST collections`
+
+```json
+{ "student_id": 12, "amount": 285000, "charge_ids": [501, 502], "guardian_id": 3, "notes": "Pagó la abuela",
+  "request_id": "4f1c2b9e8a7d4c3b" }
+```
+
+| Campo | |
+|---|---|
+| `student_id` | obligatorio, en su alcance |
+| `amount` | entero, obligatorio, > 0 |
+| `charge_ids[]` | opcional: cuotas pendientes de la familia; vacío = automático (de la más vieja a la más nueva) |
+| `guardian_id` | opcional: tutor de la familia que pagó |
+| `notes` | opcional, hasta 500 |
+| `request_id` | opcional, 8 a 64 caracteres: el mismo valor dentro de 24 h devuelve el mismo pago (reintentos) |
+
+→ `201`:
+
+```json
+{ "data": { "payment": { "…": "pago de GET account" }, "applied": 285000, "credit": 0,
+            "cash_box": { "id": 9, "name": "Caja de Juan Pérez", "balance": 585000, "active": true },
+            "message": "Cobrado ₲ 285.000. Recibo N° 000124.",
+            "notice": {
+              "reach": [
+                { "name": "Laura Benítez", "channels": ["app", "push"], "phone": null, "whatsapp_phone": null,
+                  "description": "A Laura Benítez le llega en la app y como notificación en el celular.",
+                  "whatsapp_url": null },
+                { "name": "Carlos Ortiz", "channels": [], "phone": "0981 123 456", "whatsapp_phone": "595981123456",
+                  "description": "Carlos Ortiz no tiene la app: no le llega. Podés mandárselo por WhatsApp.",
+                  "whatsapp_url": "https://wa.me/595981123456?text=…" }
+              ],
+              "message": "Hola, te mandamos el recibo N° 000124 del pago de ₲ 285.000 a Club Jakare: https://…/recibos/124?expires=…&signature=… (el link vale 30 días). ¡Muchas gracias!",
+              "receipt_url": "https://…/recibos/124?expires=…&signature=…"
+            } } }
+```
+
+- Pago en **efectivo**, fecha de hoy, en la caja de quien cobra (se crea con el primer cobro). Se imputa a las cuotas
+  elegidas que sigan pendientes, en orden de vencimiento y con pronto pago; lo que sobra (`credit`) queda a favor de la
+  familia. `applied`: lo imputado a cuotas.
+- Caja cerrada → `422` "Tu caja está cerrada. Hablá con Óscar Giménez para reabrirla." (con dos, "con Óscar Giménez o
+  Ana Duarte"; con más o sin nadie, "con quien maneja las cuentas del club", con la palabra de la organización; los
+  nombres son `reopeners`). Sin permiso → `403`.
+- Avisa a la familia: "Recibimos tu pago de ₲ 285.000 en efectivo (cobró Juan Pérez). Recibo N° 000124." (a cada tutor
+  con cuenta y al alumno adulto con cuenta: en "Avisos", push si tiene la app instalada y correo si tiene uno).
+- `notice` *(2026-10-05)*: a quién le llega el recibo y por dónde, **de verdad** (como `notice.reach` de la baja):
+  cada tutor de la familia y cada alumno adulto con cuenta. `channels`: `app` (tiene cuenta), `push`, `mail`; vacío =
+  no tiene la app y **no le llega**. `description`: el texto para mostrar. Sin cuenta y con celular, `whatsapp_phone`
+  y `whatsapp_url` (`wa.me` con `message` ya escrito) para mandarle el recibo a mano. `receipt_url` y el link de
+  `message` son un link firmado al PDF que **vale 30 días** (el `receipt_url` del pago dura 30 minutos, como siempre).
+  La app no promete "le avisamos": muestra `description` de cada uno y "Mandar recibo por WhatsApp a …".
+
+#### `POST collections/transfers` (multipart)
+
+La transferencia que la familia le mandó a quien cobra (captura de WhatsApp). Es un comprobante de transferencia
+(«Comprobantes de transferencia») registrado por el club.
+
+| Campo | |
+|---|---|
+| `student_id` | obligatorio, en su alcance |
+| `amount` | entero, obligatorio, > 0 |
+| `paid_on` | fecha, obligatoria, no futura |
+| `proof` | archivo obligatorio: jpg, png, webp, heic o pdf, hasta 5 MB |
+| `charge_ids[]` | opcional: cuotas pendientes de la familia (vacío = pago a cuenta) |
+| `money_account_id` | opcional: una de `transfer_accounts` (sin elegir, la primera bancaria del club) |
+| `guardian_id` | opcional: tutor que la mandó |
+| `reference` | opcional, hasta 100 |
+| `notes` | opcional, hasta 500 |
+
+→ `201` con el comprobante y `message`:
+
+```json
+{ "data": { "…": "comprobante", "status": "aprobado", "receipt_number": "000125", "registered_by": "Laura Gómez" },
+  "notice": { "…": "como en POST collections" },
+  "message": "Transferencia registrada. Recibo N° 000125." }
+```
+
+- Si quien la registra valida comprobantes (`approves_transfers`), queda **aprobada** con el pago y su recibo, y
+  `notice` dice a quién le llega el recibo (igual que en `POST collections`); si no, **pendiente** (`notice: null`;
+  "Transferencia registrada. Queda en revisión hasta que Óscar Giménez la apruebe.", "…hasta que Óscar Giménez o Ana
+  Duarte la aprueben" o, con más, "…hasta que alguien del club la apruebe") y avisa a quienes validan: "Juan Pérez
+  registró una transferencia de ₲ 300.000 (Familia Benítez).".
+- Una cuota que ya está en otro comprobante en revisión → `422` "Ya hay una transferencia en revisión para «…».".
+  Cuenta que no es banco o billetera del club → `422`.
+
+### Mi caja (permiso `collect_payments`)
+
+#### `GET me/cash-box`
+
+```json
+{
+  "data": {
+    "id": 9, "name": "Caja de Juan Pérez", "active": true,
+    "balance": 585000, "pending_deposits": 300000, "available": 285000,
+    "movements": [
+      { "id": 77, "occurred_on": "2026-10-04", "description": "Recibo N° 000124 · Familia Benítez",
+        "amount": 285000, "kind": "cobro", "receipt_url": "https://…/recibos/124?expires=…&signature=…" }
+    ],
+    "deposits": [ { "…": "depósito" } ],
+    "deposit_accounts": [{ "id": 1, "name": "Caja", "type": "caja" }, { "id": 2, "name": "Banco Itaú", "type": "banco" }],
+    "confirmers": [{ "id": 2, "name": "Óscar Giménez" }],
+    "reopeners": [{ "id": 2, "name": "Óscar Giménez" }]
+  }
+}
+```
+
+- `confirmers` *(2026-10-05)*: quiénes confirman los depósitos (los que validan comprobantes: tesorero, protesorero,
+  admin o quien tenga el permiso), **sin quien deposita**. La app los nombra: uno → "La plata sigue en tu caja hasta que
+  Óscar Giménez confirme que llegó"; dos → "…hasta que Óscar Giménez o Ana Duarte lo confirmen"; más (o ninguno) →
+  "…hasta que alguien de la academia lo confirme" (con la palabra de la organización).
+- `reopeners` *(2026-10-05)*: quiénes pueden reabrir una caja cerrada (miembros activos que editan cuentas: el admin
+  y quien tenga el permiso de cuentas, por defecto el tesorero y el protesorero), **sin quien la tiene**. La app los
+  nombra con la caja cerrada: uno → "Hablá con Óscar Giménez para reabrirla"; dos → "…con Óscar Giménez o Ana Duarte…";
+  más o ninguno → "…con quien maneja las cuentas del club…" (con la palabra de la organización).
+- Sin caja todavía: `id` y `name` `null`, `active` `true`, todo en 0 y listas vacías (salvo `deposit_accounts`).
+- `available` = `balance` − `pending_deposits` (lo que puede depositar).
+- `movements`: los últimos 50, del más nuevo al más viejo. `kind`: `cobro`, `deposito`, `anulacion` u `otro`;
+  `receipt_url` solo en los cobros.
+- `deposits`: los últimos 20, del más nuevo al más viejo. `deposit_accounts`: cuentas activas del club (sin titular).
+
+#### Objeto depósito
+
+```json
+{ "id": 4, "amount": 300000, "deposited_on": "2026-10-04",
+  "money_account": { "id": 2, "name": "Banco Itaú" }, "reference": "Boleta 5521", "notes": null,
+  "status": "pendiente", "status_label": "Por confirmar", "rejection_reason": null,
+  "created_at": "2026-10-04T19:02:00-03:00", "reviewed_at": null,
+  "holder": { "id": 5, "name": "Juan Pérez" } }
+```
+
+- `status`: `pendiente` ("Por confirmar"), `confirmado` ("Confirmado"), `rechazado` ("Rechazado") o `anulado`
+  ("Anulado": se confirmó y después se anuló la transferencia en el panel).
+
+#### `POST me/cash-box/deposits`
+
+`{ "amount": 300000, "money_account_id": 2, "deposited_on": "2026-10-04", "reference": "Boleta 5521", "notes": null }`
+(`deposited_on` no futura; `reference` hasta 100; `notes` hasta 500) → `201` con el depósito. Más que `available` →
+`422` "Tenés ₲ 285.000 para depositar.". Cuenta que no es del club → `422`. Avisa a quienes validan.
+
+#### `DELETE me/cash-box/deposits/{id}`
+
+Retira un depósito propio por confirmar → `204` (soft delete: deja de aparecer y de contar, el registro queda). Ya
+revisado → `422`.
+
+### Quien valida (permiso `review_payment_reports`)
+
+#### `GET cash-boxes`
+
+```json
+{
+  "data": {
+    "total": 885000,
+    "boxes": [
+      { "id": 9, "name": "Caja de Juan Pérez", "holder": { "id": 5, "name": "Juan Pérez", "active": true },
+        "balance": 585000, "pending_deposits": 300000, "last_movement_on": "2026-10-04" }
+    ],
+    "deposits": [ { "…": "depósito por confirmar" } ]
+  }
+}
+```
+
+- `boxes`: cajas personales con saldo distinto de 0 o depósitos por confirmar, de la de más saldo a la de menos.
+  `holder.active: false` = ya no es miembro activo. `total`: suma de los saldos.
+- `deposits`: los por confirmar, del más viejo al más nuevo.
+
+#### `POST cash-deposits/{id}/confirm`
+
+→ el depósito confirmado. Registra la transferencia de la caja a la cuenta del depósito, con su fecha. Ya revisado →
+`422`. Avisa al técnico: "Confirmamos tu depósito de ₲ 300.000 en Banco Itaú.".
+
+#### `POST cash-deposits/{id}/reject`
+
+`{ "reason": "No llegó al banco." }` (obligatorio, hasta 500) → el depósito rechazado; la plata sigue en su caja. Ya
+revisado → `422`. Avisa al técnico: "No confirmamos tu depósito de ₲ 300.000: No llegó al banco.".
+
+### Cobra directo a la Caja (2026-10-05)
+
+Por persona: quien **cobra directo** no tiene caja propia ni deposita; el efectivo entra en la Caja del club (o en otra
+cuenta del club que elija). Por defecto solo quien creó la organización (`PLAN_COBRO_EFECTIVO.md` §9).
+
+- `GET organization`: `membership.collects_to_org_cash` (`true`/`false`) y `membership.cash_box_balance` *(entero,
+  2026-10-05)*: lo que tiene en su caja personal, con los depósitos por confirmar (0 sin caja). Quien cobra directo y
+  tiene la caja en 0 no ve "Mi caja" en el inicio; si le quedó plata de antes, la ve hasta dejarla en cero.
+- `GET collections/students/{id}` suma `collects_to_org_cash`, `collect_accounts` (`[{ "id", "name", "type" }]`, cuentas
+  activas del club sin titular; vacío si no cobra directo) y `default_collect_account_id` (la Caja del club).
+- `POST collections` acepta `money_account_id` (opcional, solo si cobra directo: una de `collect_accounts`; sin elegir,
+  la Caja). Si no cobra directo y lo manda → `422` "Lo que cobrás queda en tu caja hasta que lo deposites.". Cobrando
+  directo, la respuesta trae `cash_box: null` y `account: { "id": 1, "name": "Caja" }`; su caja personal (si la tenía)
+  no cambia ni importa si está cerrada.
+- `GET me/cash-box` suma `collects_to_org_cash`. Si pasó a cobrar directo con plata en su caja, la sigue viendo y la
+  deposita como siempre.
+- `GET cash-boxes` suma `collectors` **solo para quien administra los miembros** (si no, no viene): quienes pueden
+  cobrar en efectivo (miembros activos), por nombre:
+  `[{ "user_id": 5, "name": "Juan Pérez", "collects_to_org_cash": false, "owner": false }]` (`owner`: creó la
+  organización).
+- `PUT cash-collectors/{user_id}` `{ "collects_to_org_cash": true }` → el `collector`. Queda quién lo cambió y cuándo
+  (registro de actividad). Sin permiso de miembros → `403`; alguien que no es miembro activo o no puede cobrar → `404`.
+- Cada pago guarda quién lo cobró (`created_by`): se ve en el recibo ("Cobró: Juan Pérez") y en el panel (lista de
+  pagos y movimientos de la Caja).
+
+### Push
+
+Con copia por correo. `data`: `{ "type": "payment_received", "route": "/estado-de-cuenta" }` a la familia,
+`{ "type": "cash_deposit", "route": "/efectivo" }` a quienes validan y
+`{ "type": "cash_deposit_reviewed", "route": "/mi-caja" }` al técnico.
+
+### Comprobantes de transferencia (se amplía)
+
+- En el objeto comprobante, `registered_by`: nombre de quien lo registró si lo cargó el club (`null` si lo informó la
+  familia). La familia lo ve en `GET account` como cualquier comprobante.
+- Al aprobar uno registrado por el club, el push "Aprobamos tu pago…" va a la familia (tutores con cuenta y alumnos
+  adultos) y, si lo aprobó otra persona, a quien lo registró: "Aprobamos la transferencia de ₲ 300.000 de la Familia
+  Benítez que registraste. Recibo N° 000125." (`route`: `/cobrar`). Al rechazarlo, el motivo le llega solo a quien lo
+  registró.
+- `money_accounts` (quien valida) y `POST payment-reports/{id}/approve` no incluyen las cajas personales.
+- `open` (en cada comprobante): `true` si va arriba en el estado de cuenta: en revisión, o **rechazado mientras alguna
+  de sus cuotas siga pendiente** (un rechazado sin cuotas, pago a cuenta, hasta 30 días después del rechazo). Los
+  aprobados y los rechazados ya resueltos vienen con `open: false`: son historial (`payment_reports` sigue trayendo los
+  últimos 20). Lo decide la API; la app muestra arriba solo los `open` (sin el campo, como antes: los no aprobados).
+
+## Género y concordancia (ver `PLAN_GENERO.md`)
+
+La API decide la concordancia (`App\Support\Vocabulary`); la app la recibe y no repite las reglas.
+
+### `GET organization` (se amplía)
+
+```json
+"terminology_feminine": { "instructor": "Entrenadora" },
+"vocabulary": {
+  "group":   { "word": "Categoría", "plural": "Categorías", "gender": "f", "article": "la" },
+  "space":   { "word": "Aula", "plural": "Aulas", "gender": "f", "article": "el" },
+  "student": { "word": "Jugador", "plural": "Jugadores", "gender": "m", "article": "el",
+               "feminine": "Jugadora", "feminine_plural": "Jugadoras", "masculine": "Jugador", "masculine_plural": "Jugadores" },
+  "instructor": { "word": "Coach", "plural": "Coaches", "gender": "m", "article": "el",
+               "feminine": "Entrenadora", "feminine_plural": "Entrenadoras", "masculine": "Coach", "masculine_plural": "Coaches" },
+  "organization": { "word": "academia", "plural": "academias", "gender": "f", "article": "la" }
+}
+```
+
+- Una entrada por clave de `terminology` (`program, group, student, instructor, guardian, space`) más `organization`:
+  qué es la organización según su tipo (`club`, `academia`, `escuela`, `comisión`), para "del club" / "de la academia".
+- `gender`: `m`, `f` o `c` (género común: Atleta, Estudiante, Responsable; concuerda en masculino salvo que se trate de
+  una mujer concreta). `article`: el artículo definido en singular (`el aula`: femenina con "el").
+- Las de persona (`student`, `instructor`, `guardian`) traen sus formas para nombrar a una persona concreta
+  (`feminine`, `masculine`) y a un grupo (`*_plural`). `feminine` usa `terminology_feminine` si la organización la
+  ajustó; si no, la regla (Jugador → Jugadora, Técnico → Técnica, Atleta → Atleta).
+- `membership.roles[].label` nombra al usuario según su género: "Técnica", "Tesorera", "Tutora" (un tutor sin género
+  elegido: por su parentesco).
+
+### `PUT organization/terminology` (se amplía)
+
+Acepta `feminine` (opcional): `{ "terminology": {}, "feminine": { "instructor": "Entrenadora" } }`. Claves `student`,
+`instructor`, `guardian`; hasta 30 caracteres; vacía o igual a la regla = la de la regla. La respuesta suma
+`terminology_feminine` y `vocabulary`.
+
+### `GET me` (se amplía) · **nuevo** `PATCH me`
+
+`GET me` suma `gender`: `female`, `male` o `null` (sin especificar). `PATCH me` con `{ "gender": "female" | "male" | null }`
+→ lo mismo que `GET me`. Otro valor → `422` en `gender`. Es de la persona (vale en todas sus organizaciones).
+
+### Alumnos
+
+- `GET students`, `GET students/{id}`: `gender` (`female`, `male` o `null`).
+- En la ficha, `enrollments[].group.instructors[]` suma `gender` de cada técnico.
+- `POST students` (alta del admin) y `POST enrollment-requests` (inscripción del tutor) aceptan `gender` opcional.
+
+### Invitaciones
+
+- `GET invitations/{token}` suma `gender` (el que cargó quien invitó) y `roles[].label` nombra a la persona: el género
+  de la invitación, si no el de su cuenta (si ya tiene) o el del parentesco (invitación de tutor).
+- `POST setup/instructors` acepta `gender` opcional y cada técnico de `GET setup/instructors` lo trae (`gender`). Al aceptar la invitación, si la cuenta no tiene género, toma el de
+  la invitación.
+
+### Parentesco (`relationship`)
+
+Suma `abuela`, `tio` y `tia`. `abuelo` pasa a ser "Abuelo" y `tutor` se muestra "Tutor/a". Madre, Abuela, Tía →
+femenino; Padre, Abuelo, Tío → masculino; Tutor/a y Otro → sin especificar.

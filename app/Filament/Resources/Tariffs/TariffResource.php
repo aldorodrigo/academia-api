@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Tariffs;
 use App\Enums\FeeConceptKind;
 use App\Filament\Resources\Tariffs\Pages\ManageTariffs;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\Season;
 use App\Models\Tariff;
@@ -28,6 +29,8 @@ use UnitEnum;
  */
 class TariffResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Tariff::class;
 
     protected static ?string $slug = 'tarifas';
@@ -65,7 +68,8 @@ class TariffResource extends Resource
                 ->label(Terms::label('group', 'Categoría'))
                 ->relationship('group', 'name')
                 ->placeholder('Todas')
-                ->helperText('Vacío: vale para todas. Una tarifa de la categoría gana sobre la general.'),
+                ->helperText(fn () => 'Vacío: vale para '.Terms::gendered('group', 'Categoría', 'todos', 'todas').'. Una tarifa '
+                    .Terms::of('group', 'Categoría').' gana sobre la general.'),
             TextInput::make('amount')->label('Monto')->prefix('₲')->numeric()->minValue(1)->required(),
             DatePicker::make('valid_from')
                 ->label('Vigente desde')
@@ -82,7 +86,7 @@ class TariffResource extends Resource
             ->columns([
                 TextColumn::make('feeConcept.name')->label('Concepto')->sortable(),
                 TextColumn::make('season.name')->label('Temporada'),
-                TextColumn::make('group.name')->label(Terms::label('group', 'Categoría'))->placeholder('Todas'),
+                TextColumn::make('group.name')->label(Terms::label('group', 'Categoría'))->placeholder(fn () => Terms::gendered('group', 'Categoría', 'Todos', 'Todas')),
                 MoneyColumn::make('amount')->label('Monto'),
                 TextColumn::make('valid_from')->label('Desde')->date('d/m/Y')->sortable(),
             ])

@@ -35,7 +35,7 @@ class WaiveSuspendedClass
 
     /**
      * Deshace el descuento (al volver a programar o reprogramar la clase): las cuotas impagas
-     * se reemiten con ese día y se borran los descuentos pendientes. Lo ya pagado no se toca.
+     * se reemiten con ese día y se archivan los descuentos pendientes (soft delete). Lo ya pagado no se toca.
      */
     public function undo(ClassSession $session, ?User $by = null): void
     {

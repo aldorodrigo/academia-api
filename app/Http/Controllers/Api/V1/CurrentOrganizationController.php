@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Attendance\AttendanceAccess;
+use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\PaymentReportAccess;
+use App\Actions\Billing\WaiveCharges;
+use App\Actions\Enrollments\EnrollmentRequestAccess;
 use App\Enums\Feature;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsureCanConfigureOrganization;
 use App\Models\LessonProfile;
+use App\Models\MoneyAccount;
 use App\Models\RoleAssignment;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
@@ -44,15 +48,32 @@ class CurrentOrganizationController extends Controller
                 'currency' => $organization->currency,
                 'timezone' => $organization->timezone,
                 'terminology' => array_merge($organization::DEFAULT_TERMINOLOGY, $organization->terminology ?? []),
+                // Formas femeninas que ajustó la organización (vacío = las de la regla) y, por palabra, plural,
+                // género, artículo y formas de persona; también "organization" (club, academia…). Ver PLAN_GENERO.md.
+                'terminology_feminine' => (object) ($organization->terminology_feminine ?? []),
+                'vocabulary' => $organization->vocabulary(),
                 'features' => $organization->features ?? [],
                 'membership' => [
                     'roles' => $roles,
+                    // Lo que cobra en efectivo entra directo a la Caja del club (docs/PLAN_COBRO_EFECTIVO.md §9).
+                    'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $organization),
+                    // Lo que tiene en su caja personal (con los depósitos por confirmar; 0 sin caja): quien cobra
+                    // directo no ve "Mi caja" mientras esté en cero.
+                    'cash_box_balance' => MoneyAccount::cashBoxOf($user, $organization)?->balance() ?? 0,
                     // Permisos que usa la app para mostrar secciones (ej. informes).
-                    'permissions' => collect(['view_reports' => 'View:Reports'])
+                    'permissions' => collect([
+                        'view_reports' => 'View:Reports',
+                        'create_students' => 'Create:Student',
+                        // Bajas y condonación (docs/PLAN_BAJAS.md).
+                        'withdraw_students' => WithdrawalController::WITHDRAW_PERMISSION,
+                        'waive_charges' => WaiveCharges::PERMISSION,
+                    ])
                         ->filter(fn (string $permission) => $user->can($permission))
                         ->keys()
                         ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
                         ->when(PaymentReportAccess::canReview($user, $organization), fn ($permissions) => $permissions->push('review_payment_reports'))
+                        ->when(EnrollmentRequestAccess::canReviewAny($user), fn ($permissions) => $permissions->push('manage_enrollment_requests'))
+                        ->when(CashCollectionAccess::canCollect($user), fn ($permissions) => $permissions->push('collect_payments'))
                         ->when(
                             $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
                             fn ($permissions) => $permissions->push('teach_lessons'),

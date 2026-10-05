@@ -96,17 +96,26 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
   cambia en Roles. Presidente y vicepresidente: ver todo e informes (el presidente, también aprobar becas). Tesorero y
   protesorero: cobros, cuotas, gastos, cuentas, tarifas, becas y descuentos, ver alumnos y grupos, informes (el
   tesorero, también aprobar becas). Secretario y prosecretario: alumnos, tutores, inscripciones e invitaciones; ver
-  grupos, temporadas y miembros. Vocal: informes. Síndico: ver lo financiero e informes. Admin, técnico y tutor: nada
-  extra (el admin pasa por todo; técnico y tutor usan sus grupos e hijos).
+  grupos, temporadas y miembros. Vocal: informes. Síndico: ver lo financiero e informes. Técnico, tesorero y
+  protesorero: cobrar en efectivo desde la app. Admin, técnico y tutor: nada más (el admin pasa por todo; técnico y
+  tutor usan sus grupos e hijos). "Condonar deudas" nace con el tesorero y el presidente (y se les agregó a los roles
+  que ya existían); el admin lo agrega o quita por rol.
 - Se aplican al crear el rol; `organizations:sync-roles` los completa en los roles base que no tienen **ningún**
   permiso (no pisa lo que cambió el admin).
 - **Quien no es admin solo invita o asigna tutores y técnicos** (no cargos ni administrador).
+- **Borrar roles** *(2026-10-05)*: los roles base (Administrador, Presidente, Vicepresidente, Secretario, Prosecretario,
+  Tesorero, Protesorero, Vocal, Síndico, Técnico, Tutor) **no se borran nunca**. Un rol creado por la organización se
+  borra solo si nadie lo tiene (ni asignado, vigente o por empezar, ni en una invitación pendiente); se archiva (soft
+  delete: queda el historial de quién lo tuvo) y queda registrado quién lo borró con el nombre y los permisos del rol.
+  Sin borrado en masa. El administrador pasa por todo: en Roles dice "Todos" en permisos.
 - **Escritorio del panel:** arriba la guía (hasta completarla), botones a lo principal y tarjetas que se muestran por
   **permiso** (sirven para roles creados a mano): Hoy (clases del día y asistencia), Cobranza del mes (cobrado, falta
   del mes, vencido con días de gracia, vence esta semana), Morosos (5 familias con más deuda, con WhatsApp), Alumnos
   (activos, altas y bajas del mes, cupo por grupo), Caja, Para hacer (cada cosa para quien la puede resolver),
-  Cumpleaños y Balance del mes. **App:** la guía en el inicio y botones según permisos (Mis grupos, Estado de cuenta,
-  Mis reservas, Agenda, Informes).
+  Cumpleaños y Balance del mes. **App:** la guía en el inicio y botones según permisos y con el vocabulario de la
+  organización ("Mis categorías"/"Mis niveles", Cobrar, Mi caja, Estado de cuenta, Mis reservas, Agenda, Comprobantes,
+  Efectivo, "Cargar jugador", Solicitudes, Informes). "Mi caja" no aparece para quien cobra directo a la Caja con su
+  caja en ₲ 0.
 
 ### Asignaciones y mandatos
 - **`role_assignments` es la fuente de verdad** de quién tiene qué rol y desde/hasta cuándo;
@@ -201,9 +210,77 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   de la temporada anterior (de las disciplinas de la nueva), con la categoría que corresponde por edad;
   los que no siguen quedan como están. Se ofrece al crear la temporada.
 - Criterio de grupo por programa: año de nacimiento (fútbol) o nivel (pádel, danza).
+
+### Bajas *(2026-10-04, `docs/PLAN_BAJAS.md`)*
+- **Se da de baja en el panel** ("Dar de baja" en Inscripciones, por fila o en bloque, y en la ficha del jugador) **o en
+  la app** (ficha del alumno para quien tiene el permiso), con **fecha** (hoy por defecto; entre la inscripción y hoy) y
+  **motivo** obligatorio; queda quién la dio y el registro de actividad. La da quien puede **editar inscripciones**
+  (admin; secretario y prosecretario por defecto). "Estado" ya no ofrece "Baja".
+- **Aviso a la familia:** al dar de baja se pregunta si se le avisa (prendido si hay tutores con la app). El mensaje
+  viene prellenado, amable y con las puertas abiertas ("…Las puertas siempre van a estar abiertas: cuando quieran
+  volver, escribinos y los esperamos"), sin hablar de plata, y se puede cambiar en el momento. Les llega a los tutores
+  con cuenta (y al alumno adulto con cuenta): siempre en la bandeja **"Avisos"** de la app, y además por push si tienen
+  la app instalada con notificaciones y por correo si tienen uno para copias. **El formulario dice la verdad:** antes de
+  mandarlo muestra a quién le llega y por dónde ("A Laura Benítez le llega en la app") y, a los tutores sin cuenta con
+  celular, ofrece "Mandar por WhatsApp" (link `wa.me` con el mensaje ya escrito, se manda a mano; no hay API de
+  WhatsApp). El registro de actividad guarda los canales reales de cada uno. *(2026-10-05)*
+- **La deuda queda como histórica:** las cuotas impagas, **también la del período en curso** si ya empezó, siguen
+  pendientes hasta que se pagan, se anulan o se condonan (§5). Nunca se borran ni se anulan solas; solo se anulan
+  solas las **futuras** sin pagos.
+- **Avisos de baja:** el técnico avisa "Dejó de venir" (sus grupos, nota opcional) y el tutor avisa "Deja el club"
+  (ficha del hijo, mensaje opcional; marca todas sus inscripciones vigentes). Cada uno lo puede deshacer. No dan la
+  baja: la inscripción queda marcada y les llega un aviso (push y correo) a quienes pueden darla, que deciden en la app
+  ("Avisos de baja") o en el panel: "Dar de baja" (con la nota como motivo) o "Sigue viniendo". Dar la baja cierra el
+  aviso.
+- **Si vuelve:** "Reactivar" (activo o becado). La deuda sigue para pagarse; las cuotas se emiten **desde el período
+  en curso** (los meses que estuvo afuera no se cobran) y se reemiten las futuras anuladas. Igual al volver de una
+  suspensión. De pendiente a activo se sigue cobrando desde la fecha de inscripción.
+- **Dado de baja** = ninguna inscripción sin baja en temporadas vigentes o próximas y al menos una baja (si sigue en
+  otra disciplina, no). Saldos y Morosos (app, panel, PDF y Excel) lo marcan con la fecha ("Matías: baja el
+  03/06/2026") y Morosos se filtra: todos, solo los que siguen o solo los dados de baja.
 - **Familia:** agrupa alumnos y tutores. Un tutor puede tener varios hijos; un hijo varios tutores.
 - Alumno adulto sin tutor: es su propio responsable.
 - Ficha médica: visible solo para roles autorizados.
+- **Nada se borra (soft delete):** alumnos, inscripciones y asistencias se **archivan** (incluido "Borrar" en el panel)
+  y dejan de aparecer en listas, cuentas, informes y el Escritorio, pero queda el historial. El documento sigue siendo
+  único por organización contando los archivados: cargar de nuevo ese documento (app, panel o importación)
+  **restaura al mismo alumno** con sus asistencias en vez de crear otro, y una inscripción archivada vuelve como nueva
+  (desde ese día, con sus cargos). Lo mismo con los **tutores**: "Eliminar" en Tutores lo archiva (deja de verse en la
+  ficha de sus hijos y no recibe avisos) y, si se lo vuelve a cargar con el mismo usuario, correo, celular o
+  documento, se restaura. Los descuentos de una clase suspendida que se vuelve a dar también se archivan.
+
+### Inscripción desde la app *(2026-10-04, `docs/PLAN_INSCRIPCION_TUTOR.md`)*
+- **"Entra ya, se confirma después".** Un **miembro activo** (normalmente un tutor) pide la inscripción de un hijo:
+  nombre, apellido, fecha de nacimiento, **documento** (obligatorio), parentesco, disciplina, temporada vigente o
+  próxima y categoría activa (la API sugiere la que corresponde por año de nacimiento) y, si quiere, la ficha médica.
+  El chico queda dado de alta (`RegisterStudent`) con la inscripción **`pendiente`**: aparece en "Mis hijos" y en las
+  clases del técnico como "Nuevo, por confirmar" y se le toma asistencia, pero **no se cobra** (ni inscripción ni cuotas).
+- Una sola solicitud por confirmar por documento. Si ya es su hijo y tiene inscripción en esa disciplina y temporada, o
+  el chico ya está en esa categoría, no se puede pedir. Si se había dado de baja de esa categoría, vuelve desde hoy (los
+  meses que estuvo afuera no se cobran). Si el documento es de un alumno de otra familia, va a clases ya pero el tutor
+  se le vincula (y ve sus datos) recién al confirmar; sus datos no se cambian.
+- **Confirman** quien tiene "Confirmar inscripciones de la app (todas las categorías)" (secretario y prosecretario por
+  defecto; el admin siempre) y quien tiene "Confirmar inscripciones de la app en sus categorías" (el técnico por
+  defecto, en las suyas); los dos se editan por rol. Con un toque desde la planilla, desde la lista de la app o desde
+  el panel. Puede cambiar la categoría (de la misma disciplina, entre las que confirma) y qué se cobra del período en
+  curso (`MidPeriod`, por defecto el del plan). Si la categoría está completa (ocupan las inscripciones activas,
+  becadas o pendientes, sin contar el lugar de la propia solicitud), tiene que confirmarlo.
+- **Al confirmar**, la inscripción pasa a `activo`: se emiten el cargo de inscripción y las cuotas desde el día en que
+  empezó a ir. El tutor queda vinculado a su cuenta sin invitación (su ficha de tutor si ya tenía, sin pisarla), la
+  ficha médica pasa a la del alumno si no tenía y, si no tenía el rol `tutor`, se le asigna.
+- **Rechazar** pide motivo y saca al chico de la lista (también de la lista del mes del grupo) sin borrar nada: se
+  archiva la inscripción pendiente (o vuelve a la baja que tenía) y, si el alumno lo creó o restauró la solicitud y no
+  tiene nada más, el alumno y sus asistencias. El tutor también puede cancelarla mientras está por confirmar (mismo
+  efecto, sin aviso). Confirmar y rechazar avisan al tutor (push y correo); una solicitud nueva avisa a
+  quienes pueden confirmar en esa categoría.
+- Si quien pide puede confirmar en esa categoría, **se confirma sola**. Siempre queda registrado quién confirmó o rechazó.
+- La ficha médica de la solicitud se guarda cifrada, no la ve quien confirma y se borra al confirmar (ya está en la
+  ficha), rechazar o cancelar.
+- **Cargar alumno desde la app:** quien puede crear alumnos (el admin, el secretario) da de alta directo, como "Nuevo
+  jugador" del panel: datos del chico (documento obligatorio), categoría sugerida y su tutor (nombre, celular, correo
+  opcional). Si el tutor no usa la app, se crea su invitación y la app la manda por WhatsApp (link `wa.me`).
+- "Nuevo jugador" del panel también exige el documento (los alumnos que ya estaban sin documento se siguen editando).
+- Pendiente para el Sprint 5e: el link público del club (familias que todavía no están), actividades y lista de espera.
 
 ### Lugares, canchas y choques *(Sprint 5d)*
 - Un **lugar** (nombre y dirección) tiene una o varias **canchas** (salas, aulas, pileta: la palabra sale del
@@ -246,7 +323,14 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
     las que todavía no empezaron son **próximas** y la familia las ve aparte de lo que tiene que pagar ahora.
   - Desde el período de la fecha de inscripción. **A mitad de período** se cobra proporcional, completo o desde
     el próximo (lo elige quien inscribe; el plan trae el valor por defecto).
-  - **Baja o suspensión:** se anulan solas las cuotas futuras sin pagar; si se reactiva, se reemiten.
+  - **Baja o suspensión:** se anulan solas las cuotas futuras sin pagar (las ya empezadas quedan pendientes); si se
+    reactiva, se emiten desde el período en curso y se reemiten las futuras (§3, Bajas).
+  - **Condonar** (permiso "Condonar deudas", `Waive:Charge`; por defecto el admin, el tesorero y el presidente, y se
+    agrega o quita por rol; panel y app): perdona **lo que falta pagar** de una o varias cuotas, con motivo; queda
+    quién, cuándo, por qué y cuánto (una fila por condonación), con estado "Condonado". Sale de la cuenta, de Saldos y
+    de Morosos como una anulada; lo ya pagado sigue siendo ingreso. Es distinto de "Anular" (cargo mal emitido).
+  - **Deshacer una condonación** (mismo permiso, con motivo): la cuota vuelve a quedar pendiente por lo condonado;
+    queda quién, cuándo y por qué, y el historial muestra los dos pasos. Se puede volver a condonar.
   - Becas, descuentos y montos nuevos **no rehacen** cuotas ya emitidas: se anula la cuota con
     "Volver a emitirla" y se rehace con lo de hoy.
   - La generación es **idempotente**: lock en Redis + clave única en BD
@@ -284,6 +368,45 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Cada pago genera un **recibo PDF**.
 - **Comprobante subido por el padre** (transferencia) queda `pendiente` hasta que el
   tesorero lo valida; recién ahí impacta en la cuenta. *(Fase 2)*
+- **Cobro en efectivo desde la app** (`PLAN_COBRO_EFECTIVO.md`): quien tiene el permiso "Cobrar en efectivo desde la
+  app" (técnico, tesorero y protesorero por defecto; el admin siempre) cobra a los alumnos de sus grupos (o a todos, si
+  ve todos los alumnos) las cuotas pendientes de toda la familia. Es un pago normal: efectivo, fecha de hoy, imputación,
+  pronto pago, saldo a favor y recibo de siempre. La familia recibe un aviso con el recibo.
+- **A quién le llega el recibo** *(2026-10-05)*: al cobrar (app o "Registrar pago" del panel, que también avisa a la
+  familia) y al aprobar una transferencia que registró alguien del club, nunca se promete "le avisamos": se dice la
+  verdad por persona ("A Laura Benítez le llega en la app.", "Carlos Ortiz no tiene la app: no le llega.") con los
+  canales reales (app, push, correo). A quien no tiene la app y tiene celular se le ofrece "Mandar recibo por WhatsApp
+  a …": link `wa.me` con un mensaje amable y el link al PDF del recibo, que vale **30 días** (los demás links al recibo
+  duran 30 minutos). No se usa la API de WhatsApp.
+- **Caja del técnico:** lo cobrado entra en la **caja personal** de quien cobra ("Caja de Juan Pérez", una cuenta del
+  club con titular, creada con el primer cobro): es plata del club en su poder. Con la caja cerrada (cuenta inactiva)
+  no puede cobrar.
+- **Depósito:** quien cobra informa que dejó la plata en una cuenta del club (Caja, banco o billetera); queda **por
+  confirmar** y la plata sigue en su caja hasta que lo confirma alguien que valida comprobantes; la app nombra a quién
+  ("…hasta que Óscar Giménez confirme que llegó", con dos "…o Ana Duarte lo confirmen", con más "…hasta que alguien de
+  la academia lo confirme"), nunca "el tesorero" fijo: puede no haber tesorero. Con la caja cerrada, la app nombra a quién
+  la puede reabrir (quienes editan cuentas, sin el titular): "Hablá con Óscar Giménez para reabrirla". Quien valida comprobantes lo confirma (transferencia de su caja a esa
+  cuenta, con la fecha del depósito) o lo rechaza con motivo; en los dos casos se le avisa. No se deposita más de lo
+  disponible (saldo menos lo que ya está por confirmar). Anular un pago cobrado así saca la plata de su caja.
+- **Transferencia que la familia le mandó al club** (la captura de WhatsApp): quien cobra en efectivo también la
+  registra desde la app como un comprobante de transferencia en nombre de la familia, con la imagen o el PDF y quién lo
+  registró. Si quien la registra valida comprobantes, queda aprobada al instante con su recibo; si es el técnico, queda
+  en revisión. La familia la ve en su estado de cuenta.
+- **Cobra directo a la Caja** *(2026-10-05, `PLAN_COBRO_EFECTIVO.md` §9)*: se elige por persona (sí/no en su
+  membresía). Por defecto **sí** solo para quien creó la organización (el dueño: el usuario del alta autoservicio o el
+  primer administrador que acepta la invitación de la plataforma; en las que ya existían, la membresía más vieja con rol
+  de administrador); **no** para todos los demás, también un segundo admin. Lo cambia quien administra los miembros y
+  queda registrado quién y cuándo. Si cobra directo, el efectivo entra en la Caja del club (o en otra cuenta del club
+  que elija), sin caja personal ni depósito; si no, a su caja personal como siempre. Cada pago guarda **quién lo
+  cobró** (lista de pagos, recibo y movimientos de la Caja). Si pasa a cobrar directo con plata en su caja, esa plata
+  sigue ahí hasta que la deposite. Quien cobra directo no ve "Mi caja" en el inicio de la app mientras su caja esté en
+  ₲ 0; si le quedó plata o depósitos por confirmar, la ve hasta dejarla en cero.
+- Las cajas personales no aparecen al elegir dónde entra un pago (registrar pago, aprobar comprobantes); sí en
+  Cuentas, Transferencias y Gastos. Excepción: en "Registrar pago" del panel, quien registra ve **su** caja, que es la
+  cuenta por defecto con método Efectivo (el efectivo queda en su poder hasta depositarlo, como en la app); si cobra
+  directo a la Caja, la cuenta por defecto es la Caja del club.
+- En el estado de cuenta, un comprobante rechazado se ve mientras alguna de sus cuotas siga pendiente (sin cuotas,
+  30 días); después queda como historial.
 
 ## 9. Gastos *(Sprint 4b)*
 
@@ -299,6 +422,11 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 
 - Avisos segmentados: toda la organización, programa, grupo, familia.
 - Push (Firebase) + email; confirmación de lectura.
+- **Bandeja "Avisos"** *(2026-10-05)*: cada aviso (todo `PushNotification`) queda guardado para la cuenta, en la
+  organización en la que se mandó, con leído / no leído. Es el único canal seguro: le llega aunque use la app web sin
+  notificaciones y no tenga un correo verificado. **No entran los recordatorios de día de clase** ("¿Lo llevás?" del
+  tutor y "Tomar asistencia" del técnico): se repiten y vencen al empezar la clase, así que solo van por push y correo.
+  Cada aviso declara si entra (`PushNotification::inInbox()`, sí por defecto).
 - Envíos masivos por lotes en la cola `notifications` (Horizon).
 - Una **resolución** publicada a un grupo notifica a sus tutores y puede generar un cargo. *(Fase 2)*
 

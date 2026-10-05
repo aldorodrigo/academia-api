@@ -178,7 +178,7 @@ class SeasonPlanSteps
                         ->label('¿Qué días se cuentan?')
                         ->options(DailyBasis::class)
                         ->descriptions(fn (Get $get) => [
-                            DailyBasis::Training->value => 'Los días con horario de la categoría.',
+                            DailyBasis::Training->value => 'Los días con horario '.Terms::of('group', 'Categoría').'.',
                             DailyBasis::Attendance->value => 'Las clases a las que vino, según la asistencia. La cuota se crea '.self::afterUnit($get).'.',
                             DailyBasis::Taught->value => 'Las clases que se dieron: las suspendidas no se cobran y las recuperaciones sí. La cuota se crea '.self::afterUnit($get).'.',
                         ])
@@ -288,7 +288,7 @@ class SeasonPlanSteps
     {
         return [
             Radio::make('issue_upfront')
-                ->label('¿Cuándo se crean las cuotas de cada jugador?')
+                ->label(fn () => '¿Cuándo se crean las cuotas de cada '.Terms::singular('student', 'Jugador').'?')
                 ->options(fn (Get $get) => self::byAttendance($get)
                     ? ['0' => ucfirst(self::afterUnit($get))]
                     : [
@@ -299,9 +299,10 @@ class SeasonPlanSteps
                     '0' => self::byAttendance($get)
                         ? (self::value($get, 'daily_basis') === DailyBasis::Taught->value
                             ? 'Con las clases que se dieron '.(self::unit($get) ?? BillingUnit::Month)->within().'.'
-                            : 'Con las clases a las que vino según la asistencia (unos días después, para que el técnico pueda corregirla).')
+                            : 'Con las clases a las que vino según la asistencia (unos días después, para que '
+                                .Terms::the('instructor', 'Técnico').' pueda corregirla).')
                         : 'La familia ve solo la cuota '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().'.',
-                    '1' => 'La familia ve las '.SeasonPlan::periodsCount(self::state($get)).' cuotas: la '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().' en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
+                    '1' => 'La familia ve '.SeasonPlan::allPeriods(SeasonPlan::periodsCount(self::state($get))).': la '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().' en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
                 ])
                 ->formatStateUsing(fn ($state) => filter_var($state, FILTER_VALIDATE_BOOLEAN) ? '1' : '0')
                 ->required(),
@@ -341,11 +342,12 @@ class SeasonPlanSteps
     {
         $rows = SeasonPlan::examples($state)
             ->map(fn (array $row) => '<tr><td style="padding:4px 12px 4px 0">'.e(ucfirst($row['period'])).'</td>'
-                .'<td style="padding:4px 12px 4px 0">'.e($row['due_on']).'</td>'
+                .'<td style="padding:4px 12px 4px 0">'.e($row['due_on'])
+                .($row['due_note'] ? '<br><span style="opacity:.75;font-size:.8em">'.e($row['due_note']).'</span>' : '').'</td>'
                 .'<td style="padding:4px 0;text-align:right">'.e($row['amount']).'</td></tr>')
             ->join('');
 
-        return new HtmlString('<p style="font-weight:600;margin-bottom:4px">Primeras cuotas de cada jugador</p>'
+        return new HtmlString('<p style="font-weight:600;margin-bottom:4px">Primeras cuotas de cada '.e(Terms::singular('student', 'Jugador')).'</p>'
             .'<table style="font-size:0.875rem"><thead><tr><th style="text-align:left;padding-right:12px">Cuota</th>'
             .'<th style="text-align:left;padding-right:12px">Vence</th><th style="text-align:right">Monto</th></tr></thead>'
             ."<tbody>{$rows}</tbody></table>");

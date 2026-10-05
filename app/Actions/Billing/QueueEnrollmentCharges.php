@@ -5,6 +5,7 @@ namespace App\Actions\Billing;
 use App\Jobs\IssueEnrollmentCharges;
 use App\Models\Charge;
 use App\Models\User;
+use App\Support\Vocabulary;
 use Filament\Notifications\Notification;
 use Illuminate\Bus\Batch;
 use Illuminate\Support\Facades\Bus;
@@ -28,7 +29,7 @@ class QueueEnrollmentCharges
         $startedAt = now()->subSecond();
 
         Bus::batch(array_map(fn (int $id) => new IssueEnrollmentCharges($id, $userId), $enrollmentIds))
-            ->name('Cuotas de '.count($enrollmentIds).' inscripciones')
+            ->name('Cuotas de '.Vocabulary::count(count($enrollmentIds), 'inscripción', 'inscripciones'))
             ->allowFailures()
             ->finally(function (Batch $batch) use ($enrollmentIds, $userId, $startedAt) {
                 $user = $userId !== null ? User::query()->find($userId) : null;
@@ -45,7 +46,8 @@ class QueueEnrollmentCharges
 
                 Notification::make()
                     ->title($batch->failedJobs > 0 ? 'Cuotas creadas con errores' : 'Cuotas creadas')
-                    ->body("Se crearon {$created} cuotas para ".count($enrollmentIds).' inscripciones.'
+                    ->body('Se '.($created === 1 ? 'creó ' : 'crearon ').Vocabulary::count($created, 'cuota', 'cuotas')
+                        .' para '.Vocabulary::count(count($enrollmentIds), 'inscripción', 'inscripciones').'.'
                         .($batch->failedJobs > 0 ? " Fallaron {$batch->failedJobs}: volvé a generarlas desde Cuotas." : ''))
                     ->status($batch->failedJobs > 0 ? 'warning' : 'success')
                     ->sendToDatabase($user);

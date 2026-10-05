@@ -4,11 +4,15 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Attendance\AttendanceAccess;
 use App\Actions\Attendance\ResolveClassSessions;
+use App\Actions\Enrollments\EnrollmentRequestAccess;
+use App\Actions\Enrollments\ReportDropout;
 use App\Enums\EnrollmentStatus;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\ClassSessionResource;
 use App\Models\Attendance;
 use App\Models\ClassSession;
+use App\Models\Enrollment;
+use App\Models\EnrollmentRequest;
 use App\Models\Group;
 use App\Models\Schedule;
 use App\Models\Student;
@@ -66,14 +70,28 @@ class GroupController extends Controller
             ->groupBy('student_id');
 
         $studentIds = $classes->flatMap(fn (ClassSession $session) => $session->students()->pluck('id'))->unique();
+
+        // Nuevos que pidieron lugar desde la app: en el mes en curso aparecen aunque todavía no hayan tenido clase.
+        $pending = EnrollmentRequest::query()->pending()->where('group_id', $group->id)->whereNotNull('student_id')->pluck('id', 'student_id');
+        if ($month->isSameMonth($today)) {
+            $studentIds = $studentIds->merge($pending->keys())->unique();
+        }
+        $canReview = $pending->isNotEmpty() && EnrollmentRequestAccess::canReviewGroup($request->user(), $group);
+
         $students = Student::query()->whereKey($studentIds)->orderBy('last_name')->orderBy('first_name')->get();
+        $reported = Enrollment::query()
+            ->where('group_id', $group->id)
+            ->whereIn('student_id', $studentIds)
+            ->whereNotNull('dropout_reported_at')
+            ->pluck('dropout_reported_at', 'student_id');
+        $timezone = $current->get()->timezone;
 
         return response()->json([
             'data' => [
                 ...$this->group($group),
                 'month' => $month->format('Y-m'),
                 'classes' => $classes->map(fn (ClassSession $session) => (new ClassSessionResource($session))->toArray($request))->values(),
-                'students' => $students->map(function (Student $student) use ($attendances) {
+                'students' => $students->map(function (Student $student) use ($attendances, $reported, $timezone, $pending, $canReview) {
                     $marks = $attendances->get($student->id, collect())->countBy(fn (Attendance $a) => $a->status->value);
 
                     return [
@@ -81,10 +99,54 @@ class GroupController extends Controller
                         'full_name' => $student->full_name,
                         'photo_url' => $student->photoUrl(),
                         ...Attendance::summary($marks->all()),
+                        // El técnico avisó que dejó de venir (la baja la decide el club).
+                        'dropout_reported_on' => isset($reported[$student->id])
+                            ? CarbonImmutable::parse($reported[$student->id])->setTimezone($timezone)->toDateString()
+                            : null,
+                        // Nuevo, por confirmar: pidió lugar desde la app.
+                        'enrollment_request' => isset($pending[$student->id])
+                            ? ['id' => $pending[$student->id], 'can_review' => $canReview]
+                            : null,
                     ];
                 })->values(),
             ],
         ]);
+    }
+
+    /**
+     * "Dejó de venir": el técnico de un grupo avisa al club (nota opcional).
+     */
+    public function reportDropout(Request $request, int $group, int $student, ReportDropout $dropout, CurrentOrganization $current): JsonResponse
+    {
+        $request->validate(['note' => ['nullable', 'string', 'max:255']]);
+        $enrollment = $this->enrollment($request, $group, $student);
+
+        $enrollment = $dropout->report($enrollment, $request->input('note'), $request->user());
+
+        return response()->json(['data' => [
+            'dropout_reported_on' => $enrollment->dropout_reported_at->setTimezone($current->get()->timezone)->toDateString(),
+        ]]);
+    }
+
+    /**
+     * El técnico deshace su aviso: sigue viniendo.
+     */
+    public function cancelDropout(Request $request, int $group, int $student, ReportDropout $dropout): JsonResponse
+    {
+        $dropout->clear($this->enrollment($request, $group, $student), $request->user());
+
+        return response()->json(['data' => ['dropout_reported_on' => null]]);
+    }
+
+    private function enrollment(Request $request, int $group, int $student): Enrollment
+    {
+        $group = AttendanceAccess::groups($request->user())->find($group);
+        abort_if($group === null, 404, 'No encontramos este grupo.');
+
+        $enrollment = ReportDropout::enrollmentFor($group, $student);
+        abort_if($enrollment === null, 404, 'Este alumno no está activo en el grupo.');
+
+        return $enrollment;
     }
 
     /**

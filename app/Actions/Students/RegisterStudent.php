@@ -2,8 +2,11 @@
 
 namespace App\Actions\Students;
 
+use App\Actions\Billing\GenerateEnrollmentCharge;
+use App\Actions\Billing\IssueSeasonCharges;
 use App\Actions\Invitations\CreateInvitation;
 use App\Enums\EnrollmentStatus;
+use App\Enums\Gender;
 use App\Enums\GuardianRelationship;
 use App\Enums\MidPeriod;
 use App\Exceptions\ImportRowException;
@@ -17,12 +20,14 @@ use App\Models\Student;
 use App\Models\User;
 use App\Support\Phone;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 /**
  * Alta de un jugador en un solo paso: datos, inscripción, tutores (con familia
- * automática) e invitación a la app. La usan el formulario del panel y la importación.
+ * automática) e invitación a la app. La usan el formulario del panel, la importación y la aprobación de
+ * solicitudes de inscripción de la app.
  *
  * No duplica: el alumno se busca por documento (o nombre + fecha de nacimiento) y el
  * tutor por correo, documento o nombre dentro de la familia.
@@ -38,8 +43,8 @@ class RegisterStudent
     ) {}
 
     /**
-     * @param  array{first_name: string, last_name: string, birth_date: CarbonImmutable|string, document?: ?string, shirt_size?: ?string, position?: ?string, notes?: ?string, user_id?: ?int}  $data
-     * @param  list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string, invite?: bool}>  $guardians
+     * @param  array{first_name: string, last_name: string, birth_date: CarbonImmutable|string, gender?: Gender|string|null, document?: ?string, shirt_size?: ?string, position?: ?string, notes?: ?string, user_id?: ?int}  $data
+     * @param  list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string, invite?: bool, user_id?: ?int}>  $guardians  con `user_id` queda vinculado a esa cuenta (sin invitación)
      * @param  EnrollmentStatus|null  $status  null: se mantiene el de una inscripción existente (o Activo si es nueva)
      * @param  bool  $mustBeNew  el formulario "Nuevo jugador" no reutiliza un jugador existente (la importación sí)
      * @param  MidPeriod|null  $midPeriod  qué se cobra del período en curso (null: lo del plan de la temporada)
@@ -63,7 +68,7 @@ class RegisterStudent
                 $toInvite = $this->guardians($student, $guardians);
 
                 if (! $student->isAdult() && $student->guardians()->doesntExist()) {
-                    throw new ImportRowException('El jugador es menor de edad: cargá al menos un tutor.');
+                    throw new ImportRowException($this->minorWithoutGuardian($this->current->get()));
                 }
 
                 Family::syncFor($student);
@@ -81,16 +86,31 @@ class RegisterStudent
     }
 
     /**
+     * "El jugador es menor de edad: cargá al menos un tutor." con el vocabulario del club.
+     */
+    private function minorWithoutGuardian(Organization $organization): string
+    {
+        return ucfirst(Vocabulary::the($organization->term('student')))
+            .' es menor de edad: cargá al menos '.Vocabulary::a($organization->term('guardian')).'.';
+    }
+
+    /**
      * @param  array<string, mixed>  $data
      */
     private function student(array $data, bool $mustBeNew): Student
     {
         $birthDate = CarbonImmutable::parse($data['birth_date'])->toDateString();
 
-        $student = Student::findExisting($data['document'] ?? null, $data['first_name'], $data['last_name'], $birthDate);
+        $student = Student::findExisting($data['document'] ?? null, $data['first_name'], $data['last_name'], $birthDate, withTrashed: true);
 
-        if ($student !== null && $mustBeNew) {
+        if ($student !== null && ! $student->trashed() && $mustBeNew) {
             throw new ImportRowException('Ya está cargado: inscribilo desde su ficha.');
+        }
+
+        // Archivado (ej. una inscripción de la app rechazada): vuelve con su historial, no se crea otro.
+        if ($student?->trashed()) {
+            $student->restore();
+            $student->attendances()->onlyTrashed()->restore();
         }
 
         $student ??= new Student;
@@ -98,6 +118,8 @@ class RegisterStudent
         $student->fill(array_filter([
             ...collect($data)->only(['first_name', 'last_name', 'document', 'shirt_size', 'position', 'notes', 'user_id'])->all(),
             'birth_date' => $birthDate,
+            // Opcional: sin dato no pisa el que ya tenía.
+            'gender' => Gender::parse($data['gender'] ?? null),
         ], fn ($value) => $value !== null))->save();
 
         return $student;
@@ -131,12 +153,23 @@ class RegisterStudent
 
             $phone = Phone::normalize($data['phone'] ?? null);
 
-            // El mismo tutor: por correo, por celular, por documento o por nombre en la familia.
-            $guardian = ($email ? Guardian::query()->where('email', $email)->first() : null)
-                ?? ($phone ? Guardian::query()->where('phone', $phone)->first() : null)
-                ?? (filled($data['document'] ?? null) ? Guardian::query()->where('document', $data['document'])->first() : null)
+            $userId = $data['user_id'] ?? null;
+
+            // El mismo tutor: por su usuario (solicitud desde la app), por correo, por celular, por documento o
+            // por nombre en la familia. Un tutor archivado (soft delete) con esos datos se restaura: el documento y
+            // el usuario son únicos por organización.
+            $find = fn (string $column, mixed $value) => Guardian::query()->withTrashed()
+                ->where($column, $value)->orderByRaw('deleted_at IS NOT NULL')->first();
+            $guardian = ($userId ? $find('user_id', $userId) : null)
+                ?? ($email ? $find('email', $email) : null)
+                ?? ($phone ? $find('phone', $phone) : null)
+                ?? (filled($data['document'] ?? null) ? $find('document', $data['document']) : null)
                 ?? $this->sameNameInFamily($student, $data, $familyId)
                 ?? new Guardian;
+
+            if ($guardian->trashed()) {
+                $guardian->restore();
+            }
 
             $guardian->fill(array_filter([
                 'first_name' => $data['first_name'],
@@ -144,6 +177,7 @@ class RegisterStudent
                 'document' => $data['document'] ?? null,
                 'email' => $email,
                 'phone' => $data['phone'] ?? null,
+                'user_id' => $guardian->user_id ?? $userId,
             ], fn ($value) => $value !== null))->save();
 
             $student->guardians()->syncWithoutDetaching([
@@ -178,11 +212,26 @@ class RegisterStudent
 
     private function enroll(Student $student, Group $group, Season $season, ?EnrollmentStatus $status, ?MidPeriod $midPeriod): void
     {
-        $enrollment = Enrollment::query()->firstOrNew([
-            'student_id' => $student->id,
-            'group_id' => $group->id,
-            'season_id' => $season->id,
-        ]);
+        $key = ['student_id' => $student->id, 'group_id' => $group->id, 'season_id' => $season->id];
+        $enrollment = Enrollment::query()->withTrashed()->where($key)->orderByRaw('deleted_at IS NOT NULL')->first()
+            ?? new Enrollment($key);
+
+        // Una archivada vuelve como inscripción nueva: desde hoy, con sus cargos (idempotentes).
+        if ($enrollment->trashed()) {
+            $enrollment->restore();
+            $enrollment->forceFill([
+                'status' => $status ?? EnrollmentStatus::Active,
+                'enrolled_on' => now()->toDateString(),
+                'mid_period' => $midPeriod,
+            ])->save();
+
+            if ($enrollment->isBillableStatus()) {
+                app(GenerateEnrollmentCharge::class)->handle($enrollment);
+                app(IssueSeasonCharges::class)->forEnrollment($enrollment);
+            }
+
+            return;
+        }
 
         if (! $enrollment->exists || $status !== null) {
             $enrollment->status = $status ?? EnrollmentStatus::Active;

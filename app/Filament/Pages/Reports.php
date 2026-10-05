@@ -44,6 +44,10 @@ class Reports extends Page
     #[Url]
     public int $minMonths = 1;
 
+    /** Morosos: '' todos, 'only' solo dados de baja, 'exclude' sin dados de baja. */
+    #[Url]
+    public string $withdrawn = '';
+
     public static function canAccess(): bool
     {
         return auth()->user()?->can('View:Reports') ?? false;
@@ -65,7 +69,7 @@ class Reports extends Page
 
         $report = match ($this->tab) {
             'saldos' => new FamilyBalancesReport($organization),
-            'morosos' => new DelinquentsReport($organization, max(1, $this->minMonths)),
+            'morosos' => new DelinquentsReport($organization, max(1, $this->minMonths), $this->withdrawn ?: null),
             default => new BalanceReport($organization, CarbonImmutable::parse($this->from), CarbonImmutable::parse($this->to)),
         };
 

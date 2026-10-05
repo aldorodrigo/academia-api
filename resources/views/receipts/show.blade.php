@@ -45,7 +45,7 @@
 
     <table>
         <thead>
-            <tr><th>Jugador</th><th>Concepto</th><th class="amount">Monto</th></tr>
+            <tr><th>{{ $studentTerm ?? $organization->term('student') }}</th><th>Concepto</th><th class="amount">Monto</th></tr>
         </thead>
         <tbody>
             @foreach ($allocations as $allocation)
@@ -70,6 +70,9 @@
     <p class="muted">
         Forma de pago: {{ $payment->method->label() }}{{ $payment->reference ? ' · Ref. '.$payment->reference : '' }}
         · Cuenta: {{ $payment->moneyAccount->name }}
+        @if ($payment->creator)
+            · Cobró: {{ $payment->creator->name }}
+        @endif
     </p>
     @if ($payment->isVoided())
         <p><strong>Anulado:</strong> {{ $payment->void_reason }}</p>

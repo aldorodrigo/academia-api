@@ -48,7 +48,7 @@ it('propone una temporada anual con cuota mensual y calcula fin y nombre según 
             'kind' => SeasonKind::Annual,
             'starts_on' => '2027-01-01',
             'ends_on' => '2027-12-31',
-            'name' => '2027',
+            'name' => 'Temporada 2027',
             'fee_frequency' => FeeFrequency::Monthly,
             'due_days' => 9,
             'issue_upfront' => '0',
@@ -79,7 +79,7 @@ it('crea la temporada con sus montos y el resumen coincide con lo que se emite',
 
     $state = ['name' => '2027', 'starts_on' => '2027-01-01', 'ends_on' => '2027-12-31', 'fee_frequency' => 'mensual', 'due_days' => 9, 'issue_upfront' => '1', 'fee_amount' => 150000, 'program_ids' => [$this->futbol->id]];
     expect(SeasonPlan::summary($state))->toBe('2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota mensual de ₲ 150.000, que vence el día 10 de cada mes. Las 12 cuotas de cada jugador se crean todas al inscribirlo.')
-        ->and(SeasonPlan::examples($state)->first())->toBe(['period' => 'enero 2027', 'due_on' => '10/01/2027', 'amount' => '₲ 150.000']);
+        ->and(SeasonPlan::examples($state)->first())->toBe(['period' => 'enero 2027', 'due_on' => '10/01/2027', 'due_note' => null, 'amount' => '₲ 150.000']);
 
     // Lo que después se emite coincide con el ejemplo.
     Enrollment::factory()->create(['student_id' => Student::factory()->for($this->jakare)->create()->id, 'group_id' => $this->sub10->id, 'season_id' => $season->id, 'enrolled_on' => '2026-10-15']);
@@ -96,14 +96,14 @@ it('copia la temporada anterior con aumento y ofrece pasar a los jugadores', fun
 
     Livewire::test(CreateSeason::class)
         ->fillForm(['copy_from' => (string) $old->id])
-        ->assertSchemaStateSet(['name' => '2027', 'starts_on' => '2027-01-01', 'fee_amount' => 150000, 'has_group_amounts' => true])
+        ->assertSchemaStateSet(['name' => 'Temporada 2027', 'starts_on' => '2027-01-01', 'fee_amount' => 150000, 'has_group_amounts' => true])
         ->fillForm(['increase_percent' => 10])
         ->assertSchemaStateSet(['fee_amount' => 165000])
         ->call('create')
         ->assertHasNoFormErrors()
         ->assertNotified('Temporada 2027 creada.');
 
-    $new = Season::query()->where('name', '2027')->sole();
+    $new = Season::query()->where('name', 'Temporada 2027')->sole();
     expect($new->tariffs()->orderBy('amount')->pluck('amount')->all())->toBe([165000, 187000]);
 });
 

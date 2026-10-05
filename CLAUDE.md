@@ -6,7 +6,7 @@ Guía para Claude Code al trabajar en este repositorio.
 
 SaaS para **academias, clubes y escuelas de formación** (deporte, danza, música, idiomas…)
 y comisiones de padres. Piloto: **Club Jakare** (fútbol infantil, Paraguay).
-Nombre del producto: pendiente (nombre en clave del repo: `academia`).
+Producto: **Tuku** (dominio `tukuha.app`; nombre en clave del repo: `academia`).
 
 Este repo es el **backend**: API para la app Flutter (`/api/v1`) + panel de administración
 Filament (`/admin`) + colas (Horizon) + tareas programadas. La app móvil vive en otro repo.
@@ -91,8 +91,15 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   también van por correo. Correo para copias: `User::mailableEmail()` (el verificado o, sin celular, el de la cuenta).
   Cada dato se verifica por separado: un celular o correo sin verificar no ocupa el dato (`User::owning()`,
   `User::releaseContacts()`, regla `ContactAvailable`).
-- **Avisos:** extender `App\Notifications\PushNotification` (push + correo con la marca a partir de `toPush()`;
-  `mailActions()` y `mailPose()` para los botones y la mascota). No crear notificaciones solo push.
+- **Avisos:** extender `App\Notifications\PushNotification` (bandeja + push + correo con la marca a partir de `toPush()`;
+  `mailActions()` y `mailPose()` para los botones y la mascota). No crear notificaciones solo push. Cada aviso queda en
+  la bandeja "Avisos" de la app (canal `inbox`, `App\Support\Notifications\InboxChannel`: tabla `notifications` con
+  `organization_id` y `data.format = tuku`; `GET me/notifications`, `NotificationInboxController`) salvo que el aviso
+  sobreescriba `inInbox()` con `false` (los recordatorios de día de clase `ClassReminder` e `InstructorClassReminder`); los de Filament
+  (`format = filament`) no se mezclan. Antes de prometer por dónde llega algo, usá los canales reales
+  (`WithdrawEnrollment::noticeReach()`/`channelsOf()`; el recibo de un pago: `Billing\ReceiptNotice`, con el link de 30 días
+  `ReceiptController::shareUrl()` para mandarlo por `wa.me`; en el panel `Filament\Support\ReceiptNoticeNotification`).
+  Nunca "le avisamos" sin canal real, ni "el tesorero" fijo: nombrá a quién (`PaymentReportAccess::confirmers()`).
 - **Correos con la marca Tuku:** componentes en `resources/views/vendor/mail` (tema `tuku.css`, `mascot`, `buttons`) y
   `vendor/notifications/email.blade.php` en español. Los links de los correos que cambian algo abren una página
   (`site.aviso`) con un botón que hace el `POST`: los antivirus de correo abren los links solos.
@@ -129,6 +136,14 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Alta de jugador: `App\Actions\Students\RegisterStudent` (datos + inscripción + tutores + invitación). La usan
   el formulario "Nuevo jugador" y la importación (`ImportStudentRow` adapta la fila; el importer corre en cola y
   recibe `organization_id` en `options`).
+- Inscripción desde la app ("entra ya, se confirma después"): `SubmitEnrollmentRequest` da de alta con `RegisterStudent`
+  en `pendiente` (va a clases: `ClassSession::enrollmentsQuery()` suma las pendientes con `EnrollmentRequest` por
+  confirmar; no se cobra) y guarda la `EnrollmentRequest`; `ReviewEnrollmentRequest` confirma (pendiente → activo: el
+  modelo emite inscripción y cuotas) o rechaza/cancela (deshace el alta). `EnrollmentRequestAccess`: quién confirma
+  (`Manage:EnrollmentRequests` en todas, `Confirm:GroupEnrollments` en las categorías del técnico; `reviewable()`),
+  opciones, cupo y mitad de período (`MidPeriodPreview::periodStarted`). "Cargar alumno" de la app: `POST students`
+  (`StudentRegistrationController`, `Create:Student`, invitación del tutor con `whatsapp_url`). Panel: "Solicitudes de
+  inscripción" en Académico. Plan: `docs/PLAN_INSCRIPCION_TUTOR.md` (5e le suma el link público).
 - Familia: automática e invisible (`Family::syncFor($student)`), sin menú ni campo en el panel.
 - Categoría sugerida por fecha de nacimiento: `Group::suggestFor($birthDate, $season, $program)`.
 - Campos de inscripción (alta, acción "Inscribir", pestaña Inscripciones): `App\Filament\Support\EnrollmentForm`.
@@ -137,8 +152,32 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `QueueEnrollmentCharges`, avisa al terminar).
 - Nueva temporada: asistente `CreateSeason` (`Seasons\Support\SeasonPlanSteps` y `SeasonPlan`: valores por defecto,
   copia, resumen, cuotas de ejemplo, tarifas). "Configurar cobro" y "Cambiar monto": `SeasonActions`.
-- Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
-- Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
+- Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento; `withTrashed: true` incluye archivados).
+- **Soft delete** en `Student`, `Guardian`, `Enrollment` y `Attendance` (y en `PaymentReport`, `CashDeposit`,
+  `ChargeWaiver`, `OnboardingDraft`): `delete()` archiva. En consultas con `DB::table` o `withoutGlobalScopes()` filtrá
+  `deleted_at`. El alta (`RegisterStudent`) restaura al alumno archivado con el mismo documento (y una inscripción
+  archivada) y al tutor archivado con el mismo usuario, correo, celular o documento; la unicidad de `enrollments`
+  cuenta solo las vigentes (columna generada `not_deleted`).
+- Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms` (fuera del panel usa la
+  organización activa). Nada de "jugador", "categoría" o "técnico" fijos en textos: van con `Terms` o `term()`.
+- Vocabulario por deporte (`docs/PLAN_VOCABULARIO.md`): `VocabularySuggestion` propone las palabras de la primera
+  disciplina elegida que tenga (`Templates::programTerminology`: fútbol Jugador/Técnico/Categoría/Cancha, natación
+  Nivel/Pileta…) hasta que el vocabulario se confirma (`terminology_confirmed_at`); la guía la recuerda ("Elegí cómo
+  les dicen"). Se cambia con `UpdateTerminology` (app `PUT organization/terminology`, guía del panel) o en
+  Configuración → Vocabulario.
+- Borrador del paso 2 de la guía ("Se guarda solo"): `StepDrafts` / `OnboardingDraft` (soft delete al crear las
+  categorías), `onboarding/steps/groups/draft` en la API y `updatedMountedActions` en el panel
+  (`docs/PLAN_PRIMEROS_PASOS_AJUSTES.md`).
+- Cantidades con su plural: `Vocabulary::count()`; nombres de temporada: `Vocabulary::season()`.
+- Importar Excel: `App\Filament\Actions\SpreadsheetImportAction` (.xlsx y .csv). Textos de Filament en voseo:
+  overrides en `lang/vendor/*/es` (solo las claves que cambian). Marca del panel: "Tuku" (no `APP_NAME`).
+- Textos del panel con mayúscula solo al principio: todo recurso usa `App\Filament\Support\SentenceCaseLabels`
+  ("Depósitos de efectivo"); "Roles y permisos" es `App\Filament\Resources\Roles\RoleResource` (extiende el de
+  Shield: nombre visible con `OrganizationRole::labelFor()`, sin "Guard") y `App\Support\Roles\ShieldLabels` (permisos y
+  recursos sin Title Case). Borrar un rol: `App\Actions\Roles\DeleteRole` (solo creados y sin uso; los base nunca, lo
+  frena también `Role::deleting`); `roles` tiene soft delete (migración temprana `2026_09_26_212820`, porque migraciones
+  de datos posteriores usan el modelo). Fechas: `d/m/Y` y `d/m/Y H:i` por defecto (`AppServiceProvider::configurePanelFormats`), las
+  que tienen hora en la zona de la organización (las fechas solas y los `TimePicker` no se convierten).
 
 ### Finanzas (cargos)
 - `Charge` es inmutable (no se edita ni se borra): se anula con `VoidCharge` (motivo). Estado calculado: `Charge::status()`.
@@ -146,6 +185,16 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `issue_upfront`, `mid_period`): períodos con `SeasonPeriods`; emisión por inscripción con `IssueSeasonCharges`
   (al crear la inscripción, idempotente por `unique_key` `enr:…:con:…:per:Y-m-d`); `GenerateSeasonCharges` (lock) y
   comando diario `charges:generate`. Baja o suspensión: `VoidFutureCharges`. `Charge::isUpcoming()` = próxima.
+- Hooks de `Enrollment` (`created`/`updated`): una `pendiente` no se cobra; al pasar de pendiente a activo se emiten el
+  cargo de inscripción y las cuotas desde que empezó; al volver de una baja o suspensión, las cuotas desde el período
+  en curso (los meses afuera no se cobran).
+- Bajas (`docs/PLAN_BAJAS.md`): `Enrollments\WithdrawEnrollment` (fecha, motivo y aviso opcional a la familia
+  `StudentWithdrawn` con `defaultNotice()`; la deuda queda), `ReactivateEnrollment` (cuotas desde el período en curso),
+  `ReportDropout` (aviso del técnico "dejó de venir" o del tutor "deja el club", `dropout_source`; `DropoutReported`);
+  acciones del panel en `Filament\Support\WithdrawalActions`; endpoints de la app en `Api\V1\WithdrawalController`.
+  Dados de baja en informes: `Support\Enrollments\Withdrawals`. Condonar: `Billing\WaiveCharges` (permiso
+  `Waive:Charge`, admin/tesorero/presidente por defecto; anulación con `waived_amount`, estado `condonado`, fila en
+  `ChargeCondonation`) y `Billing\UnwaiveCharge` (deshacer); acciones `Filament\Support\WaiveChargeAction`.
 - Descuentos y becas: `DiscountCalculator`, en el orden de `organizations.billing.discount_order`.
 - Tarifa aplicable: `Tariff::applicable()`. Configuración de cobros: `Organization::billing()`.
 - Becas: `ScholarshipDecision` (permiso `Approve:Scholarship`).
@@ -153,6 +202,19 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `ApplyCredit` (saldo a favor, se llama al generar cargos), `VoidPayment`. `Payment`, `PaymentAllocation` y
   `LedgerEntry` son inmutables. Recibo: `ReceiptController` (ruta firmada `recibos/{payment}`).
 - Tesorería: `App\Actions\Treasury\ExpenseLedger` (registrar, pagar, anular, recurrentes) y `TransferFunds`.
+- Cobro en efectivo desde la app (`docs/PLAN_COBRO_EFECTIVO.md`): `CollectCashPayment` (usa `RegisterPayment`; entra en
+  la caja personal, `MoneyAccount::ensureCashBoxOf()`, cuenta con `user_id`), acceso en `CashCollectionAccess` (permiso
+  `Collect:Payments`, `collect_payments` en la app). Depósitos de la caja: `Treasury\CashDeposits` (por confirmar;
+  confirmar = `TransferFunds`); los confirma quien valida comprobantes. Las cuentas del club son `MoneyAccount::club()`;
+  donde entra un pago se elige de `PaymentReportAccess::paymentAccounts()` (sin cajas personales). La transferencia que
+  la familia le manda a quien cobra: `SubmitPaymentReport::onBehalf()` (`registered_by_staff`; aprobada al instante si
+  quien la registra valida comprobantes).
+- **Cobra directo a la Caja** (`PLAN_COBRO_EFECTIVO.md` §9): `memberships.collects_to_org_cash` por persona (por defecto
+  solo el dueño, `organizations.owner_id`: lo fijan `RegisterOrganization` y, en las de la plataforma, el primer admin
+  que acepta la invitación). `CashCollectionAccess::collectsToOrgCash()`/`orgCash()`/`collectors()`; lo cambia
+  `SetCollectsToOrgCash` (quién y cuándo + actividad) desde Miembros del panel o `PUT cash-collectors/{user}`. Con eso
+  `CollectCashPayment` y "Registrar pago" (Efectivo) van a la Caja del club o a la cuenta del club elegida, sin caja
+  personal. Quién cobró: `Payment::creator()` (lista de pagos, recibo, movimientos).
 - Informes: `App\Reports\*` (`data()` para API/panel, `pdf()`, `xlsx()` con openspout); descarga por ruta firmada
   `informes/{report}.{format}` (`ReportDownloadController`). Permiso `View:Reports`; la app lo recibe en
   `membership.permissions` como `view_reports`. Los jugadores sin familia cuentan como su propio grupo.
@@ -173,3 +235,8 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Modelos con atributos de Laravel 13 (`#[Fillable]`, `#[Hidden]`).
 - Enums en `App\Enums`.
 - Correr `composer lint` antes de commitear.
+- **Siempre soft delete:** nada de dominio se borra físicamente (alumnos, tutores, inscripciones, asistencias,
+  comprobantes, depósitos, descuentos…): se archiva con `SoftDeletes` y se filtra en listas e informes. Cargos, pagos y
+  movimientos no se borran: se anulan con motivo.
+- **Registrar quién:** toda aprobación, rechazo, confirmación, condonación, baja o registro hecho por otro guarda quién
+  lo hizo y cuándo (`*_by` + fecha, y el motivo cuando corresponde).

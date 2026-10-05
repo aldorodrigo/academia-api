@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Policies;
 
+use App\Actions\Roles\DeleteRole;
+use App\Models\Role as AppRole;
 use Illuminate\Auth\Access\HandlesAuthorization;
 use Illuminate\Foundation\Auth\User as AuthUser;
 use Spatie\Permission\Models\Role;
@@ -34,12 +36,15 @@ class RolePolicy
 
     public function delete(AuthUser $authUser, Role $role): bool
     {
-        return $authUser->can('Delete:Role');
+        // Los roles base y los que alguien tiene no se borran (al admin, que pasa por Gate::before, lo frena el
+        // modelo con DeleteRole::ensureDeletable).
+        return $authUser->can('Delete:Role') && (! $role instanceof AppRole || DeleteRole::canDelete($role));
     }
 
     public function deleteAny(AuthUser $authUser): bool
     {
-        return $authUser->can('DeleteAny:Role');
+        // Sin borrado en masa: se borra de a uno.
+        return false;
     }
 
     public function restore(AuthUser $authUser, Role $role): bool
@@ -49,12 +54,13 @@ class RolePolicy
 
     public function forceDelete(AuthUser $authUser, Role $role): bool
     {
-        return $authUser->can('ForceDelete:Role');
+        // Nunca se borra físicamente.
+        return false;
     }
 
     public function forceDeleteAny(AuthUser $authUser): bool
     {
-        return $authUser->can('ForceDeleteAny:Role');
+        return false;
     }
 
     public function restoreAny(AuthUser $authUser): bool

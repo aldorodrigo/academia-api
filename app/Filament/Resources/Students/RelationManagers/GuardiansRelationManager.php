@@ -45,6 +45,9 @@ class GuardiansRelationManager extends RelationManager
     public function table(Table $table): Table
     {
         return $table
+            // "Crear tutor", no "Crear guardian" (el nombre del modelo).
+            ->modelLabel(fn () => Terms::singular('guardian', 'Tutor'))
+            ->pluralModelLabel(fn () => Terms::plural('guardian', 'Tutor'))
             ->recordTitle(fn (Guardian $record) => $record->full_name)
             ->columns([
                 TextColumn::make('full_name')->label('Nombre'),

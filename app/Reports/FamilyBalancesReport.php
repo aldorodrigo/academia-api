@@ -4,10 +4,12 @@ namespace App\Reports;
 
 use App\Enums\ChargeStatus;
 use App\Models\Charge;
+use App\Support\Enrollments\Withdrawals;
 
 /**
  * Saldos por familia: lo pendiente, lo vencido y el saldo a favor. Las cuotas creadas por
- * adelantado cuyo período no empezó van aparte (próximas), no como pendiente.
+ * adelantado cuyo período no empezó van aparte (próximas), no como pendiente. Cada fila marca a los
+ * hijos dados de baja (`withdrawn`).
  */
 class FamilyBalancesReport extends Report
 {
@@ -27,12 +29,14 @@ class FamilyBalancesReport extends Report
     }
 
     /**
-     * @return list<array{family: string, students: list<string>, pending: int, overdue: int, credit: int, upcoming: int}>
+     * @return list<array{family: string, students: list<string>, pending: int, overdue: int, credit: int, upcoming: int, withdrawn: list<array{student_id: int, student: string, on: ?string}>}>
      */
     public function families(): array
     {
+        $withdrawals = Withdrawals::load();
+
         return $this->households()
-            ->map(function (array $household) {
+            ->map(function (array $household) use ($withdrawals) {
                 $charges = Charge::query()->notVoided()
                     ->whereIn('student_id', $household['students']->modelKeys())
                     ->with(['allocations.payment', 'organization'])
@@ -45,6 +49,7 @@ class FamilyBalancesReport extends Report
                     'overdue' => (int) $charges->filter(fn (Charge $c) => $c->status() === ChargeStatus::Overdue)->sum(fn (Charge $c) => $c->pendingAmount()),
                     'credit' => (int) ($household['family']?->payments->whereNull('voided_at')->sum(fn ($payment) => $payment->credit()) ?? 0),
                     'upcoming' => (int) $charges->filter(fn (Charge $c) => $c->isUpcoming())->sum(fn (Charge $c) => $c->pendingAmount()),
+                    'withdrawn' => $withdrawals->for($household['students']),
                 ];
             })
             ->filter(fn (array $row) => $row['pending'] > 0 || $row['credit'] > 0 || $row['upcoming'] > 0)
@@ -79,8 +84,8 @@ class FamilyBalancesReport extends Report
                 ['Saldo a favor', $data['totals']['credit']],
                 ['Próximas cuotas', $data['totals']['upcoming']],
             ]],
-            ['title' => 'Familias', 'headers' => ['Familia', 'Jugadores', 'Pendiente', 'Vencido', 'Saldo a favor', 'Próximas'], 'money' => [2, 3, 4, 5],
-                'rows' => array_map(fn (array $f) => [$f['family'], implode(', ', $f['students']), $f['pending'], $f['overdue'], $f['credit'], $f['upcoming']], $data['families'])],
+            ['title' => 'Familias', 'headers' => ['Familia', 'Jugadores', 'Pendiente', 'Vencido', 'Saldo a favor', 'Próximas', 'Dados de baja'], 'money' => [2, 3, 4, 5],
+                'rows' => array_map(fn (array $f) => [$f['family'], implode(', ', $f['students']), $f['pending'], $f['overdue'], $f['credit'], $f['upcoming'], Withdrawals::describe($f['withdrawn'])], $data['families'])],
         ];
     }
 }

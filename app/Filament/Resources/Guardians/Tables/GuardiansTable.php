@@ -48,7 +48,12 @@ class GuardiansTable
                     ),
             ])
             ->defaultSort('last_name')
-            ->recordActions([self::inviteAction(), EditAction::make(), DeleteAction::make()])
+            ->recordActions([
+                self::inviteAction(),
+                EditAction::make(),
+                // No se borra de verdad: queda archivado (soft delete) con su historial.
+                DeleteAction::make()->modalDescription('Deja de aparecer en las listas y en la ficha de sus hijos; su historial queda guardado.'),
+            ])
             ->toolbarActions([
                 BulkAction::make('invite')
                     ->label('Invitar a la app')

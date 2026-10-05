@@ -39,8 +39,15 @@ class StudentResource extends JsonResource
             'last_name' => $this->last_name,
             'full_name' => $this->full_name,
             'birth_date' => $this->birth_date?->toDateString(),
+            // Opcional (female / male; null = sin especificar): para nombrarlo ("Jugadora").
+            'gender' => $this->gender?->value,
             'photo_url' => $this->photoUrl(),
             'is_self' => $this->user_id !== null && $this->user_id === $user->id,
+            // El tutor avisó que deja el club (la baja la decide el club).
+            'leaving_reported_on' => $this->currentEnrollments
+                ->filter(fn ($enrollment) => $enrollment->dropout_source === 'guardian' && $enrollment->dropout_reported_at !== null)
+                ->min('dropout_reported_at')
+                ?->setTimezone($this->organization->timezone)->toDateString(),
             'enrollments' => $this->currentEnrollments
                 ->map(fn ($enrollment) => (new EnrollmentResource($enrollment))->detailed($this->detailed)->toArray($request))
                 ->values(),

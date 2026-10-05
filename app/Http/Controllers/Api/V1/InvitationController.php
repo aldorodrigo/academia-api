@@ -22,6 +22,7 @@ class InvitationController extends Controller
         abort_unless($invitation?->canBeAccepted(), Response::HTTP_NOT_FOUND, 'La invitación no es válida o ya venció.');
 
         $organization = $invitation->organization;
+        $gender = $invitation->personGender();
 
         return response()->json([
             'data' => [
@@ -29,9 +30,10 @@ class InvitationController extends Controller
                 'email' => $invitation->email,
                 'phone' => $invitation->phone,
                 'name' => $invitation->name,
+                'gender' => $invitation->gender?->value,
                 'roles' => collect($invitation->roles)->map(fn (array $role) => [
                     'name' => $role['role'],
-                    'label' => OrganizationRole::labelFor($role['role'], $organization),
+                    'label' => OrganizationRole::labelFor($role['role'], $organization, $gender),
                 ])->values(),
                 'user_exists' => $invitation->existingUser() !== null,
                 'expires_at' => $invitation->expires_at->toIso8601ZuluString(),

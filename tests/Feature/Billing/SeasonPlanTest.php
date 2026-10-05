@@ -254,7 +254,7 @@ describe('pase de temporada', function () {
             ->and($created)->toBe(1)
             ->and(Charge::query()->where('season_id', $new->id)->count())->toBe(12)
             ->and(DatabaseNotification::query()->sole()->data['title'])->toBe('Cuotas creadas')
-            ->and(DatabaseNotification::query()->sole()->data['body'])->toBe('Se crearon 12 cuotas para 1 inscripciones.');
+            ->and(DatabaseNotification::query()->sole()->data['body'])->toBe('Se crearon 12 cuotas para 1 inscripción.');
     });
 });
 

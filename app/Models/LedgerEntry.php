@@ -78,6 +78,16 @@ class LedgerEntry extends Model
     }
 
     /**
+     * Quién registró el movimiento.
+     *
+     * @return BelongsTo<User, $this>
+     */
+    public function creator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /**
      * @return BelongsTo<LedgerEntry, $this>
      */
     public function reverses(): BelongsTo

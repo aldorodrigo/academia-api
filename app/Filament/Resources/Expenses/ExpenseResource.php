@@ -6,6 +6,7 @@ use App\Actions\Treasury\ExpenseLedger;
 use App\Enums\ExpenseStatus;
 use App\Filament\Resources\Expenses\Pages\ManageExpenses;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\Expense;
 use App\Models\MoneyAccount;
 use BackedEnum;
@@ -31,6 +32,8 @@ use UnitEnum;
  */
 class ExpenseResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Expense::class;
 
     protected static ?string $slug = 'gastos';

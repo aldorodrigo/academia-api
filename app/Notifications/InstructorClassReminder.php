@@ -33,6 +33,15 @@ class InstructorClassReminder extends PushNotification
             ]));
     }
 
+    /**
+     * Recordatorio de día de clase ("Tomar asistencia" del técnico): llega por push y correo, pero no queda en la bandeja
+     * "Avisos" (se repite hasta 3 veces por clase y vence al empezar).
+     */
+    public function inInbox(): bool
+    {
+        return false;
+    }
+
     public function toPush(object $notifiable): PushMessage
     {
         return new PushMessage('Mis clases', $this->body, [

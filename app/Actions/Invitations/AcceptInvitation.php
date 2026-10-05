@@ -2,7 +2,9 @@
 
 namespace App\Actions\Invitations;
 
+use App\Actions\Auth\RegisterUser;
 use App\Enums\MembershipStatus;
+use App\Enums\OrganizationRole;
 use App\Mail\ConfirmEmailMail;
 use App\Models\Group;
 use App\Models\Guardian;
@@ -26,7 +28,7 @@ class AcceptInvitation
     public function __construct(private RoleAssigner $assigner) {}
 
     /**
-     * @param  array{name?: ?string, password: string, device_name: string}  $data
+     * @param  array{name?: ?string, password: string, device_name: string, terms?: mixed}  $data
      * @return array{0: User, 1: string}
      */
     public function handle(Invitation $invitation, array $data): array
@@ -47,6 +49,11 @@ class AcceptInvitation
                     'email' => $invitation->email,
                     'phone' => $invitation->phone,
                     'password' => $data['password'],
+                    // Aceptó los términos al crear la cuenta, como en el registro.
+                    ...(empty($data['terms']) ? [] : [
+                        'terms_accepted_at' => now(),
+                        'terms_version' => RegisterUser::TERMS_VERSION,
+                    ]),
                 ]);
                 // El link llegó a ese WhatsApp o a ese correo: queda verificado. Con los dos, el celular; el
                 // correo se confirma con el link que le mandamos (hasta entonces no recibe copias).
@@ -61,12 +68,23 @@ class AcceptInvitation
                 throw ValidationException::withMessages(['password' => 'La contraseña no es correcta.']);
             }
 
+            // El género que cargó quien invitó, si la persona todavía no eligió el suyo en "Mi cuenta".
+            if ($invitation->gender !== null && $user->gender === null) {
+                $user->forceFill(['gender' => $invitation->gender])->save();
+            }
+
             $organization = $invitation->organization;
 
-            $organization->memberships()->updateOrCreate(
+            $membership = $organization->memberships()->updateOrCreate(
                 ['user_id' => $user->id],
                 ['status' => MembershipStatus::Active],
             );
+
+            // Creada desde la plataforma: el primer administrador que acepta es el dueño y cobra directo a la Caja.
+            if ($organization->owner_id === null && collect($invitation->roles)->contains('role', OrganizationRole::Admin->value)) {
+                $organization->forceFill(['owner_id' => $user->id])->save();
+                $membership->forceFill(['collects_to_org_cash' => true])->save();
+            }
 
             foreach ($invitation->roles as $item) {
                 $role = Role::query()->where('organization_id', $organization->id)->where('name', $item['role'])->first();
@@ -101,7 +119,7 @@ class AcceptInvitation
     private function linkGuardian(Invitation $invitation, User $user): void
     {
         $guardian = $invitation->guardian_id === null ? null
-            : Guardian::query()->withoutGlobalScopes()->find($invitation->guardian_id);
+            : Guardian::query()->withoutGlobalScopes()->whereNull('deleted_at')->find($invitation->guardian_id);
 
         if ($guardian === null || ($guardian->user_id !== null && $guardian->user_id !== $user->id)) {
             return;

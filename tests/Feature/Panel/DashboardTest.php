@@ -182,7 +182,8 @@ describe('permisos por defecto', function () {
             ->and($role(OrganizationRole::Secretary)->hasPermissionTo('Create:Student'))->toBeTrue()
             ->and($role(OrganizationRole::Secretary)->hasPermissionTo('ViewAny:Payment'))->toBeFalse()
             ->and($role(OrganizationRole::Member)->permissions->pluck('name')->all())->toBe(['View:Reports'])
-            ->and($role(OrganizationRole::Instructor)->permissions)->toBeEmpty()
+            ->and($role(OrganizationRole::Secretary)->hasPermissionTo('Manage:EnrollmentRequests'))->toBeTrue()
+            ->and($role(OrganizationRole::Instructor)->permissions->pluck('name')->all())->toEqualCanonicalizing(['Confirm:GroupEnrollments', 'Collect:Payments'])
             ->and($role(OrganizationRole::Guardian)->permissions)->toBeEmpty();
     });
 

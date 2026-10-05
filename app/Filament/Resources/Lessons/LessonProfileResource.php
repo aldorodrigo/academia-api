@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Lessons;
 
 use App\Enums\OrganizationRole;
 use App\Filament\Resources\Lessons\Pages\ManageLessonProfiles;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\LessonProfile;
 use App\Models\MoneyAccount;
 use App\Models\User;
@@ -29,6 +30,7 @@ use UnitEnum;
 class LessonProfileResource extends Resource
 {
     use LessonsModule;
+    use SentenceCaseLabels;
 
     protected static ?string $model = LessonProfile::class;
 

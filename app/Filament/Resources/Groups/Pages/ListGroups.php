@@ -21,7 +21,7 @@ class ListGroups extends ListRecords
         return [
             // Las disciplinas no tienen menú propio: se agregan acá o desde el formulario.
             Action::make('newProgram')
-                ->label('Nueva '.Terms::singular('program', 'Disciplina'))
+                ->label(Terms::gendered('program', 'Disciplina', 'Nuevo', 'Nueva').' '.Terms::singular('program', 'Disciplina'))
                 ->icon(Heroicon::OutlinedPlus)
                 ->color('gray')
                 ->schema(GroupForm::programFields())
@@ -29,7 +29,7 @@ class ListGroups extends ListRecords
                 ->action(function (array $data): void {
                     Program::query()->create($data);
 
-                    Notification::make()->success()->title(Terms::label('program', 'Disciplina').' creada.')->send();
+                    Notification::make()->success()->title(Terms::label('program', 'Disciplina').' '.Terms::gendered('program', 'Disciplina', 'creado', 'creada').'.')->send();
                 }),
             CreateAction::make(),
         ];

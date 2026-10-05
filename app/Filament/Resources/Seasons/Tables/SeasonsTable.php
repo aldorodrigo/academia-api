@@ -19,7 +19,7 @@ class SeasonsTable
             ->modifyQueryUsing(fn (Builder $query) => $query->with('programs')->withCount(['charges' => fn (Builder $charges) => $charges->whereNull('voided_at')]))
             ->columns([
                 TextColumn::make('name')->label('Nombre')->searchable(),
-                TextColumn::make('programs.name')->label(ucfirst(Terms::plural('program', 'Disciplina')))->badge()->placeholder('Todas'),
+                TextColumn::make('programs.name')->label(ucfirst(Terms::plural('program', 'Disciplina')))->badge()->placeholder(fn () => Terms::gendered('program', 'Disciplina', 'Todos', 'Todas')),
                 TextColumn::make('kind')->label('Duración'),
                 TextColumn::make('starts_on')->label('Fechas')->sortable()
                     ->formatStateUsing(fn (Season $record) => $record->starts_on->format('d/m/Y').' – '.$record->ends_on->format('d/m/Y')),

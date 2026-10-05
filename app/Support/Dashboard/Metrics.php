@@ -93,6 +93,7 @@ class Metrics
             ->get();
 
         $phones = DB::table('guardians')
+            ->whereNull('deleted_at')
             ->whereIn('family_id', $rows->pluck('family_id'))
             ->whereNotNull('phone')
             ->orderBy('id')
@@ -141,10 +142,12 @@ class Metrics
             'active' => (int) (clone $current)->distinct()->count('enrollments.student_id'),
             'new' => (int) DB::table('enrollments')
                 ->where('organization_id', $this->organization->id)
+                ->whereNull('deleted_at')
                 ->whereBetween('enrolled_on', [$start, $end])
                 ->distinct()->count('student_id'),
             'withdrawn' => (int) DB::table('enrollments')
                 ->where('organization_id', $this->organization->id)
+                ->whereNull('deleted_at')
                 ->where('status', EnrollmentStatus::Withdrawn->value)
                 ->whereBetween('ended_on', [$start, $end])
                 ->distinct()->count('student_id'),
@@ -213,11 +216,11 @@ class Metrics
                 ->from('group_instructor')->whereColumn('group_instructor.group_id', 'groups.id'))->count(),
             'groups_without_schedule' => $groups()->whereNotExists(fn (Builder $query) => $query
                 ->from('schedules')->whereColumn('schedules.group_id', 'groups.id'))->count(),
-            'guardians_without_app' => DB::table('guardians')->where('organization_id', $org)->whereNull('user_id')
+            'guardians_without_app' => DB::table('guardians')->where('organization_id', $org)->whereNull('deleted_at')->whereNull('user_id')
                 ->where(fn (Builder $query) => $query->whereNotNull('phone')->orWhereNotNull('email'))->count(),
             'pending_expenses' => DB::table('expenses')->where('organization_id', $org)
                 ->where('status', ExpenseStatus::Pending->value)->count(),
-            'pending_enrollments' => DB::table('enrollments')->where('organization_id', $org)
+            'pending_enrollments' => DB::table('enrollments')->where('organization_id', $org)->whereNull('deleted_at')
                 ->where('status', EnrollmentStatus::Pending->value)->count(),
         ];
     }
@@ -261,6 +264,7 @@ class Metrics
         return DB::table('enrollments')
             ->join('seasons', 'seasons.id', '=', 'enrollments.season_id')
             ->where('enrollments.organization_id', $this->organization->id)
+            ->whereNull('enrollments.deleted_at')
             ->whereIn('enrollments.status', [EnrollmentStatus::Active->value, EnrollmentStatus::Scholarship->value])
             ->where('seasons.ends_on', '>=', $this->today->toDateString());
     }

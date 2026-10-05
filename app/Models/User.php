@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Actions\Auth\SendVerificationCode;
+use App\Enums\Gender;
 use App\Enums\MembershipStatus;
 use App\Enums\OrganizationRole;
 use App\Support\Phone;
@@ -26,7 +27,7 @@ use Laravel\Fortify\TwoFactorAuthenticatable;
 use Laravel\Sanctum\HasApiTokens;
 use Spatie\Permission\Traits\HasRoles;
 
-#[Fillable(['name', 'email', 'phone', 'password', 'terms_accepted_at', 'terms_version'])]
+#[Fillable(['name', 'email', 'phone', 'password', 'terms_accepted_at', 'terms_version', 'gender'])]
 #[Hidden(['password', 'remember_token', 'two_factor_secret', 'two_factor_recovery_codes'])]
 class User extends Authenticatable implements FilamentUser, HasTenants, MustVerifyEmail
 {
@@ -42,6 +43,7 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
     {
         return [
             'email_verified_at' => 'datetime',
+            'gender' => Gender::class,
             'phone_verified_at' => 'datetime',
             'terms_accepted_at' => 'datetime',
             'password' => 'hashed',
@@ -242,6 +244,23 @@ class User extends Authenticatable implements FilamentUser, HasTenants, MustVeri
     public function guardians(): HasMany
     {
         return $this->hasMany(Guardian::class);
+    }
+
+    /**
+     * Su género para nombrarlo en una organización: el que eligió en "Mi cuenta" (o le cargaron en la
+     * invitación o el panel); si no, el que se deduce del parentesco si es tutor ahí. null = sin especificar.
+     */
+    public function genderIn(?Organization $organization = null): ?Gender
+    {
+        if ($this->gender !== null || $organization === null) {
+            return $this->gender;
+        }
+
+        return Guardian::withoutGlobalScopes()
+            ->where('organization_id', $organization->id)
+            ->where('user_id', $this->id)
+            ->first()
+            ?->gender();
     }
 
     /**

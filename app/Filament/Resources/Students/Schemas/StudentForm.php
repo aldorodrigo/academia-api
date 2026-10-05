@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Students\Schemas;
 use App\Enums\GuardianRelationship;
 use App\Filament\Resources\Students\Pages\EditStudent;
 use App\Filament\Support\EnrollmentForm;
+use App\Filament\Support\GenderField;
 use App\Filament\Support\Terms;
 use App\Models\Guardian;
 use App\Models\Student;
@@ -56,13 +57,15 @@ class StudentForm
                         }
                     }]),
                 TextInput::make('last_name')->label('Apellido')->required()->maxLength(255)->live(onBlur: true),
+                // Obligatorio al cargar uno nuevo (evita duplicados); los que ya estaban sin documento se siguen editando.
                 TextInput::make('document')->label('Documento')->maxLength(30)
+                    ->required(fn (string $operation) => $operation === 'create')
                     ->live(onBlur: true)
                     ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, ?Student $record) => $rule
-                        ->where('organization_id', filament()->getTenant()?->getKey()))
+                        ->where('organization_id', filament()->getTenant()?->getKey())->whereNull('deleted_at'))
                     ->validationMessages(['unique' => fn (string $operation) => $operation === 'create'
                         ? self::ALREADY_LOADED
-                        : 'Ya hay otro jugador con este documento.']),
+                        : 'Ya hay '.Terms::gendered('student', 'Jugador', 'otro', 'otra').' '.Terms::singular('student', 'Jugador').' con este documento.']),
                 DatePicker::make('birth_date')
                     ->label('Fecha de nacimiento')
                     ->required()
@@ -74,6 +77,7 @@ class StudentForm
                             $set('group_id', $groupId);
                         }
                     }),
+                GenderField::make(),
                 TextInput::make('shirt_size')->label('Talle')->maxLength(10),
                 TextInput::make('position')->label('Posición')->maxLength(50),
                 Select::make('user_id')
@@ -88,7 +92,7 @@ class StudentForm
             ]),
             ...self::enrollmentAndGuardians(),
             Section::make('Ficha médica')
-                ->description('Solo la ven los roles autorizados, sus tutores y sus técnicos.')
+                ->description(fn () => 'Solo la ven los roles autorizados, sus '.Terms::plural('guardian', 'Tutor').' y sus '.Terms::plural('instructor', 'Técnico').'.')
                 ->relationship('medicalRecord', condition: fn (?array $state) => collect($state)->filter(fn ($value) => filled($value))->isNotEmpty())
                 ->visible(fn (?Student $record) => $record
                     ? auth()->user()->can('viewMedical', $record)
@@ -121,7 +125,8 @@ class StudentForm
             Section::make('Inscripción')->visibleOn('create')->columnSpanFull()->columns(4)
                 ->schema(EnrollmentForm::fields(details: false)),
             Section::make(ucfirst(Terms::plural('guardian', 'Tutor')))
-                ->description('Con el celular (WhatsApp) o el correo, después de crear los invitás a la app desde la ficha del jugador: al aceptar ven a sus hijos.')
+                ->description(fn () => 'Con el celular (WhatsApp) o el correo, después de crear los invitás a la app desde la ficha '
+                    .Terms::of('student', 'Jugador').': al aceptar ven a sus hijos.')
                 ->visibleOn('create')
                 ->columnSpanFull()
                 ->schema([
@@ -129,10 +134,11 @@ class StudentForm
                         ->hiddenLabel()
                         ->columns(3)
                         ->defaultItems(1)
-                        ->addActionLabel('Agregar otro tutor')
+                        ->addActionLabel(fn () => 'Agregar '.Terms::gendered('guardian', 'Tutor', 'otro', 'otra').' '.Terms::singular('guardian', 'Tutor'))
                         // Un menor necesita al menos un tutor; un adulto puede ser su propio responsable.
                         ->minItems(fn (Get $get) => self::isMinor($get('birth_date')) ? 1 : 0)
-                        ->validationMessages(['min' => 'El jugador es menor de edad: cargá al menos un tutor.'])
+                        ->validationMessages(['min' => fn () => ucfirst(Terms::the('student', 'Jugador'))
+                            .' es menor de edad: cargá al menos '.Terms::a('guardian', 'Tutor').'.'])
                         ->schema([
                             TextInput::make('phone')
                                 ->label('Celular (WhatsApp)')

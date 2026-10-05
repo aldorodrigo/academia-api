@@ -135,7 +135,7 @@ it('el importador procesa la fila en la organización de la opción', function (
 
     StudentImporter::test(options: ['organization_id' => $this->jakare->id], import: $import)
         ->import(['first_name' => 'X', 'last_name' => 'Y', 'birth_date' => '01/01/2015', 'program' => 'Fútbol', 'group' => 'Sub-99'])
-        ->assertHasRowFailure('No existe Categoría "Sub-99" en Fútbol.');
+        ->assertHasRowFailure('No existe la categoría "Sub-99" en Fútbol.');
 });
 
 it('la lista de alumnos muestra la acción de importar', function () {
@@ -177,6 +177,17 @@ it('los relation managers del alumno muestran inscripciones y tutores', function
 
     Mail::assertQueued(InvitationMail::class, fn ($mail) => $mail->hasTo('ana@test.com'));
     expect($guardian->invitations()->sole()->guardian_id)->toBe($guardian->id);
+
+    // "Reenviar invitación": la misma invitación con un link nuevo, sin sumar otra.
+    $first = $guardian->invitations()->sole();
+    Livewire::test(GuardiansRelationManager::class, ['ownerRecord' => $student, 'pageClass' => EditStudent::class])
+        ->assertTableActionHasLabel('invite', 'Reenviar invitación', $guardian)
+        ->callTableAction('invite', $guardian)
+        ->assertActionMounted('showLink');
+
+    expect($guardian->invitations()->sole())
+        ->id->toBe($first->id)
+        ->token_hash->not->toBe($first->token_hash);
 });
 
 it('un tutor con solo celular se invita por WhatsApp desde la ficha', function () {
@@ -228,7 +239,14 @@ it('la lista de inscripciones no tiene alta y lleva a la ficha del jugador', fun
     Livewire::test(ManageEnrollments::class)
         ->assertActionDoesNotExist('create')
         ->assertCanSeeTableRecords([$enrollment])
-        ->callTableAction('changeStatus', $enrollment, data: ['status' => EnrollmentStatus::Withdrawn->value])
+        ->callTableAction('changeStatus', $enrollment, data: ['status' => EnrollmentStatus::Suspended->value])
+        ->assertHasNoTableActionErrors();
+
+    expect($enrollment->fresh()->status)->toBe(EnrollmentStatus::Suspended);
+
+    // La baja va con fecha y motivo (WithdrawalsTest).
+    Livewire::test(ManageEnrollments::class)
+        ->callTableAction('withdraw', $enrollment, data: ['ended_on' => $this->jakare->today()->toDateString(), 'withdrawal_reason' => 'Se mudó'])
         ->assertHasNoTableActionErrors();
 
     expect($enrollment->fresh()->status)->toBe(EnrollmentStatus::Withdrawn)
@@ -288,7 +306,7 @@ it('un adulto se puede crear sin tutores', function () {
 
     Livewire::test(CreateStudent::class)
         ->fillForm([
-            'first_name' => 'Laura', 'last_name' => 'Ríos', 'birth_date' => now()->subYears(30)->toDateString(),
+            'first_name' => 'Laura', 'last_name' => 'Ríos', 'document' => '3111222', 'birth_date' => now()->subYears(30)->toDateString(),
             'group_id' => $group->id, 'guardians' => [],
         ])
         ->call('create')

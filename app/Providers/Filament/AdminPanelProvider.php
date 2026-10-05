@@ -42,7 +42,12 @@ class AdminPanelProvider extends PanelProvider
             // Alta autoservicio: cuenta → código (WhatsApp o correo) → "Tu club" (registro de la organización).
             ->registration(RegisterAccount::class)
             ->emailVerification(VerifyAccount::class)
-            ->brandName(config('app.name'))
+            // La marca es Tuku (no APP_NAME, que en local dice "Academia").
+            ->brandName('Tuku')
+            ->brandLogo(asset('brand/tuku-logo.svg'))
+            ->darkModeBrandLogo(asset('brand/tuku-logo-blanco.svg'))
+            ->brandLogoHeight('2rem')
+            ->favicon(asset('brand/tuku-favicon.svg'))
             ->colors([
                 'primary' => Color::Emerald,
             ])
@@ -80,7 +85,10 @@ class AdminPanelProvider extends PanelProvider
                     ->visible(fn () => (bool) auth()->user()?->is_super_admin),
             ])
             ->plugins([
-                FilamentShieldPlugin::make(),
+                // Los roles van con las personas (no en un grupo "Filament Shield").
+                FilamentShieldPlugin::make()
+                    ->navigationGroup('Personas')
+                    ->navigationLabel('Roles y permisos'),
             ])
             ->authMiddleware([
                 Authenticate::class,

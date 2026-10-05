@@ -4,6 +4,7 @@ namespace App\Filament\Resources\RecurringExpenses;
 
 use App\Filament\Resources\RecurringExpenses\Pages\ManageRecurringExpenses;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\RecurringExpense;
 use BackedEnum;
 use Filament\Actions\DeleteAction;
@@ -25,6 +26,9 @@ use UnitEnum;
  */
 class RecurringExpenseResource extends Resource
 {
+    // "Gastos recurrentes", no "Gastos Recurrentes".
+    use SentenceCaseLabels;
+
     protected static ?string $model = RecurringExpense::class;
 
     protected static ?string $slug = 'gastos-recurrentes';

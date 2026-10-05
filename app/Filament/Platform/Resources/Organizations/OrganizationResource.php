@@ -6,6 +6,7 @@ use App\Filament\Platform\Resources\Organizations\Pages\EditOrganization;
 use App\Filament\Platform\Resources\Organizations\Pages\ListOrganizations;
 use App\Filament\Platform\Resources\Organizations\Schemas\OrganizationForm;
 use App\Filament\Platform\Resources\Organizations\Tables\OrganizationsTable;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\Organization;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -15,6 +16,8 @@ use Filament\Tables\Table;
 
 class OrganizationResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Organization::class;
 
     protected static ?string $slug = 'organizaciones';

@@ -44,7 +44,7 @@ class EnrollmentResource extends JsonResource
                 'venue' => $schedule->venue ? ['name' => $schedule->venue->label] : null,
             ])->values();
             $groupData['instructors'] = $group->instructors
-                ->map(fn (User $instructor) => ['name' => $instructor->name])
+                ->map(fn (User $instructor) => ['name' => $instructor->name, 'gender' => $instructor->gender?->value])
                 ->values();
         }
 

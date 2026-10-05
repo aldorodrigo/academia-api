@@ -23,7 +23,8 @@ class AcceptInvitationRequest extends FormRequest
     }
 
     /**
-     * Cuenta nueva: nombre y contraseña confirmada. Cuenta existente: su contraseña.
+     * Cuenta nueva: nombre, contraseña confirmada y los términos aceptados (como en el registro).
+     * Cuenta existente: su contraseña.
      */
     public function rules(): array
     {
@@ -33,6 +34,15 @@ class AcceptInvitationRequest extends FormRequest
             'name' => $newAccount ? ['required', 'string', 'max:255'] : ['prohibited'],
             'password' => $newAccount ? ['required', 'confirmed', Password::min(8)] : ['required', 'string'],
             'device_name' => ['required', 'string', 'max:255'],
+            'terms' => $newAccount ? ['accepted'] : ['nullable'],
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public function messages(): array
+    {
+        return ['terms.accepted' => 'Tenés que aceptar los términos.'];
     }
 }

@@ -4,6 +4,7 @@ namespace App\Filament\Resources\DiscountRules;
 
 use App\Enums\DiscountType;
 use App\Filament\Resources\DiscountRules\Pages\ManageDiscountRules;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\DiscountRule;
 use App\Models\FeeConcept;
@@ -30,6 +31,8 @@ use UnitEnum;
  */
 class DiscountRuleResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = DiscountRule::class;
 
     protected static ?string $slug = 'descuentos';

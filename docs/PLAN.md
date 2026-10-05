@@ -227,6 +227,19 @@ Módulos opcionales: Meeting, Minute, Resolution, Vote, Event, EventCall, Fundra
 | **6. Publicación** | Pulido, builds: web + Android (interno) + iOS (TestFlight) | Ajustes de rendimiento y seguridad; backups verificados |
 | **7. Piloto Jakare** | Correcciones del uso real | Carga de datos reales, capacitación, invitación a padres |
 
+**Hallazgos de la prueba integral (2026-10-04), para el MVP** — implementados en ramas e integrados en
+`integracion/mvp-jakare` (app y API); estado en §10:
+
+- **B1** · Crear club desde la app aceptaba solo algunas claves del vocabulario (faltaba `space`).
+- **E4, E7, E8, D6** · Invitaciones (reenviar reutiliza la invitación, límite por invitación y no por IP, términos al
+  aceptar) y agenda del tutor en orden de fecha y hora.
+- **Vocabulario por deporte** (D2, D3): [`PLAN_VOCABULARIO.md`](PLAN_VOCABULARIO.md).
+- **Ajustes de "Primeros pasos"** (E3, E6: borrador del paso 2, vencimiento real, importación .xlsx):
+  [`PLAN_PRIMEROS_PASOS_AJUSTES.md`](PLAN_PRIMEROS_PASOS_AJUSTES.md).
+- **Bajas y condonación** (F4): [`PLAN_BAJAS.md`](PLAN_BAJAS.md).
+- **Inscribir desde la app** (F2, primera pieza del 5e): [`PLAN_INSCRIPCION_TUTOR.md`](PLAN_INSCRIPCION_TUTOR.md).
+- **Cobro en efectivo y caja del técnico** (F1): [`PLAN_COBRO_EFECTIVO.md`](PLAN_COBRO_EFECTIVO.md).
+
 ### Fase 2 — Institucional y deportiva
 - Comisión: reuniones, actas y resoluciones (PDF, votación, publicación a grupos que notifica y genera cargos).
 - ~~Asistencia desde la app del instructor y suspensión de prácticas con aviso~~ (adelantado al Sprint 5).
@@ -538,5 +551,24 @@ Plan aprobado e implementado el 03/10/2026 (`PLAN_PRIMEROS_PASOS.md`, etapa 1; c
   "Datos para transferir" en las cuentas bancarias y billeteras.
 - Probado de punta a punta en la web (tutor informa, tesorera aprueba desde la app, recibo en el estado de cuenta;
   técnico toma asistencia; admin ve cargos y rechaza desde el panel).
+
+### Prueba integral: hallazgos para el MVP (2026-10-04)
+Estado de todos: **implementado en ramas, integrado en `integracion/mvp-jakare`, pendiente de prueba en navegador.**
+
+- **B1** (`fix/crear-club-terminology`, solo API): `POST organizations` valida `terminology` con las claves de
+  `Organization::DEFAULT_TERMINOLOGY` (acepta `space`).
+- **E4, E7, E8, D6** (`fix/invitaciones-y-agenda`): agenda ordenada por fecha y hora; límite `invitations` por token
+  con tope por IP; reenviar reutiliza la invitación (`CreateInvitation::resend`); términos al aceptar una invitación.
+- **Vocabulario por deporte** (`feat/vocabulario-por-deporte`): [`PLAN_VOCABULARIO.md`](PLAN_VOCABULARIO.md) y
+  [`PLAN_PRIMEROS_PASOS_AJUSTES.md`](PLAN_PRIMEROS_PASOS_AJUSTES.md) (borrador del paso 2, vencimiento a mitad de
+  período, plurales, voseo y marca del panel, importación .xlsx).
+- **Bajas y condonación** (`feat/bajas-condonacion`): [`PLAN_BAJAS.md`](PLAN_BAJAS.md).
+- **Inscribir desde la app** (`feat/inscripcion-tutor-app`): [`PLAN_INSCRIPCION_TUTOR.md`](PLAN_INSCRIPCION_TUTOR.md).
+- **Cobro en efectivo y caja del técnico** (`feat/cobro-efectivo-tecnico`):
+  [`PLAN_COBRO_EFECTIVO.md`](PLAN_COBRO_EFECTIVO.md).
+- **Integración:** una inscripción pendiente no se cobra y al confirmarla se cobra desde que empezó; al volver de una
+  baja o suspensión, desde el mes en curso. Siempre soft delete: además de alumnos, inscripciones, asistencias,
+  comprobantes y depósitos, ahora también tutores (el "Eliminar" del panel archiva; el alta restaura al archivado) y
+  los descuentos de clases suspendidas (`charge_waivers`).
 
 ### Después: Sprint 5b — avisos segmentados con lectura

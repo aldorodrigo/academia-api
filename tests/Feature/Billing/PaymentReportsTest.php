@@ -178,8 +178,10 @@ describe('tutor', function () {
         asReviewer($this->treasurer, 'DELETE', "payment-reports/{$report->id}")->assertNotFound();
         asReviewer($this->tutor, 'DELETE', "payment-reports/{$report->id}")->assertNoContent();
 
+        // Soft delete: no aparece, pero quedan el registro y el archivo.
         expect(PaymentReport::query()->count())->toBe(0);
-        Storage::disk('local')->assertMissing($report->proof_path);
+        $this->assertSoftDeleted($report);
+        Storage::disk('local')->assertExists($report->proof_path);
 
         reportPayment($this->tutor)->assertCreated();
         $report = PaymentReport::query()->sole();

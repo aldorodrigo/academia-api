@@ -4,6 +4,7 @@ namespace App\Filament\Platform\Resources\Users;
 
 use App\Filament\Platform\Resources\Users\Pages\ListUsers;
 use App\Filament\Platform\Resources\Users\Tables\UsersTable;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\User;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -16,6 +17,8 @@ use Filament\Tables\Table;
  */
 class UserResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = User::class;
 
     protected static ?string $slug = 'usuarios';

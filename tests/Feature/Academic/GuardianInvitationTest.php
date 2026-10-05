@@ -26,7 +26,7 @@ it('al aceptar la invitación del tutor ve a sus hijos directamente', function (
         ->and($invitation->roles[0]['role'])->toBe('tutor');
 
     $apiToken = $this->postJson("/api/v1/invitations/{$token}/accept", [
-        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app',
+        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app', 'terms' => true,
     ])->assertCreated()->json('token');
 
     $user = User::query()->where('email', 'ana@test.com')->sole();
@@ -48,6 +48,17 @@ it('reenviar conserva el vínculo con el tutor', function () {
     app(CreateInvitation::class)->resend($invitation);
 
     expect($this->guardian->invitations()->whereNull('revoked_at')->sole()->guardian_id)->toBe($this->guardian->id);
+});
+
+it('invitar de nuevo a un tutor reutiliza su invitación pendiente', function () {
+    [$invitation, $token] = app(CreateInvitation::class)->forGuardian($this->guardian);
+    [$again, $newToken] = app(CreateInvitation::class)->forGuardian($this->guardian);
+
+    expect($again->id)->toBe($invitation->id)
+        ->and($this->guardian->invitations()->sole()->id)->toBe($invitation->id)
+        ->and($newToken)->not->toBe($token);
+    $this->getJson("/api/v1/invitations/{$token}")->assertNotFound();
+    $this->getJson("/api/v1/invitations/{$newToken}")->assertOk()->assertJsonPath('data.name', $this->guardian->full_name);
 });
 
 it('no se puede invitar a un tutor sin celular ni correo', function () {
@@ -73,7 +84,7 @@ it('un tutor con solo celular se invita para mandarle el link por WhatsApp', fun
         ->assertJsonPath('data.email', null)
         ->assertJsonPath('data.user_exists', false);
     $this->postJson("/api/v1/invitations/{$token}/accept", [
-        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app',
+        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app', 'terms' => true,
     ])->assertCreated();
 
     $user = User::query()->where('phone', '+595981555444')->sole();
@@ -88,7 +99,7 @@ it('no pisa un tutor ya vinculado a otra cuenta', function () {
     $this->guardian->update(['user_id' => $other->id]);
 
     $this->postJson("/api/v1/invitations/{$token}/accept", [
-        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app',
+        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app', 'terms' => true,
     ])->assertCreated();
 
     expect($this->guardian->fresh()->user_id)->toBe($other->id);
@@ -106,7 +117,7 @@ it('un tutor con celular y correo recibe la invitación por los dos lados', func
 
     // Al aceptarla, el celular queda verificado y al correo le llega el link para confirmarlo.
     $this->postJson("/api/v1/invitations/{$token}/accept", [
-        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app',
+        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app', 'terms' => true,
     ])->assertCreated();
 
     $user = User::query()->where('phone', '+595981555444')->sole();
@@ -126,7 +137,7 @@ it('la cuenta existente se busca por el celular o el correo verificados', functi
     expect($invitation->existingUser())->toBeNull();
 
     $this->postJson("/api/v1/invitations/{$token}/accept", [
-        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app',
+        'name' => 'Ana', 'password' => 'secreta123', 'password_confirmation' => 'secreta123', 'device_name' => 'app', 'terms' => true,
     ])->assertCreated();
 
     expect($other->fresh()->email)->toBeNull()

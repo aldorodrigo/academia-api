@@ -17,7 +17,8 @@ class PaymentReported extends PushNotification
     {
         $report->loadMissing(['user', 'family']);
 
-        $this->body = "{$report->user->name} informó una transferencia de ".Money::pyg($report->amount)->format()
+        $verb = $report->registered_by_staff ? 'registró' : 'informó';
+        $this->body = "{$report->user->name} {$verb} una transferencia de ".Money::pyg($report->amount)->format()
             ." ({$report->family->name}).";
     }
 

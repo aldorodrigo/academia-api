@@ -8,6 +8,9 @@ use App\Enums\MoneyAccountType;
 use App\Enums\PaymentReportStatus;
 use App\Filament\Resources\PaymentReports\Pages\ManagePaymentReports;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\ReceiptNoticeNotification;
+use App\Filament\Support\SentenceCaseLabels;
+use App\Filament\Support\Terms;
 use App\Http\Controllers\PaymentProofController;
 use App\Http\Controllers\ReceiptController;
 use App\Models\Charge;
@@ -38,6 +41,8 @@ use UnitEnum;
  */
 class PaymentReportResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = PaymentReport::class;
 
     protected static ?string $slug = 'comprobantes';
@@ -81,7 +86,8 @@ class PaymentReportResource extends Resource
                     ->tooltip(fn (PaymentReport $record) => $record->created_at->format('d/m/Y H:i'))
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('family.name')->label('Familia')
-                    ->description(fn (PaymentReport $record) => $record->family->students->pluck('first_name')->join(', ').' · '.$record->user->name)
+                    ->description(fn (PaymentReport $record) => $record->family->students->pluck('first_name')->join(', ').' · '
+                        .($record->registered_by_staff ? "registró {$record->user->name}" : $record->user->name))
                     ->searchable(),
                 TextColumn::make('paid_on')->label('Transferencia')->date('d/m/Y')
                     ->description(fn (PaymentReport $record) => collect([$record->moneyAccount?->name, $record->reference ? "Ref. {$record->reference}" : null])->filter()->join(' · ')),
@@ -147,7 +153,7 @@ class PaymentReportResource extends Resource
                         ->join(', ')
                     .'. Lo que sobre queda como saldo a favor.'),
                 Select::make('money_account_id')->label('Entró en')
-                    ->options(fn () => MoneyAccount::query()->where('is_active', true)->pluck('name', 'id'))
+                    ->options(fn () => PaymentReportAccess::paymentAccounts()->pluck('name', 'id'))
                     ->required(),
                 DatePicker::make('received_on')->label('Fecha')->required()
                     ->maxDate(fn () => Filament::getTenant()->today()),
@@ -162,10 +168,18 @@ class PaymentReportResource extends Resource
                     (int) $data['amount'],
                 );
 
+                // La registró alguien del club (la familia no la informó): el recibo le llega a la familia solo si
+                // tiene la app; se dice la verdad y se ofrece WhatsApp. Si la informó el tutor, le llega en la app.
+                if ($record->registered_by_staff) {
+                    ReceiptNoticeNotification::make($report->payment, "Pago aprobado: recibo N° {$report->payment->receiptLabel()}.")->send();
+
+                    return;
+                }
+
                 Notification::make()
                     ->success()
                     ->title("Pago aprobado: recibo N° {$report->payment->receiptLabel()}.")
-                    ->body('Le avisamos al tutor.')
+                    ->body('Le avisamos '.Terms::toPerson('guardian', 'Tutor', $record->reporterGender()).'.')
                     ->actions([
                         Action::make('receipt')->label('Descargar recibo')->button()
                             ->url(ReceiptController::signedUrl($report->payment), shouldOpenInNewTab: true),
@@ -182,7 +196,9 @@ class PaymentReportResource extends Resource
             ->color('danger')
             ->visible(fn (PaymentReport $record) => $record->isPending())
             ->modalHeading('Rechazar comprobante')
-            ->modalDescription('El tutor recibe el motivo y puede informar el pago de nuevo.')
+            ->modalDescription(fn (PaymentReport $record) => $record->registered_by_staff
+                ? "{$record->user->name} lo registró: recibe el motivo y puede registrarlo de nuevo."
+                : ucfirst(Terms::thePerson('guardian', 'Tutor', $record->reporterGender())).' recibe el motivo y puede informar el pago de nuevo.')
             ->schema([
                 Textarea::make('reason')->label('Motivo')->placeholder('El comprobante no se lee, el monto no coincide…')
                     ->required()->maxLength(500),
@@ -190,13 +206,16 @@ class PaymentReportResource extends Resource
             ->action(function (PaymentReport $record, array $data): void {
                 app(ReviewPaymentReport::class)->reject($record, auth()->user(), $data['reason']);
 
-                Notification::make()->success()->title('Comprobante rechazado. Le avisamos al tutor.')->send();
+                // Si la registró alguien del club, el motivo le llega a esa persona, no a la familia.
+                Notification::make()->success()->title('Comprobante rechazado. Le avisamos '.($record->registered_by_staff
+                    ? 'a '.$record->user->name
+                    : Terms::toPerson('guardian', 'Tutor', $record->reporterGender())).'.')->send();
             });
     }
 
     private static function defaultAccountId(PaymentReport $record): ?int
     {
-        $accounts = MoneyAccount::query()->where('is_active', true)->orderBy('id')->get();
+        $accounts = PaymentReportAccess::paymentAccounts();
 
         return ($accounts->firstWhere('id', $record->money_account_id)
             ?? $accounts->firstWhere('type', MoneyAccountType::Bank)

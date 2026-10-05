@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Enums\Gender;
+use App\Enums\GuardianRelationship;
 use App\Models\Concerns\BelongsToOrganization;
 use App\Support\Phone;
 use Database\Factories\GuardianFactory;
@@ -12,15 +14,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Tutor (padre, madre…). Se vincula a un usuario al aceptar la invitación.
+ * Tutor (padre, madre…). Se vincula a un usuario al aceptar la invitación. No se borra: "Eliminar" lo archiva
+ * (soft delete) y deja de aparecer en listas, fichas y avisos; el alta lo restaura si vuelve con el mismo dato.
  */
 #[Fillable(['organization_id', 'family_id', 'user_id', 'first_name', 'last_name', 'document', 'email', 'phone'])]
 class Guardian extends Model
 {
     /** @use HasFactory<GuardianFactory> */
-    use BelongsToOrganization, HasFactory;
+    use BelongsToOrganization, HasFactory, SoftDeletes;
 
     protected static function booted(): void
     {
@@ -81,6 +85,22 @@ class Guardian extends Model
     public function invitations(): HasMany
     {
         return $this->hasMany(Invitation::class);
+    }
+
+    /**
+     * Su género: el que eligió en "Mi cuenta" o, si no, el que se deduce del parentesco con sus chicos
+     * (Madre → femenino, Padre → masculino; Tutor/a u Otro no dicen nada). No se le pregunta.
+     */
+    public function gender(): ?Gender
+    {
+        if ($this->user?->gender !== null) {
+            return $this->user->gender;
+        }
+
+        return $this->students()->withoutGlobalScopes()->get()
+            ->map(fn (Student $student) => GuardianRelationship::parse($student->pivot->relationship)->gender())
+            ->filter()
+            ->first();
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Enums\DailyGrouping;
 use App\Enums\FeeFrequency;
 use App\Enums\MidPeriod;
 use App\Enums\SeasonKind;
+use App\Filament\Support\Terms;
 use App\Models\FeeConcept;
 use App\Models\Group;
 use App\Models\Organization;
@@ -17,6 +18,7 @@ use App\Models\Program;
 use App\Models\Season;
 use App\Models\Tariff;
 use App\Support\Money;
+use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
@@ -165,12 +167,14 @@ class SeasonPlan
     }
 
     /**
-     * Primeras cuotas de ejemplo (sin categoría: en el cobro por día, lunes a viernes).
+     * Primeras cuotas de ejemplo (sin categoría: en el cobro por día, lunes a viernes). Si la temporada ya
+     * empezó, la del período en curso vence como para quien se inscribe hoy (los mismos días para pagar,
+     * igual que `IssueSeasonCharges`) y lo dice en `due_note`.
      *
      * @param  array<string, mixed>  $state
-     * @return Collection<int, array{period: string, due_on: string, amount: string}>
+     * @return Collection<int, array{period: string, due_on: string, due_note: ?string, amount: string}>
      */
-    public static function examples(array $state, int $count = 3): Collection
+    public static function examples(array $state, int $count = 3, ?CarbonImmutable $today = null): Collection
     {
         $season = self::draft($state);
 
@@ -180,14 +184,22 @@ class SeasonPlan
 
         $amount = (int) ($state['fee_amount'] ?? 0);
         $daily = $season->fee_frequency === FeeFrequency::Daily;
+        $today ??= app(CurrentOrganization::class)->get()?->today() ?? CarbonImmutable::today();
+        // Desde el próximo período, quien se inscribe con este empezado no lo paga.
+        $chargesCurrent = ($season->mid_period ?? MidPeriod::Full) !== MidPeriod::Next;
 
-        return app(SeasonPeriods::class)->for($season)->take($count)->map(fn (BillingPeriod $period) => [
-            // Igual que la cuota que ve la familia: "enero 2027", "1.ª quincena ene 2027", "semana 4–10 ene".
-            'period' => self::periodLabel($period, $season, withQuantity: true),
-            'due_on' => $period->dueOn->format('d/m/Y'),
-            'amount' => Money::pyg($daily ? $period->quantity * $amount : $amount)->format()
-                .($daily ? " ({$period->quantity} × ".Money::pyg($amount)->format().')' : ''),
-        ]);
+        return app(SeasonPeriods::class)->for($season)->take($count)->map(function (BillingPeriod $period) use ($season, $daily, $amount, $today, $chargesCurrent) {
+            $dueOn = $chargesCurrent ? $period->dueOnFor($today, $season->due_days) : $period->dueOn;
+
+            return [
+                // Igual que la cuota que ve la familia: "enero 2027", "1.ª quincena ene 2027", "semana 4–10 ene".
+                'period' => self::periodLabel($period, $season, withQuantity: true),
+                'due_on' => $dueOn->format('d/m/Y'),
+                'due_note' => $dueOn->eq($period->dueOn) ? null : 'para los que se inscriben hoy',
+                'amount' => Money::pyg($daily ? $period->quantity * $amount : $amount)->format()
+                    .($daily ? " ({$period->quantity} × ".Money::pyg($amount)->format().')' : ''),
+            ];
+        });
     }
 
     /**
@@ -212,6 +224,14 @@ class SeasonPlan
         $season = self::draft($state);
 
         return $season === null ? 0 : app(SeasonPeriods::class)->for($season)->count();
+    }
+
+    /**
+     * "las 12 cuotas" (o "la cuota" si hay una sola).
+     */
+    public static function allPeriods(int $count): string
+    {
+        return $count === 1 ? 'la cuota' : "las {$count} cuotas";
     }
 
     /**
@@ -285,7 +305,8 @@ class SeasonPlan
         $text .= match (true) {
             $season->chargesByAttendance() => ' Cada cuota se crea '.$unit->createdAfter().', con las clases a las que vino según la asistencia.',
             $season->chargesAfterPeriod() => ' Cada cuota se crea '.$unit->createdAfter().', con las clases que se dieron (las suspendidas no se cobran).',
-            $season->issue_upfront => ' Las '.self::periodsCount($state).' cuotas de cada jugador se crean todas al inscribirlo.',
+            $season->issue_upfront => ' '.ucfirst(self::allPeriods(self::periodsCount($state))).' de cada '.Terms::singular('student', 'Jugador')
+                .(self::periodsCount($state) === 1 ? ' se crea' : ' se crean todas').' al inscribirlo.',
             default => ' Cada cuota se crea '.$unit->createdAtStart().'.',
         };
 

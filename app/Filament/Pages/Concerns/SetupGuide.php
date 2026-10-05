@@ -5,11 +5,15 @@ namespace App\Filament\Pages\Concerns;
 use App\Actions\Academic\CreatePrograms;
 use App\Actions\Academic\SaveGroups;
 use App\Actions\Onboarding\ManageInstructors;
+use App\Actions\Organizations\UpdateTerminology;
+use App\Enums\Gender;
 use App\Enums\GroupCriterion;
+use App\Enums\OrganizationType;
 use App\Filament\Actions\ShowInvitationLinkAction;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Seasons\SeasonResource;
 use App\Filament\Support\ContactField;
+use App\Filament\Support\GenderField;
 use App\Filament\Support\Terms;
 use App\Filament\Support\VenueField;
 use App\Models\Group;
@@ -18,8 +22,10 @@ use App\Models\Program;
 use App\Models\Schedule;
 use App\Models\Venue;
 use App\Support\Onboarding\Checklist;
+use App\Support\Onboarding\StepDrafts;
 use App\Support\Onboarding\Team;
 use App\Support\Onboarding\Templates;
+use App\Support\Onboarding\VocabularySuggestion;
 use App\Support\Scheduling\ScheduleConflicts;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -61,7 +67,7 @@ trait SetupGuide
     }
 
     /**
-     * @return array{steps: list<array<string, mixed>>, done: int, total: int, next: ?string, completed: bool, dismissed: bool}
+     * @return array{steps: list<array<string, mixed>>, done: int, total: int, next: ?string, completed: bool, dismissed: bool, terminology_suggestion: ?array<string, mixed>}
      */
     public static function checklist(): array
     {
@@ -80,7 +86,8 @@ trait SetupGuide
         $checklist = self::checklist();
 
         return match (true) {
-            $checklist['completed'] => null,
+            // Completa pero sin contestar cómo les dicen: queda solo el recordatorio.
+            $checklist['completed'] => $checklist['terminology_suggestion'] !== null ? 'vocabulary' : null,
             $checklist['dismissed'] => 'compact',
             default => 'full',
         };
@@ -192,8 +199,84 @@ trait SetupGuide
                     ...collect($data['programs'] ?? [])->map(fn (string $name) => $templates[$name])->all(),
                     ...($data['custom'] ?? []),
                 ]);
+
+                // Una academia que enseña fútbol: ¿categoría, técnico y cancha?
+                if (VocabularySuggestion::for($this->tenant()) !== null) {
+                    $this->replaceMountedAction('terminology');
+
+                    return;
+                }
+
                 $this->notifyDone('Listo. Ahora, '.$this->plural('group').' y horarios.');
             });
+    }
+
+    /**
+     * Propuesta de las palabras de deporte (después de "¿Qué enseñan?"): elige las palabras o deja
+     * las de antes. No se cierra sin elegir.
+     */
+    public function terminologyAction(): Action
+    {
+        $suggestion = fn () => VocabularySuggestion::for($this->tenant());
+        $words = fn (array $items) => self::words(array_map('mb_strtolower', array_values($items)));
+
+        return Action::make('terminology')
+            ->label('Elegí cómo les dicen')
+            ->icon(Heroicon::OutlinedLanguage)
+            ->modalHeading('¿Cómo les dicen?')
+            ->modalDescription(fn () => ($s = $suggestion())
+                ? 'En '.$words($s['programs']).' se suele decir '.$words($s['suggested']).'. Elegí las palabras que usan ustedes: las pantallas van a decir eso.'
+                : null)
+            ->fillForm(fn () => ['terminology' => $suggestion()['suggested'] ?? []])
+            ->schema(fn () => collect($suggestion()['suggested'] ?? [])->map(
+                fn (string $word, string $key) => TextInput::make("terminology.{$key}")
+                    ->label(Templates::termQuestions()[$key] ?? $key)
+                    ->datalist(collect(Templates::terminologyOptions()[$key] ?? [])->push($word)->unique()->values()->all())
+                    ->helperText('Elegí una o escribí la que usan.')
+                    ->required()
+                    ->maxLength(30),
+            )->values()->all())
+            ->modalSubmitActionLabel('Usar estas palabras')
+            // Cerrarla sin contestar no decide nada: la guía la sigue recordando.
+            ->modalCancelActionLabel('Después')
+            ->extraModalFooterActions(fn () => [
+                Action::make('keepTerminology')
+                    ->label('Dejar como estaba ('.$words($suggestion()['current'] ?? []).')')
+                    ->color('gray')
+                    ->cancelParentActions()
+                    ->action(function (UpdateTerminology $update) {
+                        $update->handle($this->tenant(), []);
+                        $this->notifyDone('Listo: las palabras quedan como estaban.');
+                    }),
+            ])
+            ->action(function (array $data, UpdateTerminology $update) {
+                $update->handle($this->tenant(), $data['terminology'] ?? []);
+                Notification::make()->success()->title('Listo: las pantallas ya dicen así.')->send();
+                // Los títulos del menú y de la guía usan las palabras nuevas.
+                $this->redirect(Dashboard::getUrl());
+            });
+    }
+
+    /**
+     * "a, b y c".
+     *
+     * @param  list<string>  $items
+     */
+    private static function words(array $items): string
+    {
+        return count($items) <= 1
+            ? implode('', $items)
+            : implode(', ', array_slice($items, 0, -1)).' y '.end($items);
+    }
+
+    /**
+     * Qué es la organización ("club", "academia"), para "Configurá tu academia".
+     */
+    public static function typeNoun(): string
+    {
+        $tenant = Filament::getTenant();
+
+        return ($tenant instanceof Organization && $tenant->type ? $tenant->type : OrganizationType::Club)->noun();
     }
 
     // Paso 2: categorías y horarios
@@ -216,6 +299,13 @@ trait SetupGuide
                     'levels' => Templates::levels(),
                 ];
 
+                // Lo que quedó a medio armar (acá o en la app) sigue donde estaba.
+                $saved = StepDrafts::get($this->tenant(), 'groups')['draft'];
+
+                if ($saved !== null && $saved['groups'] !== [] && Program::query()->whereKey($saved['program_id'])->exists()) {
+                    return [...$state, ...array_filter(StepDrafts::toPanelState($saved), fn ($value) => $value !== null)];
+                }
+
                 return [...$state, 'groups' => self::suggestions($state), 'plan' => []];
             })
             ->steps([
@@ -224,7 +314,7 @@ trait SetupGuide
                     ->label(fn () => ucfirst($this->plural('group')))
                     ->description(fn () => '¿Qué '.$this->plural('group').' tienen?')
                     ->schema([
-                        Text::make(fn () => 'Las familias eligen '.$this->g('group', 'el', 'la').' '.$this->term('group').' al inscribirse. Te sugerimos una lista: cambiá lo que haga falta.'),
+                        Text::make(fn () => 'Las familias eligen '.Terms::the('group', 'group').' al inscribirse. Te sugerimos una lista: cambiá lo que haga falta.'),
                         Select::make('program_id')
                             ->label(fn () => ucfirst($this->term('program')))
                             ->options(fn () => Program::query()->orderBy('name')->pluck('name', 'id'))
@@ -265,7 +355,9 @@ trait SetupGuide
                             ->addActionLabel(fn () => 'Agregar '.$this->g('group', 'otro', 'otra')),
                         TextInput::make('capacity')
                             ->label(fn () => 'Cupo por cada '.$this->g('group', 'uno', 'una').' (opcional)')
-                            ->numeric()->minValue(1),
+                            ->numeric()->minValue(1)
+                            // "Se guarda solo": el cupo va al borrador al salir del campo.
+                            ->live(onBlur: true),
                     ])
                     // Arma la pantalla de horarios con la lista (conserva lo ya cargado).
                     ->afterValidation(function (Get $get, Set $set) {
@@ -357,6 +449,25 @@ trait SetupGuide
                     default => 'Listo. Ahora, la temporada.',
                 });
             });
+    }
+
+    /**
+     * "Se guarda solo": cada cambio del panel lateral de categorías y horarios va al borrador del paso
+     * (el mismo que la app), así se retoma desde cualquier dispositivo aunque se cierre sin crear.
+     */
+    public function updatedMountedActions(): void
+    {
+        $mounted = $this->mountedActions[0] ?? null;
+
+        if (($mounted['name'] ?? null) !== 'groups' || ! self::canConfigure()) {
+            return;
+        }
+
+        $draft = StepDrafts::fromPanelState($mounted['data'] ?? []);
+
+        $draft === null
+            ? StepDrafts::forget($this->tenant(), 'groups')
+            : StepDrafts::put($this->tenant(), 'groups', $draft);
     }
 
     /**
@@ -504,10 +615,13 @@ trait SetupGuide
             })
             ->schema([
                 Toggle::make('teaches')->label('Doy clases')->live(),
+                // Arranca sin ninguna: elegí las que das (al menos una).
                 CheckboxList::make('group_ids')
-                    ->label('¿Cuáles?')
+                    ->label('¿Cuáles das vos?')
                     ->options(fn () => Group::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
                     ->columns(3)
+                    ->required(fn (Get $get) => (bool) $get('teaches'))
+                    ->validationMessages(['required' => fn () => 'Elegí al menos '.Terms::a('group', 'group').'.'])
                     ->visible(fn (Get $get) => $get('teaches')),
             ])
             ->action(function (array $data, ManageInstructors $manage) {
@@ -520,13 +634,14 @@ trait SetupGuide
     public function inviteInstructorAction(): Action
     {
         return Action::make('inviteInstructor')
-            ->label(fn () => 'Invitar a '.$this->g('instructor', 'un', 'una').' '.$this->term('instructor'))
+            ->label(fn () => 'Invitar a '.Terms::a('instructor', 'instructor'))
             ->icon(Heroicon::OutlinedUserPlus)
-            ->modalHeading(fn () => 'Invitar a '.$this->g('instructor', 'un', 'una').' '.$this->term('instructor'))
+            ->modalHeading(fn () => 'Invitar a '.Terms::a('instructor', 'instructor'))
             ->modalDescription('Con el celular, le mandás el link por WhatsApp; con el correo, también le llega por email.')
             ->schema([
                 TextInput::make('name')->label('Nombre y apellido')->required()->maxLength(255),
                 ContactField::make(),
+                GenderField::make(),
                 CheckboxList::make('group_ids')
                     ->label('¿Qué da?')
                     ->options(fn () => Group::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
@@ -534,11 +649,11 @@ trait SetupGuide
             ])
             ->action(function (array $data, ManageInstructors $manage) {
                 $contact = ContactField::split($data['contact']);
-                $result = $manage->invite($this->tenant(), auth()->user(), $data['name'], $contact['email'], $data['group_ids'] ?? [], $contact['phone']);
+                $result = $manage->invite($this->tenant(), auth()->user(), $data['name'], $contact['email'], $data['group_ids'] ?? [], $contact['phone'], Gender::parse($data['gender'] ?? null));
 
                 if ($result['token'] === null) {
                     $this->warnInstructor(ScheduleConflicts::forInstructor($result['user'], $result['user']->instructedGroups()->pluck('groups.id')->all()));
-                    $this->notifyDone('Ya era '.$this->term('instructor').': le asignamos lo que da.');
+                    $this->notifyDone('Ya era '.mb_strtolower($this->tenant()->term('instructor', $result['user']->genderIn($this->tenant()))).': le asignamos lo que da.');
 
                     return;
                 }

@@ -7,7 +7,9 @@ use App\Enums\ChargeStatus;
 use App\Filament\Resources\Charges\Pages\ManageCharges;
 use App\Filament\Support\ChargeHistory;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
+use App\Filament\Support\WaiveChargeAction;
 use App\Models\Charge;
 use App\Models\ChargeAdjustment;
 use App\Support\Money;
@@ -32,6 +34,8 @@ use UnitEnum;
  */
 class ChargeResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Charge::class;
 
     protected static ?string $slug = 'cargos';
@@ -95,7 +99,8 @@ class ChargeResource extends Resource
                     ->schema([DatePicker::make('period')->label('Mes')->format('Y-m-01')->displayFormat('m/Y')])
                     ->query(fn (Builder $query, array $data) => $query->when($data['period'] ?? null, fn (Builder $query, string $period) => $query->whereDate('period', $period))),
             ])
-            ->recordActions([self::detailAction(), self::historyAction(), self::voidAction()]);
+            ->recordActions([self::detailAction(), self::historyAction(), WaiveChargeAction::make(), WaiveChargeAction::undo(), self::voidAction()])
+            ->toolbarActions([WaiveChargeAction::bulk()]);
     }
 
     /**

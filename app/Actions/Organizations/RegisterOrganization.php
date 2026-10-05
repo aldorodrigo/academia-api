@@ -40,7 +40,14 @@ class RegisterOrganization
                 'self_service' => true,
             ]);
 
-            $organization->memberships()->create(['user_id' => $user->id, 'status' => MembershipStatus::Active]);
+            // Eligió otras palabras que las del tipo: ya decidió, no se le proponen las de deporte.
+            if ($terminology !== Templates::terminologyFor($type)) {
+                $organization->forceFill(['terminology_confirmed_at' => now()])->save();
+            }
+
+            // Quien la crea es el dueño: lo que cobra en efectivo entra directo a la Caja (sin caja propia).
+            $organization->forceFill(['owner_id' => $user->id])->save();
+            $organization->memberships()->create(['user_id' => $user->id, 'status' => MembershipStatus::Active, 'collects_to_org_cash' => true]);
             $this->assigner->assign($organization, $user, OrganizationRole::Admin, assignedBy: $user);
 
             activity('platform')->performedOn($organization)->causedBy($user)->log('Organización creada (autoservicio)');

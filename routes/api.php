@@ -3,10 +3,14 @@
 use App\Http\Controllers\Api\V1\AccountController;
 use App\Http\Controllers\Api\V1\AgendaController;
 use App\Http\Controllers\Api\V1\AuthTokenController;
+use App\Http\Controllers\Api\V1\CashBoxController;
+use App\Http\Controllers\Api\V1\CashDepositController;
 use App\Http\Controllers\Api\V1\ClassController;
 use App\Http\Controllers\Api\V1\ClassResponseController;
+use App\Http\Controllers\Api\V1\CollectionController;
 use App\Http\Controllers\Api\V1\CurrentOrganizationController;
 use App\Http\Controllers\Api\V1\DeviceController;
+use App\Http\Controllers\Api\V1\EnrollmentRequestController;
 use App\Http\Controllers\Api\V1\GroupController;
 use App\Http\Controllers\Api\V1\InvitationController;
 use App\Http\Controllers\Api\V1\Lessons\BookingController;
@@ -14,6 +18,7 @@ use App\Http\Controllers\Api\V1\Lessons\LessonController;
 use App\Http\Controllers\Api\V1\Lessons\LessonProfileController;
 use App\Http\Controllers\Api\V1\Lessons\TeacherController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\NotificationInboxController;
 use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Http\Controllers\Api\V1\OnboardingController;
 use App\Http\Controllers\Api\V1\OrganizationController;
@@ -28,7 +33,11 @@ use App\Http\Controllers\Api\V1\Setup\SeasonController as SetupSeasonController;
 use App\Http\Controllers\Api\V1\Setup\SiteController as SetupSiteController;
 use App\Http\Controllers\Api\V1\StudentAttendanceController;
 use App\Http\Controllers\Api\V1\StudentController;
+use App\Http\Controllers\Api\V1\StudentRegistrationController;
+use App\Http\Controllers\Api\V1\TerminologyController;
 use App\Http\Controllers\Api\V1\VenueController;
+use App\Http\Controllers\Api\V1\WithdrawalController;
+use App\Support\Onboarding\StepDrafts;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.v1.')->group(function () {
@@ -49,7 +58,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         ->middleware('throttle:10,1')
         ->name('auth.password.reset');
 
-    Route::middleware('throttle:10,1')->group(function () {
+    // Límite por invitación y un tope por IP más alto (AppServiceProvider): varias familias en el mismo wifi.
+    Route::middleware('throttle:invitations')->group(function () {
         Route::get('invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
         Route::post('invitations/{token}/accept', [InvitationController::class, 'accept'])->name('invitations.accept');
     });
@@ -62,7 +72,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::delete('auth/token', [AuthTokenController::class, 'destroy'])->name('auth.token.destroy');
-        Route::get('me', MeController::class)->name('me');
+        Route::get('me', [MeController::class, 'show'])->name('me');
+        Route::patch('me', [MeController::class, 'update'])->name('me.update');
 
         // Código de la cuenta (WhatsApp o correo) y alta del club (sin organización activa).
         Route::post('auth/verify', [RegisterController::class, 'verify'])->middleware('throttle:10,1')->name('auth.verify');
@@ -90,6 +101,38 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::post('payment-reports/{report}/approve', [PaymentReportController::class, 'approve'])->whereNumber('report')->name('payment-reports.approve');
             Route::post('payment-reports/{report}/reject', [PaymentReportController::class, 'reject'])->whereNumber('report')->name('payment-reports.reject');
 
+            // Bajas y condonación (docs/PLAN_BAJAS.md).
+            Route::get('dropout-reports', [WithdrawalController::class, 'dropoutReports'])->name('dropout-reports.index');
+            Route::get('staff/students/{student}', [WithdrawalController::class, 'student'])->whereNumber('student')->name('staff.students.show');
+            Route::post('enrollments/{enrollment}/withdraw', [WithdrawalController::class, 'withdraw'])->whereNumber('enrollment')->name('enrollments.withdraw');
+            Route::delete('enrollments/{enrollment}/dropout', [WithdrawalController::class, 'dismissDropout'])->whereNumber('enrollment')->name('enrollments.dropout.dismiss');
+            Route::post('charges/waive', [WithdrawalController::class, 'waive'])->name('charges.waive');
+            Route::post('charges/{charge}/unwaive', [WithdrawalController::class, 'unwaive'])->whereNumber('charge')->name('charges.unwaive');
+            Route::post('students/{student}/leaving', [WithdrawalController::class, 'leaving'])->whereNumber('student')->name('students.leaving');
+            Route::delete('students/{student}/leaving', [WithdrawalController::class, 'cancelLeaving'])->whereNumber('student')->name('students.leaving.cancel');
+            // Inscripción desde la app: el tutor la pide (entra ya, pendiente) y quien tiene permiso la confirma o rechaza.
+            // "Cargar alumno" (quien puede crear alumnos): alta directa e invitación del tutor.
+            Route::post('students', StudentRegistrationController::class)->middleware('throttle:30,1')->name('students.store');
+            Route::get('enrollment-requests/options', [EnrollmentRequestController::class, 'options'])->name('enrollment-requests.options');
+            Route::post('enrollment-requests', [EnrollmentRequestController::class, 'store'])->middleware('throttle:10,1')->name('enrollment-requests.store');
+            Route::get('enrollment-requests', [EnrollmentRequestController::class, 'index'])->name('enrollment-requests.index');
+            Route::delete('enrollment-requests/{id}', [EnrollmentRequestController::class, 'destroy'])->whereNumber('id')->name('enrollment-requests.destroy');
+            Route::get('enrollment-requests/review', [EnrollmentRequestController::class, 'review'])->name('enrollment-requests.review');
+            Route::post('enrollment-requests/{id}/approve', [EnrollmentRequestController::class, 'approve'])->whereNumber('id')->name('enrollment-requests.approve');
+            Route::post('enrollment-requests/{id}/reject', [EnrollmentRequestController::class, 'reject'])->whereNumber('id')->name('enrollment-requests.reject');
+            // Cobro en efectivo desde la app: entra en la caja de quien cobra hasta que la deposita.
+            Route::get('collections/students', [CollectionController::class, 'students'])->name('collections.students');
+            Route::get('collections/students/{student}', [CollectionController::class, 'show'])->whereNumber('student')->name('collections.show');
+            Route::post('collections', [CollectionController::class, 'store'])->middleware('throttle:30,1')->name('collections.store');
+            Route::post('collections/transfers', [CollectionController::class, 'transfer'])->middleware('throttle:20,1')->name('collections.transfers');
+            Route::get('me/cash-box', [CashBoxController::class, 'show'])->name('cash-box.show');
+            Route::post('me/cash-box/deposits', [CashBoxController::class, 'deposit'])->middleware('throttle:10,1')->name('cash-box.deposits.store');
+            Route::delete('me/cash-box/deposits/{deposit}', [CashBoxController::class, 'withdraw'])->whereNumber('deposit')->name('cash-box.deposits.destroy');
+            Route::get('cash-boxes', [CashDepositController::class, 'index'])->name('cash-boxes.index');
+            Route::post('cash-deposits/{deposit}/confirm', [CashDepositController::class, 'confirm'])->whereNumber('deposit')->name('cash-deposits.confirm');
+            Route::post('cash-deposits/{deposit}/reject', [CashDepositController::class, 'reject'])->whereNumber('deposit')->name('cash-deposits.reject');
+            Route::put('cash-collectors/{user}', [CashDepositController::class, 'updateCollector'])->whereNumber('user')->name('cash-collectors.update');
+
             Route::get('reports/balance', [ReportController::class, 'balance'])->name('reports.balance');
             Route::get('reports/balances', [ReportController::class, 'balances'])->name('reports.balances');
             // Asistencia (técnico).
@@ -103,8 +146,17 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('venues', [VenueController::class, 'index'])->name('venues.index');
             Route::get('me/notification-settings', [NotificationSettingsController::class, 'show'])->name('notification-settings.show');
             Route::put('me/notification-settings', [NotificationSettingsController::class, 'update'])->name('notification-settings.update');
+            // Bandeja "Avisos": la copia de cada push y correo.
+            Route::get('me/notifications', [NotificationInboxController::class, 'index'])->name('notifications.index');
+            Route::post('me/notifications/read-all', [NotificationInboxController::class, 'readAll'])->name('notifications.read-all');
+            Route::post('me/notifications/{notification}/read', [NotificationInboxController::class, 'read'])->whereUuid('notification')->name('notifications.read');
             Route::get('groups', [GroupController::class, 'index'])->name('groups.index');
             Route::get('groups/{group}', [GroupController::class, 'show'])->whereNumber('group')->name('groups.show');
+            // "Dejó de venir": el técnico avisa; la baja la decide el club en el panel.
+            Route::post('groups/{group}/students/{student}/dropout', [GroupController::class, 'reportDropout'])
+                ->whereNumber(['group', 'student'])->name('groups.dropout');
+            Route::delete('groups/{group}/students/{student}/dropout', [GroupController::class, 'cancelDropout'])
+                ->whereNumber(['group', 'student'])->name('groups.dropout.cancel');
 
             // Próxima clase y asistencia (tutor).
             Route::get('agenda', [AgendaController::class, 'index'])->name('agenda');
@@ -139,6 +191,11 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                 Route::get('onboarding', [OnboardingController::class, 'show'])->name('onboarding.show');
                 Route::put('onboarding', [OnboardingController::class, 'update'])->name('onboarding.update');
                 Route::put('onboarding/steps/{key}', [OnboardingController::class, 'skip'])->name('onboarding.skip');
+                // Borrador del paso ("Se guarda solo"): por ahora, categorías y horarios.
+                Route::get('onboarding/steps/{key}/draft', [OnboardingController::class, 'draft'])->whereIn('key', StepDrafts::KEYS)->name('onboarding.draft');
+                Route::put('onboarding/steps/{key}/draft', [OnboardingController::class, 'saveDraft'])->whereIn('key', StepDrafts::KEYS)->middleware('throttle:120,1')->name('onboarding.draft.save');
+                Route::delete('onboarding/steps/{key}/draft', [OnboardingController::class, 'forgetDraft'])->whereIn('key', StepDrafts::KEYS)->name('onboarding.draft.forget');
+                Route::put('organization/terminology', [TerminologyController::class, 'update'])->name('organization.terminology');
 
                 Route::prefix('setup')->name('setup.')->group(function () {
                     Route::get('programs', [SetupProgramController::class, 'index'])->name('programs.index');

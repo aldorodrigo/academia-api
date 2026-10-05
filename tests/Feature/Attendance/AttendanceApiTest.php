@@ -36,6 +36,7 @@ use App\Notifications\ClassReminder;
 use App\Notifications\ClassRescheduled;
 use App\Notifications\ClassSuspended;
 use App\Notifications\InstructorClassReminder;
+use App\Support\Notifications\InboxChannel;
 use App\Support\Push\FcmPushSender;
 use App\Support\Push\PushChannel;
 use App\Support\Push\PushMessage;
@@ -43,6 +44,9 @@ use App\Support\Push\PushSender;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
+use Illuminate\Notifications\ChannelManager;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Messaging\MulticastSendReport;
@@ -112,7 +116,7 @@ function todayClassId(User $user): int
 describe('técnico', function () {
     it('ve las clases de hoy de sus grupos y el permiso en la organización', function () {
         attendanceApi($this->instructor, 'GET', 'organization')
-            ->assertJsonPath('data.membership.permissions', ['take_attendance']);
+            ->assertJsonPath('data.membership.permissions', ['take_attendance', 'manage_enrollment_requests', 'collect_payments']);
 
         attendanceApi($this->instructor, 'GET', 'classes')
             ->assertOk()
@@ -268,6 +272,30 @@ describe('tutor', function () {
             ->assertJsonPath('data.response', 'no_va');
 
         expect(Attendance::query()->withoutGlobalScopes()->sole()->guardian_response)->toBe(GuardianResponse::NotGoing);
+    });
+
+    it('ordena las próximas clases por fecha y hora, no por la edad de los hijos', function () {
+        // Thiago (el mayor) va a Sub-12 el lunes 18:30; Mateo, a Sub-10 el lunes 17:00.
+        $thiago = attendanceStudent('Thiago', 'Benítez', $this->sub12);
+        $thiago->update(['birth_date' => '2014-03-01']);
+        $this->mateo->update(['birth_date' => '2018-05-01']);
+        $thiago->guardians()->attach($this->mateo->guardians()->first(), ['relationship' => 'madre']);
+
+        attendanceApi($this->tutor, 'GET', 'agenda')
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('data.0.student.first_name', 'Mateo')
+            ->assertJsonPath('data.0.class.starts_at', '17:00')
+            ->assertJsonPath('data.1.student.first_name', 'Thiago')
+            ->assertJsonPath('data.1.class.starts_at', '18:30');
+
+        // Terminada la de Mateo, su próxima es el miércoles: Thiago (hoy 18:30) pasa primero.
+        $this->travelTo(CarbonImmutable::parse('2026-09-28 18:40', 'America/Asuncion'));
+
+        attendanceApi($this->tutor, 'GET', 'agenda')
+            ->assertJsonPath('data.0.student.first_name', 'Thiago')
+            ->assertJsonPath('data.0.class.date', '2026-09-28')
+            ->assertJsonPath('data.1.student.first_name', 'Mateo')
+            ->assertJsonPath('data.1.class.date', '2026-09-30');
     });
 
     it('después del horario pasa a la clase siguiente; no responde por hijos ajenos', function () {
@@ -646,10 +674,11 @@ describe('clase suspendida sin cobrar (por día de entrenamiento)', function () 
             ->and($reissued->adjustments()->sole()->label)->toBe('Clase suspendida 30/09')
             ->and(ChargeWaiver::query()->sole()->applied_charge_id)->toBe($reissued->id);
 
-        // Volver a programar: el descuento se borra y la próxima vuelve a su monto.
+        // Volver a programar: el descuento se archiva (soft delete, no se borra) y la próxima vuelve a su monto.
         attendanceApi($this->instructor, 'DELETE', 'classes/'.($this->wednesday)().'/suspension')->assertOk();
         expect(Charge::query()->whereNull('voided_at')->whereDate('period_start', '2026-10-05')->sole()->final_amount)->toBe(40000)
-            ->and(ChargeWaiver::query()->count())->toBe(0);
+            ->and(ChargeWaiver::query()->count())->toBe(0)
+            ->and(ChargeWaiver::onlyTrashed()->count())->toBe(1);
     });
 
     it('por clase dictada: la cuota sale al cerrar el período, sin las suspendidas y con las recuperaciones', function () {
@@ -891,9 +920,9 @@ describe('copia por correo de los avisos', function () {
 
         $phoneOnly = User::factory()->create(['email' => null, 'phone' => '+595981000111', 'phone_verified_at' => now()]);
         $unconfirmed = User::factory()->unverified()->create(['phone' => '+595981000222', 'phone_verified_at' => now()]);
-        expect($suspended->via($this->tutor))->toBe(['push', 'mail'])
-            ->and($suspended->via($phoneOnly))->toBe(['push'])
-            ->and($suspended->via($unconfirmed))->toBe(['push']);
+        expect($suspended->via($this->tutor))->toBe(['inbox', 'push', 'mail'])
+            ->and($suspended->via($phoneOnly))->toBe(['inbox', 'push'])
+            ->and($suspended->via($unconfirmed))->toBe(['inbox', 'push']);
 
         $mail = $suspended->toMail($this->tutor);
         expect($mail->subject)->toBe('Clase suspendida')
@@ -907,6 +936,32 @@ describe('copia por correo de los avisos', function () {
         expect($instructor->viewData['actions'])->toBe([
             ['label' => 'Tomar asistencia', 'url' => rtrim(config('app.frontend_url'), '/')."/clases/{$session->id}"],
         ]);
+    });
+
+    it('los recordatorios de día de clase no quedan en la bandeja; los demás avisos sí', function () {
+        Mail::fake();
+        $session = ClassSession::query()->withoutGlobalScopes()->find(todayClassId($this->instructor));
+        $guardianReminder = new ClassReminder($session, $this->mateo, $this->jakare->today(), $this->tutor->id);
+        $instructorReminder = new InstructorClassReminder($session, $this->jakare->today());
+
+        // Push y correo como siempre, sin el canal de la bandeja.
+        expect($guardianReminder->inInbox())->toBeFalse()
+            ->and($guardianReminder->via($this->tutor))->toBe(['push', 'mail'])
+            ->and($instructorReminder->via($this->instructor))->not->toContain('inbox')
+            ->and((new ClassSuspended($session))->inInbox())->toBeTrue();
+
+        // Mandados de verdad (sin el fake): el recordatorio no crea una fila en `notifications`; la suspensión sí.
+        $channels = (new ChannelManager(app()))
+            ->extend('push', fn ($app) => $app->make(PushChannel::class))
+            ->extend('inbox', fn ($app) => $app->make(InboxChannel::class));
+        app(CurrentOrganization::class)->run($this->jakare, function () use ($channels, $guardianReminder, $instructorReminder, $session) {
+            $channels->sendNow($this->tutor, $guardianReminder);
+            $channels->sendNow($this->instructor, $instructorReminder);
+            $channels->sendNow($this->tutor, new ClassSuspended($session));
+        });
+
+        expect(DB::table('notifications')->where('notifiable_id', $this->instructor->id)->count())->toBe(0)
+            ->and(DB::table('notifications')->where('notifiable_id', $this->tutor->id)->pluck('type')->all())->toBe([ClassSuspended::class]);
     });
 
     it('"Sí, va" y "No va" del correo abren una página y la respuesta se guarda con su botón', function () {

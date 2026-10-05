@@ -7,8 +7,10 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\MidPeriod;
 use App\Exceptions\ImportRowException;
 use App\Filament\Resources\Students\StudentResource;
+use App\Filament\Support\Terms;
 use App\Models\Group;
 use App\Models\Season;
+use App\Support\Vocabulary;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
 use Filament\Resources\Pages\CreateRecord;
@@ -28,7 +30,7 @@ class CreateStudent extends CreateRecord
         try {
             return app(RegisterStudent::class)->handle(
                 Filament::getTenant(),
-                collect($data)->only(['first_name', 'last_name', 'document', 'birth_date', 'shirt_size', 'position', 'notes', 'user_id'])->all(),
+                collect($data)->only(['first_name', 'last_name', 'document', 'birth_date', 'gender', 'shirt_size', 'position', 'notes', 'user_id'])->all(),
                 Group::query()->findOrFail($data['group_id']),
                 Season::query()->findOrFail($data['season_id']),
                 $data['status'] instanceof EnrollmentStatus ? $data['status'] : EnrollmentStatus::from($data['status']),
@@ -52,11 +54,15 @@ class CreateStudent extends CreateRecord
             ->exists();
 
         return parent::getCreatedNotification()
-            ?->body($toInvite ? 'Invitá a sus tutores a la app desde la sección Tutores.' : null);
+            ?->body($toInvite ? 'Invitá a sus '.Terms::plural('guardian', 'tutor').' a la app desde la sección '.ucfirst(Terms::plural('guardian', 'tutor')).'.' : null);
     }
 
     protected function getCreatedNotificationTitle(): ?string
     {
-        return 'Jugador inscripto.';
+        // Nombra a esa persona: "Jugadora inscripta" si se cargó que es mujer.
+        $gender = $this->getRecord()->gender;
+        $word = Filament::getTenant()->term('student');
+
+        return Vocabulary::forPerson($word, $gender).' '.Vocabulary::agree($word, $gender, 'inscripto', 'inscripta').'.';
     }
 }

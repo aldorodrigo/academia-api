@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1\Setup;
 
 use App\Actions\Invitations\CreateInvitation;
 use App\Actions\Onboarding\ManageInstructors;
+use App\Enums\Gender;
 use App\Enums\InvitationStatus;
 use App\Http\Controllers\Controller;
 use App\Models\Group;
@@ -13,9 +14,11 @@ use App\Rules\MobilePhone;
 use App\Support\Onboarding\Team;
 use App\Support\Scheduling\ScheduleConflicts;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
+use Illuminate\Validation\Rule;
 
 /**
  * Paso 4 de la guía: técnicos (invitados con sus categorías) y el admin que también da clases.
@@ -35,6 +38,7 @@ class InstructorController extends Controller
             'email' => ['nullable', 'required_without:phone', 'email', 'max:255'],
             'group_ids' => ['nullable', 'array'],
             'group_ids.*' => ['integer'],
+            'gender' => ['nullable', Rule::enum(Gender::class)],
         ], [
             'name.required' => 'Ingresá el nombre.',
             'phone.required_without' => 'Ingresá el celular o el correo.',
@@ -48,6 +52,7 @@ class InstructorController extends Controller
             $data['email'] ?? null,
             $data['group_ids'] ?? [],
             $data['phone'] ?? null,
+            Gender::parse($data['gender'] ?? null),
         );
 
         // Un técnico que ya existe y queda con dos categorías a la vez: aviso.
@@ -69,10 +74,17 @@ class InstructorController extends Controller
 
     public function me(Request $request, CurrentOrganization $current, ManageInstructors $manage): JsonResponse
     {
+        // "Yo también doy clases" pide elegir al menos una (no se dan todas por defecto).
+        $mustChoose = $request->boolean('teaches') && Group::query()->where('is_active', true)->exists();
+        $group = Vocabulary::a($current->get()->term('group'));
+
         $data = $request->validate([
             'teaches' => ['required', 'boolean'],
-            'group_ids' => ['nullable', 'array'],
+            'group_ids' => [$mustChoose ? 'required' : 'nullable', 'array', $mustChoose ? 'min:1' : 'min:0'],
             'group_ids.*' => ['integer'],
+        ], [
+            'group_ids.required' => "Elegí al menos {$group}.",
+            'group_ids.min' => "Elegí al menos {$group}.",
         ]);
 
         $manage->setTeaching($current->get(), $request->user(), $data['teaches'], $data['group_ids'] ?? []);
@@ -100,12 +112,12 @@ class InstructorController extends Controller
     {
         $invitation = $this->pendingInvitation($invitation);
 
+        // La misma invitación con un link nuevo (no se suma otra a la lista).
         $token = $create->resend($invitation);
-        $renewed = Invitation::query()->where('token_hash', Invitation::hashToken($token))->firstOrFail();
 
         return response()->json(['data' => [
             'link' => Invitation::urlFor($token),
-            'whatsapp_url' => $renewed->whatsappUrl($token),
+            'whatsapp_url' => $invitation->whatsappUrl($token),
         ]]);
     }
 
@@ -159,6 +171,7 @@ class InstructorController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'phone' => $user->phone,
+            'gender' => $user->gender?->value,
             'status' => 'activo',
             'groups' => $user->instructedGroups
                 ->where('organization_id', $current->id())
@@ -181,6 +194,7 @@ class InstructorController extends Controller
             'name' => $invitation->name ?? $invitation->contact(),
             'email' => $invitation->email,
             'phone' => $invitation->phone,
+            'gender' => $invitation->gender?->value,
             'status' => $invitation->status() === InvitationStatus::Expired ? 'vencida' : 'invitado',
             'groups' => $groups->map(fn (Group $group) => ['id' => $group->id, 'name' => $group->name])->values(),
         ];
