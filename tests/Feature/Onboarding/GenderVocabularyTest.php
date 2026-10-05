@@ -11,6 +11,7 @@ use App\Enums\OrganizationType;
 use App\Models\EnrollmentRequest;
 use App\Models\Group;
 use App\Models\Guardian;
+use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\Program;
 use App\Models\Season;
@@ -124,6 +125,20 @@ describe('el género de la persona', function () {
         ])->assertCreated();
 
         expect(User::query()->where('email', 'lucia@test.com')->sole()->gender)->toBe(Gender::Female);
+    });
+
+    it('Primeros pasos (app): invitar a una técnica con su género', function () {
+        $organization = genderOrg();
+        $admin = memberOf($organization);
+        app(RoleAssigner::class)->assign($organization, $admin, OrganizationRole::Admin);
+
+        genderApi($admin, 'POST', 'setup/instructors', ['name' => 'Marta Ríos', 'email' => 'marta@test.com', 'gender' => 'female'])
+            ->assertCreated()
+            ->assertJsonPath('data.gender', 'female');
+        genderApi($admin, 'POST', 'setup/instructors', ['name' => 'X', 'email' => 'x@test.com', 'gender' => 'x'])
+            ->assertUnprocessable()->assertJsonValidationErrors('gender');
+
+        expect(Invitation::query()->withoutGlobalScopes()->where('email', 'marta@test.com')->sole()->roleLabels())->toBe(['Técnica']);
     });
 
     it('a los tutores no se les pregunta: sale del parentesco (Madre → Tutora)', function () {

@@ -2170,7 +2170,7 @@ Acepta `feminine` (opcional): `{ "terminology": {}, "feminine": { "instructor": 
 
 - `GET invitations/{token}` suma `gender` (el que cargó quien invitó) y `roles[].label` nombra a la persona: el género
   de la invitación, si no el de su cuenta (si ya tiene) o el del parentesco (invitación de tutor).
-- `POST setup/instructors` acepta `gender` opcional. Al aceptar la invitación, si la cuenta no tiene género, toma el de
+- `POST setup/instructors` acepta `gender` opcional y cada técnico de `GET setup/instructors` lo trae (`gender`). Al aceptar la invitación, si la cuenta no tiene género, toma el de
   la invitación.
 
 ### Parentesco (`relationship`)

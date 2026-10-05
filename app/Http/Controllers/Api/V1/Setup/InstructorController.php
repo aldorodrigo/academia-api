@@ -171,6 +171,7 @@ class InstructorController extends Controller
             'name' => $user->name,
             'email' => $user->email,
             'phone' => $user->phone,
+            'gender' => $user->gender?->value,
             'status' => 'activo',
             'groups' => $user->instructedGroups
                 ->where('organization_id', $current->id())
@@ -193,6 +194,7 @@ class InstructorController extends Controller
             'name' => $invitation->name ?? $invitation->contact(),
             'email' => $invitation->email,
             'phone' => $invitation->phone,
+            'gender' => $invitation->gender?->value,
             'status' => $invitation->status() === InvitationStatus::Expired ? 'vencida' : 'invitado',
             'groups' => $groups->map(fn (Group $group) => ['id' => $group->id, 'name' => $group->name])->values(),
         ];

@@ -149,7 +149,7 @@ class WithdrawalActions
 
         if ($record->hasDropoutReport()) {
             $guardian = $record->dropout_source === 'guardian';
-            $by = $record->dropoutReportedBy?->name ?? ($guardian ? 'La familia' : 'El técnico');
+            $by = $record->dropoutReportedBy?->name ?? ($guardian ? 'La familia' : ucfirst(Terms::the('instructor', 'Técnico')));
 
             return "{$by} avisó que ".($guardian ? 'deja '.Vocabulary::the($record->organization->typeNoun()) : 'dejó de venir')
                 ." ({$record->dropout_reported_at->setTimezone($record->organization->timezone)->format('d/m')})"

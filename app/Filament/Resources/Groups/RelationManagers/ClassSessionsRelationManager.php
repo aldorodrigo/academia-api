@@ -114,7 +114,7 @@ class ClassSessionsRelationManager extends RelationManager
                             ->visible(fn ($get) => $get('then') === 'cancel' && $record->canWaiveCharge()),
                         ...self::rescheduleFields($record, fn ($get) => $get('then') === 'reschedule'),
                     ])
-                    ->modalDescription('Se avisa por push a los tutores del grupo.')
+                    ->modalDescription(fn () => 'Se avisa por push a '.Terms::the('guardian', 'Tutor', plural: true).' '.Terms::of('group', 'Grupo').'.')
                     ->action(function (ClassSession $record, array $data, SuspendClass $suspend, RescheduleClass $reschedule) {
                         $reason = $data['reason'] === 'Otro' ? $data['other'] : $data['reason'];
 
@@ -125,14 +125,14 @@ class ClassSessionsRelationManager extends RelationManager
                         }
 
                         $suspend->handle($record, $reason, auth()->user(), (bool) ($data['waive_charge'] ?? false));
-                        Notification::make()->title('Clase suspendida')->body('Se avisó a los tutores.')->success()->send();
+                        Notification::make()->title('Clase suspendida')->body('Se avisó a '.Terms::the('guardian', 'Tutor', plural: true).'.')->success()->send();
                     }),
                 Action::make('move')
                     ->label('Cambiar día u horario')
                     ->icon('heroicon-o-calendar-days')
                     ->visible(fn (ClassSession $record) => ! $record->isRescheduled() && ! $record->isPast())
                     ->schema(fn (ClassSession $record) => self::rescheduleFields($record))
-                    ->modalDescription('Se avisa por push a los tutores del grupo.')
+                    ->modalDescription(fn () => 'Se avisa por push a '.Terms::the('guardian', 'Tutor', plural: true).' '.Terms::of('group', 'Grupo').'.')
                     ->action(function (ClassSession $record, array $data, RescheduleClass $reschedule) {
                         self::rescheduled($reschedule->handle($record, [...self::rescheduleData($data), 'reason' => $record->suspension_reason], auth()->user()));
                     }),
@@ -148,7 +148,7 @@ class ClassSessionsRelationManager extends RelationManager
                     ->color('warning')
                     ->visible(fn (ClassSession $record) => $record->isRescheduled() && $record->rescheduledTo !== null)
                     ->requiresConfirmation()
-                    ->modalDescription('Se borra la clase de recuperación y se avisa a los tutores.')
+                    ->modalDescription(fn () => 'Se borra la clase de recuperación y se avisa a '.Terms::the('guardian', 'Tutor', plural: true).'.')
                     ->action(function (ClassSession $record, RescheduleClass $reschedule) {
                         $reschedule->cancel($record, auth()->user());
                         Notification::make()->title('Se canceló la reprogramación')->success()->send();
@@ -166,7 +166,7 @@ class ClassSessionsRelationManager extends RelationManager
      */
     private static function rescheduled(ClassSession $makeup): void
     {
-        Notification::make()->title('Clase reprogramada')->body('Se avisó a los tutores.')->success()->send();
+        Notification::make()->title('Clase reprogramada')->body('Se avisó a '.Terms::the('guardian', 'Tutor', plural: true).'.')->success()->send();
 
         $warnings = ScheduleConflicts::forClass($makeup);
         if ($warnings !== []) {
@@ -212,7 +212,7 @@ class ClassSessionsRelationManager extends RelationManager
 
         return $session->students()->map(fn (Student $student) => ToggleButtons::make("marks.{$student->id}")
             ->label($student->full_name)
-            ->helperText($responses->get($student->id) === GuardianResponse::NotGoing ? 'El tutor avisó que no va.' : null)
+            ->helperText($responses->get($student->id) === GuardianResponse::NotGoing ? ucfirst(Terms::the('guardian', 'Tutor')).' avisó que no va.' : null)
             ->options(AttendanceStatus::class)
             ->inline()
             ->required())
