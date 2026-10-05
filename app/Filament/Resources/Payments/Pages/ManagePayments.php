@@ -2,7 +2,9 @@
 
 namespace App\Filament\Resources\Payments\Pages;
 
+use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\RegisterPayment;
+use App\Enums\MoneyAccountType;
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\Payments\PaymentResource;
 use App\Http\Controllers\ReceiptController;
@@ -69,10 +71,14 @@ class ManagePayments extends ManageRecords
                         ->live(onBlur: true)->afterStateUpdated($refresh),
                     DatePicker::make('received_on')->label('Fecha')->default(fn () => Filament::getTenant()->today()->toDateString())
                         ->required()->live()->afterStateUpdated($refresh),
-                    Select::make('method')->label('Método')->options(PaymentMethod::class)->default(PaymentMethod::Cash->value)->required(),
+                    Select::make('method')->label('Método')->options(PaymentMethod::class)->default(PaymentMethod::Cash->value)->required()
+                        ->live()
+                        ->afterStateUpdated(fn (Get $get, Set $set) => $set('money_account_id', self::defaultAccount($get('method')))),
+                    // Efectivo: la caja de quien registra (como en la app); si no, la primera cuenta bancaria o billetera.
+                    // De las cajas personales solo se ve la propia; la Caja del club y las demás cuentas, siempre.
                     Select::make('money_account_id')->label('Cuenta')
-                        ->options(fn () => MoneyAccount::query()->where('is_active', true)->pluck('name', 'id'))
-                        ->default(fn () => MoneyAccount::query()->where('is_active', true)->value('id'))
+                        ->options(fn () => self::accountOptions())
+                        ->default(fn () => self::defaultAccount(PaymentMethod::Cash))
                         ->required(),
                     Select::make('guardian_id')->label('Pagó')
                         ->options(fn (Get $get) => Guardian::query()->where('family_id', $get('family_id'))->get()
@@ -94,7 +100,7 @@ class ManagePayments extends ManageRecords
 
                 $payment = app(RegisterPayment::class)->handle(
                     $family,
-                    MoneyAccount::query()->findOrFail($data['money_account_id']),
+                    self::account($data['money_account_id']),
                     (int) $data['amount'],
                     PaymentMethod::from($data['method'] instanceof PaymentMethod ? $data['method']->value : $data['method']),
                     $receivedOn,
@@ -115,6 +121,55 @@ class ManagePayments extends ManageRecords
                     ->persistent()
                     ->send();
             });
+    }
+
+    /** Valor de "mi caja" cuando quien registra todavía no tiene una (se crea al registrar). */
+    private const OWN_CASH_BOX = 'mi-caja';
+
+    /**
+     * Cuentas del club y la caja personal de quien registra.
+     *
+     * @return array<int|string, string>
+     */
+    private static function accountOptions(): array
+    {
+        $own = MoneyAccount::cashBoxOf(auth()->user(), Filament::getTenant());
+
+        // Unión (no `...`): el spread renumera las claves enteras (los ids).
+        return [$own?->id ?? self::OWN_CASH_BOX => ($own?->name ?? 'Caja de '.auth()->user()->name).' (tu caja)']
+            + PaymentReportAccess::paymentAccounts()->pluck('name', 'id')->all();
+    }
+
+    private static function defaultAccount(mixed $method): int|string|null
+    {
+        $method = $method instanceof PaymentMethod ? $method : PaymentMethod::tryFrom((string) $method);
+
+        if ($method === PaymentMethod::Cash) {
+            return MoneyAccount::cashBoxOf(auth()->user(), Filament::getTenant())?->id ?? self::OWN_CASH_BOX;
+        }
+
+        $accounts = PaymentReportAccess::paymentAccounts();
+
+        return ($accounts->first(fn (MoneyAccount $account) => in_array($account->type, [MoneyAccountType::Bank, MoneyAccountType::Wallet], true))
+            ?? $accounts->first())?->id;
+    }
+
+    /**
+     * La cuenta elegida: "mi caja" se crea si hace falta; otra caja personal no se acepta.
+     */
+    private static function account(int|string $id): MoneyAccount
+    {
+        $user = auth()->user();
+        $organization = Filament::getTenant();
+
+        if ($id === self::OWN_CASH_BOX) {
+            return MoneyAccount::ensureCashBoxOf($user, $organization);
+        }
+
+        $account = MoneyAccount::query()->findOrFail($id);
+        abort_if($account->isCashBox() && $account->user_id !== $user->id, 403, 'Elegí tu caja o una cuenta del club.');
+
+        return $account;
     }
 
     /**

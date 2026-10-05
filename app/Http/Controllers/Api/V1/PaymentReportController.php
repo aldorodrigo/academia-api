@@ -8,14 +8,12 @@ use App\Actions\Billing\SubmitPaymentReport;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\PaymentReportResource;
 use App\Http\Resources\Api\V1\ReviewPaymentReportResource;
-use App\Models\MoneyAccount;
 use App\Models\PaymentReport;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -75,8 +73,8 @@ class PaymentReportController extends Controller
             throw ValidationException::withMessages(['status' => 'Este comprobante ya fue revisado.']);
         }
 
+        // Soft delete: queda el registro y el archivo, y deja de aparecer.
         $report->delete();
-        Storage::disk('local')->delete($report->proof_path);
 
         return response()->noContent();
     }
@@ -109,7 +107,7 @@ class PaymentReportController extends Controller
 
         $account = null;
         if (isset($data['money_account_id'])) {
-            $account = MoneyAccount::query()->where('is_active', true)->find($data['money_account_id']);
+            $account = PaymentReportAccess::paymentAccounts()->firstWhere('id', (int) $data['money_account_id']);
             if ($account === null) {
                 throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta activa.']);
             }

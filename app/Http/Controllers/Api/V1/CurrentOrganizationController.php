@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Attendance\AttendanceAccess;
+use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\WaiveCharges;
 use App\Actions\Enrollments\EnrollmentRequestAccess;
@@ -62,6 +63,7 @@ class CurrentOrganizationController extends Controller
                         ->when(AttendanceAccess::canTakeAny($user), fn ($permissions) => $permissions->push('take_attendance'))
                         ->when(PaymentReportAccess::canReview($user, $organization), fn ($permissions) => $permissions->push('review_payment_reports'))
                         ->when(EnrollmentRequestAccess::canReviewAny($user), fn ($permissions) => $permissions->push('manage_enrollment_requests'))
+                        ->when(CashCollectionAccess::canCollect($user), fn ($permissions) => $permissions->push('collect_payments'))
                         ->when(
                             $organization->hasFeature(Feature::PrivateLessons) && LessonProfile::teaches($user, $organization),
                             fn ($permissions) => $permissions->push('teach_lessons'),

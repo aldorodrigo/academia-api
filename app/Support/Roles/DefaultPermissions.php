@@ -11,7 +11,7 @@ use Spatie\Permission\PermissionRegistrar;
  * Permisos con los que nace cada rol base (business-logic.md §2), para que la comisión vea lo
  * suyo sin que el administrador tenga que armarlo en Roles. El administrador los puede cambiar.
  * El admin no los necesita (pasa por Gate::before); el tutor usa sus hijos y el técnico sus grupos (más confirmar
- * las inscripciones de la app en ellos).
+ * las inscripciones de la app en ellos y cobrar en efectivo desde la app).
  */
 class DefaultPermissions
 {
@@ -38,12 +38,12 @@ class DefaultPermissions
             OrganizationRole::Treasurer => [
                 ...self::grant(self::FINANCE, self::MANAGE),
                 ...self::grant([...self::PEOPLE, ...self::ACADEMIC], self::VIEW),
-                'View:Reports', 'Approve:Scholarship', 'Waive:Charge',
+                'View:Reports', 'Approve:Scholarship', 'Waive:Charge', 'Collect:Payments',
             ],
             OrganizationRole::DeputyTreasurer => [
                 ...self::grant(self::FINANCE, self::MANAGE),
                 ...self::grant([...self::PEOPLE, ...self::ACADEMIC], self::VIEW),
-                'View:Reports',
+                'View:Reports', 'Collect:Payments',
             ],
             // Invitan a tutores y técnicos (no a la comisión: ver RoleFields::options).
             OrganizationRole::Secretary, OrganizationRole::DeputySecretary => [
@@ -55,8 +55,9 @@ class DefaultPermissions
             ],
             OrganizationRole::Member => ['View:Reports'],
             OrganizationRole::Auditor => [...self::grant(self::FINANCE, self::VIEW), 'View:Reports'],
-            // El técnico confirma las inscripciones de la app en sus categorías.
-            OrganizationRole::Instructor => ['Confirm:GroupEnrollments'],
+            // El técnico confirma las inscripciones de la app en sus categorías y cobra cuotas en efectivo desde la
+            // app (queda en su caja hasta que la deposita).
+            OrganizationRole::Instructor => ['Confirm:GroupEnrollments', 'Collect:Payments'],
             OrganizationRole::Admin, OrganizationRole::Guardian => [],
         };
     }

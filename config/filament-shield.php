@@ -274,6 +274,8 @@ return [
         'Manage:EnrollmentRequests' => 'Confirmar inscripciones de la app (todas las categorías)',
         // Lo mismo, solo en las categorías donde es técnico (el técnico, por defecto).
         'Confirm:GroupEnrollments' => 'Confirmar inscripciones de la app en sus categorías',
+        // Cobrar cuotas en efectivo desde la app: el pago entra en la caja de quien cobra hasta que la deposita.
+        'Collect:Payments' => 'Cobrar en efectivo desde la app',
     ],
 
     /*

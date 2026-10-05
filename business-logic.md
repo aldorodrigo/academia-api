@@ -96,9 +96,10 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
   cambia en Roles. Presidente y vicepresidente: ver todo e informes (el presidente, también aprobar becas). Tesorero y
   protesorero: cobros, cuotas, gastos, cuentas, tarifas, becas y descuentos, ver alumnos y grupos, informes (el
   tesorero, también aprobar becas). Secretario y prosecretario: alumnos, tutores, inscripciones e invitaciones; ver
-  grupos, temporadas y miembros. Vocal: informes. Síndico: ver lo financiero e informes. Admin, técnico y tutor: nada
-  extra (el admin pasa por todo; técnico y tutor usan sus grupos e hijos). "Condonar deudas" nace con el tesorero y
-  el presidente (y se les agregó a los roles que ya existían); el admin lo agrega o quita por rol.
+  grupos, temporadas y miembros. Vocal: informes. Síndico: ver lo financiero e informes. Técnico, tesorero y
+  protesorero: cobrar en efectivo desde la app. Admin, técnico y tutor: nada más (el admin pasa por todo; técnico y
+  tutor usan sus grupos e hijos). "Condonar deudas" nace con el tesorero y el presidente (y se les agregó a los roles
+  que ya existían); el admin lo agrega o quita por rol.
 - Se aplican al crear el rol; `organizations:sync-roles` los completa en los roles base que no tienen **ningún**
   permiso (no pisa lo que cambió el admin).
 - **Quien no es admin solo invita o asigna tutores y técnicos** (no cargos ni administrador).
@@ -354,6 +355,26 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Cada pago genera un **recibo PDF**.
 - **Comprobante subido por el padre** (transferencia) queda `pendiente` hasta que el
   tesorero lo valida; recién ahí impacta en la cuenta. *(Fase 2)*
+- **Cobro en efectivo desde la app** (`PLAN_COBRO_EFECTIVO.md`): quien tiene el permiso "Cobrar en efectivo desde la
+  app" (técnico, tesorero y protesorero por defecto; el admin siempre) cobra a los alumnos de sus grupos (o a todos, si
+  ve todos los alumnos) las cuotas pendientes de toda la familia. Es un pago normal: efectivo, fecha de hoy, imputación,
+  pronto pago, saldo a favor y recibo de siempre. La familia recibe un aviso con el recibo.
+- **Caja del técnico:** lo cobrado entra en la **caja personal** de quien cobra ("Caja de Juan Pérez", una cuenta del
+  club con titular, creada con el primer cobro): es plata del club en su poder. Con la caja cerrada (cuenta inactiva)
+  no puede cobrar.
+- **Depósito:** quien cobra informa que dejó la plata en una cuenta del club (Caja, banco o billetera); queda **por
+  confirmar** y la plata sigue en su caja. Quien valida comprobantes lo confirma (transferencia de su caja a esa
+  cuenta, con la fecha del depósito) o lo rechaza con motivo; en los dos casos se le avisa. No se deposita más de lo
+  disponible (saldo menos lo que ya está por confirmar). Anular un pago cobrado así saca la plata de su caja.
+- **Transferencia que la familia le mandó al club** (la captura de WhatsApp): quien cobra en efectivo también la
+  registra desde la app como un comprobante de transferencia en nombre de la familia, con la imagen o el PDF y quién lo
+  registró. Si quien la registra valida comprobantes, queda aprobada al instante con su recibo; si es el técnico, queda
+  en revisión. La familia la ve en su estado de cuenta.
+- Las cajas personales no aparecen al elegir dónde entra un pago (registrar pago, aprobar comprobantes); sí en
+  Cuentas, Transferencias y Gastos. Excepción: en "Registrar pago" del panel, quien registra ve **su** caja, que es la
+  cuenta por defecto con método Efectivo (el efectivo queda en su poder hasta depositarlo, como en la app).
+- En el estado de cuenta, un comprobante rechazado se ve mientras alguna de sus cuotas siga pendiente (sin cuotas,
+  30 días); después queda como historial.
 
 ## 9. Gastos *(Sprint 4b)*
 

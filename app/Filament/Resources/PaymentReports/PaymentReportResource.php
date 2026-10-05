@@ -81,7 +81,8 @@ class PaymentReportResource extends Resource
                     ->tooltip(fn (PaymentReport $record) => $record->created_at->format('d/m/Y H:i'))
                     ->toggleable(isToggledHiddenByDefault: true),
                 TextColumn::make('family.name')->label('Familia')
-                    ->description(fn (PaymentReport $record) => $record->family->students->pluck('first_name')->join(', ').' · '.$record->user->name)
+                    ->description(fn (PaymentReport $record) => $record->family->students->pluck('first_name')->join(', ').' · '
+                        .($record->registered_by_staff ? "registró {$record->user->name}" : $record->user->name))
                     ->searchable(),
                 TextColumn::make('paid_on')->label('Transferencia')->date('d/m/Y')
                     ->description(fn (PaymentReport $record) => collect([$record->moneyAccount?->name, $record->reference ? "Ref. {$record->reference}" : null])->filter()->join(' · ')),
@@ -147,7 +148,7 @@ class PaymentReportResource extends Resource
                         ->join(', ')
                     .'. Lo que sobre queda como saldo a favor.'),
                 Select::make('money_account_id')->label('Entró en')
-                    ->options(fn () => MoneyAccount::query()->where('is_active', true)->pluck('name', 'id'))
+                    ->options(fn () => PaymentReportAccess::paymentAccounts()->pluck('name', 'id'))
                     ->required(),
                 DatePicker::make('received_on')->label('Fecha')->required()
                     ->maxDate(fn () => Filament::getTenant()->today()),
@@ -196,7 +197,7 @@ class PaymentReportResource extends Resource
 
     private static function defaultAccountId(PaymentReport $record): ?int
     {
-        $accounts = MoneyAccount::query()->where('is_active', true)->orderBy('id')->get();
+        $accounts = PaymentReportAccess::paymentAccounts();
 
         return ($accounts->firstWhere('id', $record->money_account_id)
             ?? $accounts->firstWhere('type', MoneyAccountType::Bank)
