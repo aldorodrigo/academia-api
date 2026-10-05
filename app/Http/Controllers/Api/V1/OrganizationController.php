@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Actions\Organizations\RegisterOrganization;
 use App\Enums\OrganizationType;
 use App\Http\Controllers\Controller;
+use App\Models\Organization;
 use App\Support\Organizations\Slug;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,7 +40,7 @@ class OrganizationController extends Controller
             'name' => ['required', 'string', 'min:3', 'max:255'],
             'type' => ['required', Rule::enum(OrganizationType::class)],
             'slug' => Slug::rules(),
-            'terminology' => ['nullable', 'array:program,group,student,instructor,guardian'],
+            'terminology' => ['nullable', 'array:'.implode(',', array_keys(Organization::DEFAULT_TERMINOLOGY))],
             'terminology.*' => ['nullable', 'string', 'max:30'],
         ], [
             'name.required' => 'Ingresá el nombre del club.',

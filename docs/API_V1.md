@@ -977,14 +977,15 @@ Lo que la app y el panel ofrecen como sugerencia:
   "data": {
     "organization_types": [
       { "value": "club", "label": "Club", "description": "Club o asociación deportiva",
-        "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Jugador", "instructor": "Técnico", "guardian": "Tutor" } },
+        "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Jugador", "instructor": "Técnico", "guardian": "Tutor", "space": "Cancha" } },
       { "value": "academy", "label": "Academia", "description": "Academia de deporte, danza, música o idiomas",
-        "terminology": { "program": "Disciplina", "group": "Grupo", "student": "Alumno", "instructor": "Profesor", "guardian": "Tutor" } }
+        "terminology": { "program": "Disciplina", "group": "Grupo", "student": "Alumno", "instructor": "Profesor", "guardian": "Tutor", "space": "Sala" } }
     ],
     "terminology_options": {
       "student": ["Jugador", "Alumno", "Alumna", "Atleta"],
       "instructor": ["Técnico", "Profesor", "Profesora", "Instructor", "Entrenador"],
-      "group": ["Categoría", "Grupo", "Nivel", "Clase"]
+      "group": ["Categoría", "Grupo", "Nivel", "Clase"],
+      "space": ["Cancha", "Sala", "Aula", "Espacio", "Pileta"]
     },
     "programs": [
       { "name": "Fútbol", "group_criterion": "birth_year" },
@@ -1011,7 +1012,8 @@ libre (o es una palabra reservada), `available: false` y `suggestion` con una al
 `201 { "data": { "slug": "club-jakare", "name": "Club Jakare", "type": "club" } }`.
 
 - Paraguay, ₲ y `America/Asuncion`. Crea los roles, los conceptos de cobro y la Caja, y deja al usuario como `admin`.
-- `terminology` es opcional (por defecto, la del tipo); `program` y `guardian` también se pueden mandar.
+- `terminology` es opcional (por defecto, la del tipo); `program`, `guardian` y `space` también se pueden mandar
+  (las claves válidas son las de `Organization::DEFAULT_TERMINOLOGY`; otra clave da `422`).
 - `403` si la cuenta no está verificada ("Verificá tu cuenta para crear un club."). `422` si el slug no está libre,
   es reservado o no tiene solo letras minúsculas, números y guiones (3 a 40 caracteres).
 - Después, `GET me` incluye la organización nueva.
