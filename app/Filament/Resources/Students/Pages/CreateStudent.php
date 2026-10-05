@@ -7,6 +7,7 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\MidPeriod;
 use App\Exceptions\ImportRowException;
 use App\Filament\Resources\Students\StudentResource;
+use App\Filament\Support\Terms;
 use App\Models\Group;
 use App\Models\Season;
 use Filament\Facades\Filament;
@@ -57,6 +58,6 @@ class CreateStudent extends CreateRecord
 
     protected function getCreatedNotificationTitle(): ?string
     {
-        return 'Jugador inscripto.';
+        return Terms::label('student', 'Jugador').' '.Terms::gendered('student', 'Jugador', 'inscripto', 'inscripta').'.';
     }
 }

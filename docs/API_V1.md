@@ -989,7 +989,9 @@ Lo que la app y el panel ofrecen como sugerencia:
       "student": ["Jugador", "Alumno", "Alumna", "Atleta"],
       "instructor": ["Técnico", "Profesor", "Profesora", "Instructor", "Entrenador"],
       "group": ["Categoría", "Grupo", "Nivel", "Clase"],
-      "space": ["Cancha", "Sala", "Aula", "Espacio", "Pileta"]
+      "space": ["Cancha", "Sala", "Aula", "Espacio", "Pileta"],
+      "program": ["Disciplina", "Actividad", "Deporte", "Taller"],
+      "guardian": ["Tutor", "Responsable", "Encargado"]
     },
     "programs": [
       { "name": "Fútbol", "group_criterion": "birth_year" },
@@ -1059,6 +1061,17 @@ Sin ese permiso, los endpoints de esta sección responden `403`.
   menos un técnico (con el rol vigente, invitado o el propio admin; bloqueado sin categorías).
 - `completed`: todos los pasos hechos u omitidos. `next`: el primer paso pendiente (`null` si está completa).
 - `dismissed`: la guía se cerró; no se abre sola, pero sigue la tarjeta del inicio hasta completarla.
+- La descripción de `programs` dice "… que ofrece el club / la academia / la escuela / la comisión" según el tipo.
+- `terminology_suggestion` (vocabulario por deporte, ver `PLAN_VOCABULARIO.md`): `null` o
+  `{ "programs": ["Fútbol"], "current": { "student": "Alumno", "instructor": "Profesor", "group": "Grupo", "space": "Sala" },
+  "suggested": { "student": "Jugador", "instructor": "Técnico", "group": "Categoría", "space": "Cancha" } }`.
+  Cada deporte con lo suyo: de equipo (Fútbol, Futsal, Básquet, Vóley, Handball, Hockey, Rugby) Jugador, Técnico,
+  Categoría y Cancha; Natación Alumno, Profesor, Nivel y Pileta; Tenis y Pádel Alumno, Profesor, Nivel y Cancha (se
+  compara sin tildes y por la primera palabra: "Fútbol 7"). Manda la primera disciplina elegida que tenga propuesta
+  (`programs` la trae). Solo las palabras que siguen como vinieron con el tipo y son distintas, y mientras el
+  vocabulario no esté confirmado. La app la muestra al guardar el paso 1 y, si se cierra sin contestar, la recuerda
+  en la tarjeta de la guía ("Elegí cómo les dicen", también con la guía completa) hasta que responda con
+  `PUT organization/terminology`.
 
 #### `PUT onboarding`
 
@@ -1067,6 +1080,35 @@ Sin ese permiso, los endpoints de esta sección responden `403`.
 #### `PUT onboarding/steps/{key}`
 
 `{ "skipped": true }` → el mismo objeto. `422` si el paso no se puede omitir.
+
+#### `GET onboarding/steps/groups/draft` · `PUT …` · `DELETE …`
+
+Borrador del paso 2 ("Se guarda solo"): lo que se está armando en categorías y horarios, en la API para retomarlo
+desde cualquier dispositivo, en la app o en el panel (el panel lo carga al abrir "Categorías y horarios" y guarda ahí
+cada cambio).
+
+- `GET` → `{ "data": { "draft": null | {...}, "updated_at": "2026-10-04T10:00:00-03:00" } }`.
+- `PUT` `{ "draft": { "program_id": 1, "ages": { "from": 5, "to": 16, "span": 2 }, "levels": ["Inicial"], "capacity": 20,
+  "groups": [ { "name": "Sub-8", "min_age": 7, "max_age": 8, "level": null,
+  "slots": [ { "weekdays": [2, 4], "starts_at": "17:00", "ends_at": "18:30", "venue_id": 11 } ] } ] } }` → el mismo
+  objeto. Se guarda solo lo que el paso entiende (hasta 40 categorías y 10 horarios cada una). La app manda los cambios
+  con una pausa de 800 ms y lo pendiente al salir de la pantalla.
+- `DELETE` → `204` (no hay nada a medio armar).
+- `POST setup/groups` (y el panel al crear) lo da por usado. Nunca se borra: queda como usado (soft delete).
+- Otra clave que `groups` → `404`. Sin `configure_organization` → `403`.
+
+#### `PUT organization/terminology`
+
+"Cómo les dicen" (la propuesta de deporte y "Mi cuenta" → "Cómo les dicen"):
+`{ "terminology": { "group": "Categoría", "instructor": "Técnico", "space": "Cancha" } }` →
+`{ "data": { "terminology": { "program": "Disciplina", "group": "Categoría", "student": "Alumno", "instructor": "Técnico", "guardian": "Tutor", "space": "Cancha" } } }`.
+
+- Claves `program`, `group`, `student`, `instructor`, `guardian`, `space` (en singular, hasta 30 caracteres; se guarda
+  con mayúscula inicial). Las que no se mandan quedan igual; vacía o `null` = la del tipo.
+- `{ "terminology": {} }` = "Dejar como estaba": no cambia nada.
+- Siempre deja el vocabulario confirmado: `terminology_suggestion` no vuelve a aparecer. También se confirma al
+  cambiar el vocabulario en Configuración del panel y al crear la organización con palabras distintas de las del tipo.
+- Después, `GET organization` trae el vocabulario nuevo.
 
 ### Paso 1: disciplinas
 
@@ -1207,17 +1249,23 @@ El estado (aunque esté incompleto) →
 ```json
 {
   "data": {
-    "dates": { "ends_on": "2027-12-31", "name": "2027" },
+    "dates": { "ends_on": "2027-12-31", "name": "Temporada 2027" },
     "plan": { "fee_frequency": "mensual", "due_days": 9,
               "due_days_by_frequency": { "mensual": 9, "quincenal": 3, "semanal": 3, "diaria": 5 } },
     "kinds": [ { "value": "anual", "label": "Anual", "example": "1 ene – 31 dic" } ],
     "summary": "2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota mensual de ₲ 150.000, que vence el día 10 de cada mes. Inscripción ₲ 100.000. Cada cuota se crea al empezar cada mes.",
-    "examples": [ { "period": "enero 2027", "due_on": "10/01/2027", "amount": "₲ 150.000" } ],
+    "examples": [ { "period": "enero 2027", "due_on": "10/01/2027", "due_note": null, "amount": "₲ 150.000" } ],
     "due_example": "Por ejemplo, «Cuota enero 2027» vence el 10/01/2027.",
     "periods_count": 12
   }
 }
 ```
+
+- `examples[].due_note`: con la temporada ya empezada, la cuota del período en curso vence como para quien se inscribe
+  hoy (los mismos días para pagar desde que se inscribe: `max(vencimiento, hoy + due_days)`, la misma regla que las
+  cuotas) y `due_note` dice `"para los que se inscriben hoy"` (ej. inscripto el 03/01 con 9 días: vence el 12/01). Si
+  no cambia, `null`. Con `mid_period: proximo`, el período en curso no cambia.
+- El nombre sugerido de una temporada anual es "Temporada 2027" (la app no le antepone "Temporada" si ya lo dice).
 
 - `dates`: fin y nombre sugeridos para `kind` y `starts_on` (la app los aplica al cambiar la duración o el inicio).
 - `plan`: frecuencia y vencimiento sugeridos para `kind` (la app los aplica al cambiar la duración) y el vencimiento
@@ -1287,7 +1335,8 @@ En `GET setup/instructors`, cada técnico suma `"phone"` (o `null`) y `email` pu
 #### `PUT setup/instructors/me`
 
 `{ "teaches": true, "group_ids": [3, 4] }` → el objeto de `GET setup/instructors`. Asigna (o termina) el rol de técnico
-del usuario actual y sus categorías.
+del usuario actual y sus categorías. Con `teaches: true` hay que elegir al menos una (si hay categorías): `422` "Elegí
+al menos una categoría." (la app y el panel arrancan sin ninguna tildada).
 
 #### `PUT setup/instructors/{user_id}`
 

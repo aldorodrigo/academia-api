@@ -269,7 +269,7 @@ describe('temporada', function () {
             'kind' => 'anual',
             'starts_on' => '2027-01-01',
             'ends_on' => '2027-12-31',
-            'name' => '2027',
+            'name' => 'Temporada 2027',
             'fee_frequency' => 'mensual',
             'due_days' => 9,
             'issue_upfront' => false,
@@ -279,7 +279,7 @@ describe('temporada', function () {
             ->assertOk()
             ->assertJsonPath('data.dates', ['ends_on' => '2027-06-30', 'name' => '1.er semestre 2027'])
             ->assertJsonPath('data.plan.due_days_by_frequency.semanal', 3)
-            ->assertJsonPath('data.examples.0', ['period' => 'enero 2027', 'due_on' => '10/01/2027', 'amount' => '₲ 150.000'])
+            ->assertJsonPath('data.examples.0', ['period' => 'enero 2027', 'due_on' => '10/01/2027', 'due_note' => null, 'amount' => '₲ 150.000'])
             ->assertJsonPath('data.periods_count', 12)
             ->assertJsonPath('data.summary', fn (string $summary) => str_contains($summary, 'Cuota mensual de ₲ 150.000'));
     });

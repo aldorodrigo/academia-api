@@ -2,10 +2,10 @@
 
 namespace App\Filament\Resources\Students\Pages;
 
+use App\Filament\Actions\SpreadsheetImportAction;
 use App\Filament\Imports\StudentImporter;
 use App\Filament\Resources\Students\StudentResource;
 use Filament\Actions\CreateAction;
-use Filament\Actions\ImportAction;
 use Filament\Facades\Filament;
 use Filament\Resources\Pages\ListRecords;
 
@@ -16,7 +16,7 @@ class ListStudents extends ListRecords
     protected function getHeaderActions(): array
     {
         return [
-            ImportAction::make()
+            SpreadsheetImportAction::make()
                 ->label('Importar Excel')
                 ->importer(StudentImporter::class)
                 // El import corre en cola: se le pasa la organización explícitamente.

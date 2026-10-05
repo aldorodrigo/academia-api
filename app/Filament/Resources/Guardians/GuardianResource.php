@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Guardians;
 
 use App\Filament\Resources\Guardians\Pages\ManageGuardians;
 use App\Filament\Resources\Guardians\Tables\GuardiansTable;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\Guardian;
 use App\Support\Phone;
@@ -18,6 +19,9 @@ use UnitEnum;
 
 class GuardianResource extends Resource
 {
+    // "Gastos recurrentes", no "Gastos Recurrentes".
+    use SentenceCaseLabels;
+
     protected static ?string $model = Guardian::class;
 
     protected static ?string $slug = 'tutores';

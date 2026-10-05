@@ -65,7 +65,8 @@ class TariffResource extends Resource
                 ->label(Terms::label('group', 'Categoría'))
                 ->relationship('group', 'name')
                 ->placeholder('Todas')
-                ->helperText('Vacío: vale para todas. Una tarifa de la categoría gana sobre la general.'),
+                ->helperText(fn () => 'Vacío: vale para '.Terms::gendered('group', 'Categoría', 'todos', 'todas').'. Una tarifa '
+                    .Terms::gendered('group', 'Categoría', 'del', 'de la').' '.Terms::singular('group', 'Categoría').' gana sobre la general.'),
             TextInput::make('amount')->label('Monto')->prefix('₲')->numeric()->minValue(1)->required(),
             DatePicker::make('valid_from')
                 ->label('Vigente desde')

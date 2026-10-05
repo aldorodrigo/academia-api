@@ -9,6 +9,7 @@ use App\Filament\Support\Terms;
 use App\Models\Enrollment;
 use App\Models\Group;
 use App\Models\Season;
+use App\Support\Vocabulary;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
@@ -81,8 +82,8 @@ class SeasonTransfer extends Page
             ]),
             Repeater::make('rows')
                 ->label(fn (Get $get) => count($get('rows') ?? []) === 0
-                    ? 'No hay jugadores para pasar en esa temporada.'
-                    : 'Revisá la categoría de cada uno; se sugiere por edad.')
+                    ? 'No hay '.Terms::plural('student', 'Jugador').' para pasar en esa temporada.'
+                    : 'Revisá '.Terms::gendered('group', 'Categoría', 'el', 'la').' '.Terms::singular('group', 'Categoría').' de cada uno; se sugiere por edad.')
                 ->addable(false)
                 ->deletable(false)
                 ->reorderable(false)
@@ -120,7 +121,7 @@ class SeasonTransfer extends Page
                 ->footer([
                     Actions::make([
                         Action::make('transfer')
-                            ->label(fn () => 'Reinscribir '.collect($this->data['rows'] ?? [])->where('include', true)->count().' jugadores')
+                            ->label(fn () => 'Reinscribir '.Vocabulary::count(collect($this->data['rows'] ?? [])->where('include', true)->count(), Terms::singular('student', 'Jugador'), Terms::plural('student', 'Jugador')))
                             ->submit('transfer'),
                     ]),
                 ]),

@@ -2,6 +2,7 @@
 
 namespace App\Support\Onboarding;
 
+use App\Enums\OrganizationType;
 use App\Filament\Support\Terms;
 use App\Models\Group;
 use App\Models\Organization;
@@ -30,7 +31,7 @@ class Checklist
     }
 
     /**
-     * @return array{steps: list<array<string, mixed>>, done: int, total: int, next: ?string, completed: bool, dismissed: bool}
+     * @return array{steps: list<array<string, mixed>>, done: int, total: int, next: ?string, completed: bool, dismissed: bool, terminology_suggestion: ?array<string, mixed>}
      */
     public function toArray(): array
     {
@@ -51,6 +52,8 @@ class Checklist
             'next' => $next['key'] ?? null,
             'completed' => $completed,
             'dismissed' => $this->organization->onboarding_dismissed_at !== null,
+            // Una academia que enseña fútbol: ¿categoría, técnico y cancha?
+            'terminology_suggestion' => VocabularySuggestion::for($this->organization),
         ];
     }
 
@@ -80,7 +83,8 @@ class Checklist
         $definitions = [
             'programs' => [
                 'title' => '¿Qué enseñan?',
-                'description' => ucfirst(Terms::pluralize(mb_strtolower($organization->term('program')))).' que ofrece el club.',
+                'description' => ucfirst(Terms::pluralize(mb_strtolower($organization->term('program'))))
+                    .' que ofrece '.($organization->type ?? OrganizationType::Club)->withArticle().'.',
                 'done' => $programs->isNotEmpty(),
                 'blocked_by' => null,
                 'summary' => $this->list($programs->all()),

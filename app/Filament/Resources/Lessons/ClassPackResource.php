@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Lessons;
 use App\Actions\Lessons\ExtendClassPack;
 use App\Enums\ClassPackStatus;
 use App\Filament\Resources\Lessons\Pages\ListClassPacks;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\ClassPack;
 use App\Support\Money;
 use BackedEnum;
@@ -23,6 +24,8 @@ use UnitEnum;
 class ClassPackResource extends Resource
 {
     use LessonsModule;
+    // "Gastos recurrentes", no "Gastos Recurrentes".
+    use SentenceCaseLabels;
 
     protected static ?string $model = ClassPack::class;
 

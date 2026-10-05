@@ -45,7 +45,7 @@
 
     <table>
         <thead>
-            <tr><th>Jugador</th><th>Concepto</th><th class="amount">Monto</th></tr>
+            <tr><th>{{ $organization->term('student') }}</th><th>Concepto</th><th class="amount">Monto</th></tr>
         </thead>
         <tbody>
             @foreach ($allocations as $allocation)

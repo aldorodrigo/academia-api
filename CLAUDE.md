@@ -138,7 +138,19 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Nueva temporada: asistente `CreateSeason` (`Seasons\Support\SeasonPlanSteps` y `SeasonPlan`: valores por defecto,
   copia, resumen, cuotas de ejemplo, tarifas). "Configurar cobro" y "Cambiar monto": `SeasonActions`.
 - Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
-- Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
+- Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms` (fuera del panel usa la
+  organización activa). Nada de "jugador", "categoría" o "técnico" fijos en textos: van con `Terms` o `term()`.
+- Vocabulario por deporte (`docs/PLAN_VOCABULARIO.md`): `VocabularySuggestion` propone las palabras de la primera
+  disciplina elegida que tenga (`Templates::programTerminology`: fútbol Jugador/Técnico/Categoría/Cancha, natación
+  Nivel/Pileta…) hasta que el vocabulario se confirma (`terminology_confirmed_at`); la guía la recuerda ("Elegí cómo
+  les dicen"). Se cambia con `UpdateTerminology` (app `PUT organization/terminology`, guía del panel) o en
+  Configuración → Vocabulario.
+- Borrador del paso 2 de la guía ("Se guarda solo"): `StepDrafts` / `OnboardingDraft` (soft delete al crear las
+  categorías), `onboarding/steps/groups/draft` en la API y `updatedMountedActions` en el panel
+  (`docs/PLAN_PRIMEROS_PASOS_AJUSTES.md`).
+- Cantidades con su plural: `Vocabulary::count()`; nombres de temporada: `Vocabulary::season()`.
+- Importar Excel: `App\Filament\Actions\SpreadsheetImportAction` (.xlsx y .csv). Textos de Filament en voseo:
+  overrides en `lang/vendor/*/es` (solo las claves que cambian). Marca del panel: "Tuku" (no `APP_NAME`).
 
 ### Finanzas (cargos)
 - `Charge` es inmutable (no se edita ni se borra): se anula con `VoidCharge` (motivo). Estado calculado: `Charge::status()`.

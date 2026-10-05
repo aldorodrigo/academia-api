@@ -18,4 +18,25 @@ enum OrganizationType: string
             self::ParentsAssociation => 'Comisión de padres (ACE)',
         };
     }
+
+    /**
+     * Qué es, para los textos de la guía: "Configurá tu academia".
+     */
+    public function noun(): string
+    {
+        return match ($this) {
+            self::Club => 'club',
+            self::Academy => 'academia',
+            self::School => 'escuela',
+            self::ParentsAssociation => 'comisión',
+        };
+    }
+
+    /**
+     * "el club", "la academia".
+     */
+    public function withArticle(): string
+    {
+        return ($this === self::Club ? 'el ' : 'la ').$this->noun();
+    }
 }

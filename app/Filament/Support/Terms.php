@@ -3,6 +3,7 @@
 namespace App\Filament\Support;
 
 use App\Models\Organization;
+use App\Support\Tenancy\CurrentOrganization;
 use App\Support\Vocabulary;
 use Filament\Facades\Filament;
 
@@ -13,7 +14,8 @@ class Terms
 {
     public static function singular(string $key, string $default): string
     {
-        $tenant = Filament::getTenant();
+        // Fuera del panel (la API arma los mismos textos), la organización activa.
+        $tenant = Filament::getTenant() ?? app(CurrentOrganization::class)->get();
 
         return mb_strtolower($tenant instanceof Organization ? $tenant->term($key) : $default);
     }
