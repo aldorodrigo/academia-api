@@ -13,6 +13,7 @@ use App\Rules\MobilePhone;
 use App\Support\Onboarding\Team;
 use App\Support\Scheduling\ScheduleConflicts;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -69,10 +70,18 @@ class InstructorController extends Controller
 
     public function me(Request $request, CurrentOrganization $current, ManageInstructors $manage): JsonResponse
     {
+        // "Yo también doy clases" pide elegir al menos una (no se dan todas por defecto).
+        $mustChoose = $request->boolean('teaches') && Group::query()->where('is_active', true)->exists();
+        $term = $current->get()->term('group');
+        $group = Vocabulary::gendered($term, 'un', 'una').' '.mb_strtolower($term);
+
         $data = $request->validate([
             'teaches' => ['required', 'boolean'],
-            'group_ids' => ['nullable', 'array'],
+            'group_ids' => [$mustChoose ? 'required' : 'nullable', 'array', $mustChoose ? 'min:1' : 'min:0'],
             'group_ids.*' => ['integer'],
+        ], [
+            'group_ids.required' => "Elegí al menos {$group}.",
+            'group_ids.min' => "Elegí al menos {$group}.",
         ]);
 
         $manage->setTeaching($current->get(), $request->user(), $data['teaches'], $data['group_ids'] ?? []);

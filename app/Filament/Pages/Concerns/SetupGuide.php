@@ -20,6 +20,7 @@ use App\Models\Program;
 use App\Models\Schedule;
 use App\Models\Venue;
 use App\Support\Onboarding\Checklist;
+use App\Support\Onboarding\StepDrafts;
 use App\Support\Onboarding\Team;
 use App\Support\Onboarding\Templates;
 use App\Support\Onboarding\VocabularySuggestion;
@@ -296,6 +297,13 @@ trait SetupGuide
                     'levels' => Templates::levels(),
                 ];
 
+                // Lo que quedó a medio armar (acá o en la app) sigue donde estaba.
+                $saved = StepDrafts::get($this->tenant(), 'groups')['draft'];
+
+                if ($saved !== null && $saved['groups'] !== [] && Program::query()->whereKey($saved['program_id'])->exists()) {
+                    return [...$state, ...array_filter(StepDrafts::toPanelState($saved), fn ($value) => $value !== null)];
+                }
+
                 return [...$state, 'groups' => self::suggestions($state), 'plan' => []];
             })
             ->steps([
@@ -437,6 +445,25 @@ trait SetupGuide
                     default => 'Listo. Ahora, la temporada.',
                 });
             });
+    }
+
+    /**
+     * "Se guarda solo": cada cambio del panel lateral de categorías y horarios va al borrador del paso
+     * (el mismo que la app), así se retoma desde cualquier dispositivo aunque se cierre sin crear.
+     */
+    public function updatedMountedActions(): void
+    {
+        $mounted = $this->mountedActions[0] ?? null;
+
+        if (($mounted['name'] ?? null) !== 'groups' || ! self::canConfigure()) {
+            return;
+        }
+
+        $draft = StepDrafts::fromPanelState($mounted['data'] ?? []);
+
+        $draft === null
+            ? StepDrafts::forget($this->tenant(), 'groups')
+            : StepDrafts::put($this->tenant(), 'groups', $draft);
     }
 
     /**
@@ -584,10 +611,13 @@ trait SetupGuide
             })
             ->schema([
                 Toggle::make('teaches')->label('Doy clases')->live(),
+                // Arranca sin ninguna: elegí las que das (al menos una).
                 CheckboxList::make('group_ids')
-                    ->label('¿Cuáles?')
+                    ->label('¿Cuáles das vos?')
                     ->options(fn () => Group::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
                     ->columns(3)
+                    ->required(fn (Get $get) => (bool) $get('teaches'))
+                    ->validationMessages(['required' => fn () => 'Elegí al menos '.$this->g('group', 'un', 'una').' '.$this->term('group').'.'])
                     ->visible(fn (Get $get) => $get('teaches')),
             ])
             ->action(function (array $data, ManageInstructors $manage) {

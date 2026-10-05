@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\V1\StudentAttendanceController;
 use App\Http\Controllers\Api\V1\StudentController;
 use App\Http\Controllers\Api\V1\TerminologyController;
 use App\Http\Controllers\Api\V1\VenueController;
+use App\Support\Onboarding\StepDrafts;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->name('api.v1.')->group(function () {
@@ -140,6 +141,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
                 Route::get('onboarding', [OnboardingController::class, 'show'])->name('onboarding.show');
                 Route::put('onboarding', [OnboardingController::class, 'update'])->name('onboarding.update');
                 Route::put('onboarding/steps/{key}', [OnboardingController::class, 'skip'])->name('onboarding.skip');
+                // Borrador del paso ("Se guarda solo"): por ahora, categorías y horarios.
+                Route::get('onboarding/steps/{key}/draft', [OnboardingController::class, 'draft'])->whereIn('key', StepDrafts::KEYS)->name('onboarding.draft');
+                Route::put('onboarding/steps/{key}/draft', [OnboardingController::class, 'saveDraft'])->whereIn('key', StepDrafts::KEYS)->middleware('throttle:120,1')->name('onboarding.draft.save');
+                Route::delete('onboarding/steps/{key}/draft', [OnboardingController::class, 'forgetDraft'])->whereIn('key', StepDrafts::KEYS)->name('onboarding.draft.forget');
                 Route::put('organization/terminology', [TerminologyController::class, 'update'])->name('organization.terminology');
 
                 Route::prefix('setup')->name('setup.')->group(function () {

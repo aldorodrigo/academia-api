@@ -145,6 +145,12 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   Nivel/Pileta…) hasta que el vocabulario se confirma (`terminology_confirmed_at`); la guía la recuerda ("Elegí cómo
   les dicen"). Se cambia con `UpdateTerminology` (app `PUT organization/terminology`, guía del panel) o en
   Configuración → Vocabulario.
+- Borrador del paso 2 de la guía ("Se guarda solo"): `StepDrafts` / `OnboardingDraft` (soft delete al crear las
+  categorías), `onboarding/steps/groups/draft` en la API y `updatedMountedActions` en el panel
+  (`docs/PLAN_PRIMEROS_PASOS_AJUSTES.md`).
+- Cantidades con su plural: `Vocabulary::count()`; nombres de temporada: `Vocabulary::season()`.
+- Importar Excel: `App\Filament\Actions\SpreadsheetImportAction` (.xlsx y .csv). Textos de Filament en voseo:
+  overrides en `lang/vendor/*/es` (solo las claves que cambian). Marca del panel: "Tuku" (no `APP_NAME`).
 
 ### Finanzas (cargos)
 - `Charge` es inmutable (no se edita ni se borra): se anula con `VoidCharge` (motivo). Estado calculado: `Charge::status()`.

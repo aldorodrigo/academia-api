@@ -115,7 +115,7 @@ class SeasonController extends Controller
             'unit' => $unit->noun(),
             'issue_now' => ucfirst($unit->createdAtStart()),
             'issue_now_help' => 'La familia ve solo la cuota '.$unit->ofCurrent().'.',
-            'issue_upfront_help' => "La familia ve las {$count} cuotas: la ".$unit->ofCurrent().' para pagar y el resto como próximas.',
+            'issue_upfront_help' => 'La familia ve '.SeasonPlan::allPeriods($count).': la '.$unit->ofCurrent().' para pagar y el resto como próximas.',
             'issue_after' => ucfirst($unit->createdAfter()),
             'basis_after' => 'La cuota se crea '.$unit->createdAfter().'.',
             'midway' => $unit->allowsMidway() ? 'Si alguien se inscribe '.$unit->midway().', se cobra' : null,

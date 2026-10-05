@@ -12,6 +12,7 @@ use App\Filament\Resources\Seasons\Support\SeasonPlanSteps;
 use App\Filament\Support\Terms;
 use App\Models\Enrollment;
 use App\Models\Season;
+use App\Support\Vocabulary;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
 use Filament\Notifications\Notification;
@@ -68,14 +69,16 @@ class CreateSeason extends CreateRecord
         $previous = SeasonTransfer::previousOf($season);
         $players = $previous === null ? 0 : Enrollment::query()->where('season_id', $previous->id)->distinct()->count('student_id');
 
-        $notification = Notification::make()->success()->title("Temporada {$season->name} creada.");
+        $notification = Notification::make()->success()->title(Vocabulary::season($season->name).' creada.');
 
         if ($players === 0) {
             return $notification;
         }
 
         return $notification
-            ->body('¿Pasamos a '.Terms::gendered('student', 'Jugador', 'los', 'las')." {$players} ".Terms::plural('student', 'Jugador')." de {$previous->name} ahora?")
+            ->body($players === 1
+                ? '¿Pasamos '.Terms::gendered('student', 'Jugador', 'al', 'a la').' '.Terms::singular('student', 'Jugador')." de {$previous->name} ahora?"
+                : '¿Pasamos a '.Terms::gendered('student', 'Jugador', 'los', 'las')." {$players} ".Terms::plural('student', 'Jugador')." de {$previous->name} ahora?")
             ->persistent()
             ->actions([
                 Action::make('transfer')

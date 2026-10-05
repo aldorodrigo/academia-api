@@ -8,6 +8,7 @@ use App\Filament\Resources\Groups\Pages\ListGroups;
 use App\Filament\Resources\Groups\RelationManagers\ClassSessionsRelationManager;
 use App\Filament\Resources\Groups\Schemas\GroupForm;
 use App\Filament\Resources\Groups\Tables\GroupsTable;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\Group;
 use BackedEnum;
@@ -19,6 +20,9 @@ use UnitEnum;
 
 class GroupResource extends Resource
 {
+    // "Gastos recurrentes", no "Gastos Recurrentes".
+    use SentenceCaseLabels;
+
     protected static ?string $model = Group::class;
 
     protected static ?string $slug = 'grupos';

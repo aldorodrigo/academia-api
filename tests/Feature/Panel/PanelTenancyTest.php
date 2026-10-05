@@ -61,6 +61,6 @@ it('crear una temporada desde el panel la asigna a la organización activa', fun
         ->call('create')
         ->assertHasNoFormErrors();
 
-    expect(Season::withoutGlobalScopes()->where('name', '2027')->value('organization_id'))
+    expect(Season::withoutGlobalScopes()->where('name', 'Temporada 2027')->value('organization_id'))
         ->toBe($this->jakare->id);
 });

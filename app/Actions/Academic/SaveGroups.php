@@ -3,9 +3,11 @@
 namespace App\Actions\Academic;
 
 use App\Models\Group;
+use App\Models\Organization;
 use App\Models\Program;
 use App\Models\Site;
 use App\Models\Venue;
+use App\Support\Onboarding\StepDrafts;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -32,7 +34,7 @@ class SaveGroups
             }
         }
 
-        return DB::transaction(function () use ($program, $groups, $venue) {
+        $created = DB::transaction(function () use ($program, $groups, $venue) {
             $venueId = $this->venueId($venue);
 
             return collect($groups)->map(function (array $data) use ($program, $venueId) {
@@ -51,6 +53,15 @@ class SaveGroups
                 return $group;
             });
         });
+
+        // Lo que estaba a medio armar en la guía ya está creado.
+        $organization = Organization::query()->find($program->organization_id);
+
+        if ($organization !== null) {
+            StepDrafts::forget($organization, 'groups');
+        }
+
+        return $created;
     }
 
     /**

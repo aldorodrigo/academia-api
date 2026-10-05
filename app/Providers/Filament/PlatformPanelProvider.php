@@ -31,7 +31,8 @@ class PlatformPanelProvider extends PanelProvider
             ->id('platform')
             ->path('plataforma')
             ->login()
-            ->brandName(config('app.name').' · Plataforma')
+            ->brandName('Tuku · Plataforma')
+            ->favicon(asset('brand/tuku-favicon.svg'))
             ->colors([
                 'primary' => Color::Indigo,
             ])

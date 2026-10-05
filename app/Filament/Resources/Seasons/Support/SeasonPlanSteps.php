@@ -302,7 +302,7 @@ class SeasonPlanSteps
                             : 'Con las clases a las que vino según la asistencia (unos días después, para que '
                                 .Terms::gendered('instructor', 'Técnico', 'el', 'la').' '.Terms::singular('instructor', 'Técnico').' pueda corregirla).')
                         : 'La familia ve solo la cuota '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().'.',
-                    '1' => 'La familia ve las '.SeasonPlan::periodsCount(self::state($get)).' cuotas: la '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().' en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
+                    '1' => 'La familia ve '.SeasonPlan::allPeriods(SeasonPlan::periodsCount(self::state($get))).': la '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().' en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
                 ])
                 ->formatStateUsing(fn ($state) => filter_var($state, FILTER_VALIDATE_BOOLEAN) ? '1' : '0')
                 ->required(),
@@ -342,7 +342,8 @@ class SeasonPlanSteps
     {
         $rows = SeasonPlan::examples($state)
             ->map(fn (array $row) => '<tr><td style="padding:4px 12px 4px 0">'.e(ucfirst($row['period'])).'</td>'
-                .'<td style="padding:4px 12px 4px 0">'.e($row['due_on']).'</td>'
+                .'<td style="padding:4px 12px 4px 0">'.e($row['due_on'])
+                .($row['due_note'] ? '<br><span style="opacity:.75;font-size:.8em">'.e($row['due_note']).'</span>' : '').'</td>'
                 .'<td style="padding:4px 0;text-align:right">'.e($row['amount']).'</td></tr>')
             ->join('');
 

@@ -1076,6 +1076,22 @@ Sin ese permiso, los endpoints de esta sección responden `403`.
 
 `{ "skipped": true }` → el mismo objeto. `422` si el paso no se puede omitir.
 
+#### `GET onboarding/steps/groups/draft` · `PUT …` · `DELETE …`
+
+Borrador del paso 2 ("Se guarda solo"): lo que se está armando en categorías y horarios, en la API para retomarlo
+desde cualquier dispositivo, en la app o en el panel (el panel lo carga al abrir "Categorías y horarios" y guarda ahí
+cada cambio).
+
+- `GET` → `{ "data": { "draft": null | {...}, "updated_at": "2026-10-04T10:00:00-03:00" } }`.
+- `PUT` `{ "draft": { "program_id": 1, "ages": { "from": 5, "to": 16, "span": 2 }, "levels": ["Inicial"], "capacity": 20,
+  "groups": [ { "name": "Sub-8", "min_age": 7, "max_age": 8, "level": null,
+  "slots": [ { "weekdays": [2, 4], "starts_at": "17:00", "ends_at": "18:30", "venue_id": 11 } ] } ] } }` → el mismo
+  objeto. Se guarda solo lo que el paso entiende (hasta 40 categorías y 10 horarios cada una). La app manda los cambios
+  con una pausa de 800 ms y lo pendiente al salir de la pantalla.
+- `DELETE` → `204` (no hay nada a medio armar).
+- `POST setup/groups` (y el panel al crear) lo da por usado. Nunca se borra: queda como usado (soft delete).
+- Otra clave que `groups` → `404`. Sin `configure_organization` → `403`.
+
 #### `PUT organization/terminology`
 
 "Cómo les dicen" (la propuesta de deporte y "Mi cuenta" → "Cómo les dicen"):
@@ -1228,17 +1244,23 @@ El estado (aunque esté incompleto) →
 ```json
 {
   "data": {
-    "dates": { "ends_on": "2027-12-31", "name": "2027" },
+    "dates": { "ends_on": "2027-12-31", "name": "Temporada 2027" },
     "plan": { "fee_frequency": "mensual", "due_days": 9,
               "due_days_by_frequency": { "mensual": 9, "quincenal": 3, "semanal": 3, "diaria": 5 } },
     "kinds": [ { "value": "anual", "label": "Anual", "example": "1 ene – 31 dic" } ],
     "summary": "2027 de Fútbol, del 01/01/2027 al 31/12/2027. Cuota mensual de ₲ 150.000, que vence el día 10 de cada mes. Inscripción ₲ 100.000. Cada cuota se crea al empezar cada mes.",
-    "examples": [ { "period": "enero 2027", "due_on": "10/01/2027", "amount": "₲ 150.000" } ],
+    "examples": [ { "period": "enero 2027", "due_on": "10/01/2027", "due_note": null, "amount": "₲ 150.000" } ],
     "due_example": "Por ejemplo, «Cuota enero 2027» vence el 10/01/2027.",
     "periods_count": 12
   }
 }
 ```
+
+- `examples[].due_note`: con la temporada ya empezada, la cuota del período en curso vence como para quien se inscribe
+  hoy (los mismos días para pagar desde que se inscribe: `max(vencimiento, hoy + due_days)`, la misma regla que las
+  cuotas) y `due_note` dice `"para los que se inscriben hoy"` (ej. inscripto el 03/01 con 9 días: vence el 12/01). Si
+  no cambia, `null`. Con `mid_period: proximo`, el período en curso no cambia.
+- El nombre sugerido de una temporada anual es "Temporada 2027" (la app no le antepone "Temporada" si ya lo dice).
 
 - `dates`: fin y nombre sugeridos para `kind` y `starts_on` (la app los aplica al cambiar la duración o el inicio).
 - `plan`: frecuencia y vencimiento sugeridos para `kind` (la app los aplica al cambiar la duración) y el vencimiento
@@ -1308,7 +1330,8 @@ En `GET setup/instructors`, cada técnico suma `"phone"` (o `null`) y `email` pu
 #### `PUT setup/instructors/me`
 
 `{ "teaches": true, "group_ids": [3, 4] }` → el objeto de `GET setup/instructors`. Asigna (o termina) el rol de técnico
-del usuario actual y sus categorías.
+del usuario actual y sus categorías. Con `teaches: true` hay que elegir al menos una (si hay categorías): `422` "Elegí
+al menos una categoría." (la app y el panel arrancan sin ninguna tildada).
 
 #### `PUT setup/instructors/{user_id}`
 

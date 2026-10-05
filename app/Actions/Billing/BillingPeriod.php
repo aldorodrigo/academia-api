@@ -29,6 +29,15 @@ final readonly class BillingPeriod
         return $date->startOfDay()->betweenIncluded($this->start, $this->end);
     }
 
+    /**
+     * Vencimiento para quien se inscribe ese día: con el período empezado tiene los mismos días para
+     * pagar desde que se inscribe (`due_days`), nunca antes del vencimiento del período.
+     */
+    public function dueOnFor(CarbonImmutable $enrolledOn, int $dueDays): CarbonImmutable
+    {
+        return $this->contains($enrolledOn) ? $this->dueOn->max($enrolledOn->startOfDay()->addDays($dueDays)) : $this->dueOn;
+    }
+
     public function days(): int
     {
         return (int) $this->start->diffInDays($this->end) + 1;

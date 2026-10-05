@@ -11,6 +11,7 @@ use App\Filament\Resources\Students\RelationManagers\EnrollmentsRelationManager;
 use App\Filament\Resources\Students\RelationManagers\GuardiansRelationManager;
 use App\Filament\Resources\Students\Schemas\StudentForm;
 use App\Filament\Resources\Students\Tables\StudentsTable;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\Student;
 use BackedEnum;
@@ -22,6 +23,9 @@ use UnitEnum;
 
 class StudentResource extends Resource
 {
+    // "Gastos recurrentes", no "Gastos Recurrentes".
+    use SentenceCaseLabels;
+
     protected static ?string $model = Student::class;
 
     protected static ?string $slug = 'alumnos';

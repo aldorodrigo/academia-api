@@ -261,7 +261,7 @@ class IssueSeasonCharges
         $wholeMonth = $daily && ($season->daily_grouping ?? DailyGrouping::Month) === DailyGrouping::Month;
 
         // Quien se inscribe con el período empezado tiene los mismos días para pagar desde que se inscribe.
-        $dueOn = $period->contains($enrolledOn) ? $period->dueOn->max($enrolledOn->addDays($season->due_days)) : $period->dueOn;
+        $dueOn = $period->dueOnFor($enrolledOn, $season->due_days);
 
         return [
             'due_on' => $dueOn->toDateString(),

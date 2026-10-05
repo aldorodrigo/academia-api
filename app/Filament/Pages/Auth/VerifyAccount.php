@@ -7,6 +7,7 @@ use App\Actions\Auth\VerifyCode;
 use App\Models\User;
 use App\Support\Phone;
 use App\Support\Verification\TooManyCodes;
+use App\Support\Vocabulary;
 use DanHarrin\LivewireRateLimiting\Exceptions\TooManyRequestsException;
 use Filament\Actions\Action;
 use Filament\Auth\Pages\EmailVerification\EmailVerificationPrompt;
@@ -147,7 +148,7 @@ class VerifyAccount extends EmailVerificationPrompt
     protected function getRateLimitedNotification(TooManyRequestsException $exception): ?Notification
     {
         return Notification::make()
-            ->title("Esperá {$exception->secondsUntilAvailable} segundos para pedir otro código.")
+            ->title('Esperá '.Vocabulary::count($exception->secondsUntilAvailable, 'segundo', 'segundos').' para pedir otro código.')
             ->danger();
     }
 

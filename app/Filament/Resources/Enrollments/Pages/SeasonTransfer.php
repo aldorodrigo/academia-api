@@ -9,6 +9,7 @@ use App\Filament\Support\Terms;
 use App\Models\Enrollment;
 use App\Models\Group;
 use App\Models\Season;
+use App\Support\Vocabulary;
 use Filament\Actions\Action;
 use Filament\Forms\Components\Hidden;
 use Filament\Forms\Components\Repeater;
@@ -120,7 +121,7 @@ class SeasonTransfer extends Page
                 ->footer([
                     Actions::make([
                         Action::make('transfer')
-                            ->label(fn () => 'Reinscribir '.collect($this->data['rows'] ?? [])->where('include', true)->count().' '.Terms::plural('student', 'Jugador'))
+                            ->label(fn () => 'Reinscribir '.Vocabulary::count(collect($this->data['rows'] ?? [])->where('include', true)->count(), Terms::singular('student', 'Jugador'), Terms::plural('student', 'Jugador')))
                             ->submit('transfer'),
                     ]),
                 ]),
