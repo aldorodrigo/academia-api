@@ -49,7 +49,8 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
         ->middleware('throttle:10,1')
         ->name('auth.password.reset');
 
-    Route::middleware('throttle:10,1')->group(function () {
+    // Límite por invitación y un tope por IP más alto (AppServiceProvider): varias familias en el mismo wifi.
+    Route::middleware('throttle:invitations')->group(function () {
         Route::get('invitations/{token}', [InvitationController::class, 'show'])->name('invitations.show');
         Route::post('invitations/{token}/accept', [InvitationController::class, 'accept'])->name('invitations.accept');
     });

@@ -100,12 +100,12 @@ class InstructorController extends Controller
     {
         $invitation = $this->pendingInvitation($invitation);
 
+        // La misma invitación con un link nuevo (no se suma otra a la lista).
         $token = $create->resend($invitation);
-        $renewed = Invitation::query()->where('token_hash', Invitation::hashToken($token))->firstOrFail();
 
         return response()->json(['data' => [
             'link' => Invitation::urlFor($token),
-            'whatsapp_url' => $renewed->whatsappUrl($token),
+            'whatsapp_url' => $invitation->whatsappUrl($token),
         ]]);
     }
 

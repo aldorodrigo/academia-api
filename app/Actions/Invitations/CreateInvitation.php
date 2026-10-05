@@ -10,14 +10,15 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Support\Phone;
 use App\Support\Tenancy\CurrentOrganization;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 
 /**
- * Crea (o renueva) una invitación a un celular, a un correo o a los dos. Con correo, la envía por email;
- * con celular, quien invita la comparte por WhatsApp (link `wa.me` al número, sin costo). Con los dos,
- * le llega por los dos lados.
+ * Crea (o renueva) una invitación a un celular, a un correo o a los dos; una sola abierta por persona. Con
+ * correo, la envía por email; con celular, quien invita la comparte por WhatsApp (link `wa.me` al número, sin
+ * costo). Con los dos, le llega por los dos lados.
  *
  * Devuelve el token en claro: es la única vez que existe, para mostrar el
  * link y el QR en el panel.
@@ -53,55 +54,82 @@ class CreateInvitation
         }
 
         return $this->current->run($organization, function (Organization $organization) use ($email, $phone, $roles, $invitedBy, $guardian, $name, $groupIds) {
-            // Una sola invitación pendiente por persona: la nueva reemplaza a las anteriores.
-            Invitation::query()
-                ->where(fn ($query) => $query
-                    ->when($phone, fn ($query) => $query->orWhere('phone', $phone))
-                    ->when($email, fn ($query) => $query->orWhere('email', $email)))
-                ->whereNull('accepted_at')
-                ->whereNull('revoked_at')
-                ->each(fn (Invitation $old) => $old->update(['revoked_at' => now()]));
+            // Una sola invitación abierta por persona: se reutiliza la pendiente (o vencida) con los datos nuevos y
+            // un link nuevo, en lugar de sumar otra. Si quedaran otras abiertas, se revocan.
+            $open = $this->openFor($phone, $email)->orderByDesc('id')->get();
 
-            $token = Invitation::newToken();
+            $invitation = $open->shift() ?? new Invitation(['organization_id' => $organization->id]);
+            $this->revoke($open);
 
-            $invitation = Invitation::query()->create([
-                'organization_id' => $organization->id,
+            $invitation->fill([
                 'email' => $email,
                 'phone' => $phone,
                 'name' => filled($name) ? trim($name) : null,
                 'roles' => $roles,
                 'group_ids' => $groupIds === [] ? null : array_values(array_map('intval', $groupIds)),
                 'guardian_id' => $guardian?->id,
-                'token_hash' => Invitation::hashToken($token),
                 'invited_by' => $invitedBy?->id,
-                'expires_at' => now()->addDays(Invitation::VALID_DAYS),
             ]);
 
-            if ($email !== null) {
-                Mail::to($email)->queue(new InvitationMail($invitation, $token));
-            }
-
-            return [$invitation, $token];
+            return [$invitation, $this->issue($invitation)];
         });
     }
 
     /**
-     * Token nuevo y vencimiento renovado para una invitación pendiente o vencida.
+     * Reenviar: la misma invitación (pendiente o vencida) con un token nuevo y el vencimiento renovado. El link
+     * anterior deja de servir (el token solo se guarda hasheado, así que no se puede volver a mostrar).
      */
     public function resend(Invitation $invitation): string
     {
-        [, $token] = $this->handle(
-            $invitation->organization,
-            $invitation->email,
-            $invitation->roles,
-            $invitation->invitedBy,
-            $invitation->guardian,
-            $invitation->name,
-            $invitation->group_ids ?? [],
-            $invitation->phone,
-        );
+        return $this->current->run($invitation->organization, function () use ($invitation) {
+            $this->revoke($this->openFor($invitation->phone, $invitation->email)->whereKeyNot($invitation->id)->get());
+
+            return $this->issue($invitation);
+        });
+    }
+
+    /**
+     * Token nuevo y VALID_DAYS días más; con correo, se la manda por email. Devuelve el token en claro.
+     */
+    private function issue(Invitation $invitation): string
+    {
+        $token = Invitation::newToken();
+
+        $invitation->fill([
+            'token_hash' => Invitation::hashToken($token),
+            'expires_at' => now()->addDays(Invitation::VALID_DAYS),
+        ])->save();
+
+        if (filled($invitation->email)) {
+            Mail::to($invitation->email)->queue(new InvitationMail($invitation, $token));
+        }
 
         return $token;
+    }
+
+    /**
+     * Invitaciones sin aceptar ni revocar (pendientes o vencidas) a ese celular o a ese correo.
+     *
+     * @return Builder<Invitation>
+     */
+    private function openFor(?string $phone, ?string $email): Builder
+    {
+        return Invitation::query()
+            ->where(fn (Builder $query) => $query
+                ->when($phone, fn (Builder $query) => $query->orWhere('phone', $phone))
+                ->when($email, fn (Builder $query) => $query->orWhere('email', $email)))
+            ->whereNull('accepted_at')
+            ->whereNull('revoked_at');
+    }
+
+    /**
+     * @param  iterable<Invitation>  $invitations
+     */
+    private function revoke(iterable $invitations): void
+    {
+        foreach ($invitations as $invitation) {
+            $invitation->update(['revoked_at' => now()]);
+        }
     }
 
     /**

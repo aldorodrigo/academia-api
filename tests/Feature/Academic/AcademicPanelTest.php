@@ -177,6 +177,17 @@ it('los relation managers del alumno muestran inscripciones y tutores', function
 
     Mail::assertQueued(InvitationMail::class, fn ($mail) => $mail->hasTo('ana@test.com'));
     expect($guardian->invitations()->sole()->guardian_id)->toBe($guardian->id);
+
+    // "Reenviar invitación": la misma invitación con un link nuevo, sin sumar otra.
+    $first = $guardian->invitations()->sole();
+    Livewire::test(GuardiansRelationManager::class, ['ownerRecord' => $student, 'pageClass' => EditStudent::class])
+        ->assertTableActionHasLabel('invite', 'Reenviar invitación', $guardian)
+        ->callTableAction('invite', $guardian)
+        ->assertActionMounted('showLink');
+
+    expect($guardian->invitations()->sole())
+        ->id->toBe($first->id)
+        ->token_hash->not->toBe($first->token_hash);
 });
 
 it('un tutor con solo celular se invita por WhatsApp desde la ficha', function () {

@@ -12,13 +12,22 @@ use App\Support\WhatsApp\CloudApiWhatsAppSender;
 use App\Support\WhatsApp\LogWhatsAppSender;
 use App\Support\WhatsApp\MailWhatsAppSender;
 use App\Support\WhatsApp\WhatsAppSender;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Kreait\Firebase\Contract\Messaging;
 
 class AppServiceProvider extends ServiceProvider
 {
+    /** Pedidos por minuto a una misma invitación (verla y aceptarla, con algún error de contraseña). */
+    public const INVITATION_ATTEMPTS = 15;
+
+    /** Pedidos por minuto a invitaciones desde una misma IP. */
+    public const INVITATION_ATTEMPTS_PER_IP = 120;
+
     /**
      * Register any application services.
      */
@@ -49,6 +58,22 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Notification::extend('push', fn ($app) => $app->make(PushChannel::class));
+
+        // Ver y aceptar una invitación: el límite es por invitación, para que varias familias en el mismo wifi
+        // (una reunión de padres) puedan aceptar a la vez; el tope por IP, mucho más alto, frena a quien prueba
+        // links al azar.
+        RateLimiter::for('invitations', function (Request $request): array {
+            $tooMany = fn () => response()->json(['message' => 'Demasiados intentos. Probá de nuevo en unos minutos.'], 429);
+
+            return [
+                Limit::perMinute(self::INVITATION_ATTEMPTS)
+                    ->by('invitation:'.hash('sha256', (string) $request->route('token')))
+                    ->response($tooMany),
+                Limit::perMinute(self::INVITATION_ATTEMPTS_PER_IP)
+                    ->by('invitation-ip:'.$request->ip())
+                    ->response($tooMany),
+            ];
+        });
 
         // El super admin de la plataforma (is_super_admin) tiene acceso total;
         // el admin de la organización, acceso total dentro de la organización activa.
