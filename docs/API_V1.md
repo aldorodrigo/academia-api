@@ -1448,12 +1448,15 @@ revisado → `422`.
 informada o la primera bancaria, la fecha y el monto del comprobante) → el comprobante aprobado. Registra el pago por
 transferencia (referencia y comprobante incluidos) imputado a las cuotas elegidas que sigan pendientes, del
 vencimiento más viejo al más nuevo; lo que sobra queda como saldo a favor. Ya revisado → `422`. Push al tutor:
-"Aprobamos tu pago de ₲ 210.000. Recibo N° 000124.".
+"Aprobamos tu pago de ₲ 210.000. Recibo N° 000124.". Si lo registró alguien del club (`registered_by`), el aviso va a la
+familia y la respuesta suma `notice` (como en `POST collections`: a quién le llega el recibo y WhatsApp para quien no
+tiene la app); si lo informó el tutor, `notice: null`.
 
 #### `POST payment-reports/{id}/reject`
 
 `{ "reason": "El comprobante no se lee." }` (obligatorio) → el comprobante rechazado. Ya revisado → `422`. Push al
-tutor: "No pudimos aprobar tu pago de ₲ 210.000: El comprobante no se lee.".
+tutor: "No pudimos aprobar tu pago de ₲ 210.000: El comprobante no se lee.". Si lo registró alguien del club, el motivo
+le llega a esa persona (no a la familia).
 
 ### Push
 
@@ -2016,6 +2019,8 @@ vigente o próxima) en sus grupos. `search` opcional (nombre, apellido o documen
 - `cash_box`: la caja de quien cobra (`null` si todavía no cobró nunca). `active: false` = caja cerrada.
 - `transfer_accounts`: bancos y billeteras activas del club, para registrar una transferencia (`[{ "id", "name" }]`).
   `approves_transfers`: `true` si quien cobra valida comprobantes (la transferencia queda aprobada al registrarla).
+- `confirmers` *(2026-10-05)*: quiénes aprueban la transferencia si no la aprueba quien la registra
+  (`[{ "id": 2, "name": "Óscar Giménez" }]`, los que validan comprobantes sin quien cobra). La app los nombra.
 - Alumno fuera de su alcance → `404`.
 
 #### `POST collections`
@@ -2039,14 +2044,34 @@ vigente o próxima) en sus grupos. `search` opcional (nombre, apellido o documen
 ```json
 { "data": { "payment": { "…": "pago de GET account" }, "applied": 285000, "credit": 0,
             "cash_box": { "id": 9, "name": "Caja de Juan Pérez", "balance": 585000, "active": true },
-            "message": "Cobrado ₲ 285.000. Recibo N° 000124." } }
+            "message": "Cobrado ₲ 285.000. Recibo N° 000124.",
+            "notice": {
+              "reach": [
+                { "name": "Laura Benítez", "channels": ["app", "push"], "phone": null, "whatsapp_phone": null,
+                  "description": "A Laura Benítez le llega en la app y como notificación en el celular.",
+                  "whatsapp_url": null },
+                { "name": "Carlos Ortiz", "channels": [], "phone": "0981 123 456", "whatsapp_phone": "595981123456",
+                  "description": "Carlos Ortiz no tiene la app: no le llega. Podés mandárselo por WhatsApp.",
+                  "whatsapp_url": "https://wa.me/595981123456?text=…" }
+              ],
+              "message": "Hola, te mandamos el recibo N° 000124 del pago de ₲ 285.000 a Club Jakare: https://…/recibos/124?expires=…&signature=… (el link vale 30 días). ¡Muchas gracias!",
+              "receipt_url": "https://…/recibos/124?expires=…&signature=…"
+            } } }
 ```
 
 - Pago en **efectivo**, fecha de hoy, en la caja de quien cobra (se crea con el primer cobro). Se imputa a las cuotas
   elegidas que sigan pendientes, en orden de vencimiento y con pronto pago; lo que sobra (`credit`) queda a favor de la
   familia. `applied`: lo imputado a cuotas.
-- Caja cerrada → `422` "Tu caja está cerrada. Hablá con el tesorero.". Sin permiso → `403`.
-- Avisa a la familia (push y correo): "Recibimos tu pago de ₲ 285.000 en efectivo (cobró Juan Pérez). Recibo N° 000124.".
+- Caja cerrada → `422` "Tu caja está cerrada. Hablá con quien maneja las cuentas del club." (con la palabra de la
+  organización). Sin permiso → `403`.
+- Avisa a la familia: "Recibimos tu pago de ₲ 285.000 en efectivo (cobró Juan Pérez). Recibo N° 000124." (a cada tutor
+  con cuenta y al alumno adulto con cuenta: en "Avisos", push si tiene la app instalada y correo si tiene uno).
+- `notice` *(2026-10-05)*: a quién le llega el recibo y por dónde, **de verdad** (como `notice.reach` de la baja):
+  cada tutor de la familia y cada alumno adulto con cuenta. `channels`: `app` (tiene cuenta), `push`, `mail`; vacío =
+  no tiene la app y **no le llega**. `description`: el texto para mostrar. Sin cuenta y con celular, `whatsapp_phone`
+  y `whatsapp_url` (`wa.me` con `message` ya escrito) para mandarle el recibo a mano. `receipt_url` y el link de
+  `message` son un link firmado al PDF que **vale 30 días** (el `receipt_url` del pago dura 30 minutos, como siempre).
+  La app no promete "le avisamos": muestra `description` de cada uno y "Mandar recibo por WhatsApp a …".
 
 #### `POST collections/transfers` (multipart)
 
@@ -2069,12 +2094,15 @@ La transferencia que la familia le mandó a quien cobra (captura de WhatsApp). E
 
 ```json
 { "data": { "…": "comprobante", "status": "aprobado", "receipt_number": "000125", "registered_by": "Laura Gómez" },
+  "notice": { "…": "como en POST collections" },
   "message": "Transferencia registrada. Recibo N° 000125." }
 ```
 
-- Si quien la registra valida comprobantes (`approves_transfers`), queda **aprobada** con el pago y su recibo; si no,
-  **pendiente** ("Transferencia registrada. Queda en revisión hasta que la apruebe el tesorero.") y avisa a quienes
-  validan: "Juan Pérez registró una transferencia de ₲ 300.000 (Familia Benítez).".
+- Si quien la registra valida comprobantes (`approves_transfers`), queda **aprobada** con el pago y su recibo, y
+  `notice` dice a quién le llega el recibo (igual que en `POST collections`); si no, **pendiente** (`notice: null`;
+  "Transferencia registrada. Queda en revisión hasta que Óscar Giménez la apruebe.", "…hasta que Óscar Giménez o Ana
+  Duarte la aprueben" o, con más, "…hasta que alguien del club la apruebe") y avisa a quienes validan: "Juan Pérez
+  registró una transferencia de ₲ 300.000 (Familia Benítez).".
 - Una cuota que ya está en otro comprobante en revisión → `422` "Ya hay una transferencia en revisión para «…».".
   Cuenta que no es banco o billetera del club → `422`.
 
@@ -2092,11 +2120,16 @@ La transferencia que la familia le mandó a quien cobra (captura de WhatsApp). E
         "amount": 285000, "kind": "cobro", "receipt_url": "https://…/recibos/124?expires=…&signature=…" }
     ],
     "deposits": [ { "…": "depósito" } ],
-    "deposit_accounts": [{ "id": 1, "name": "Caja", "type": "caja" }, { "id": 2, "name": "Banco Itaú", "type": "banco" }]
+    "deposit_accounts": [{ "id": 1, "name": "Caja", "type": "caja" }, { "id": 2, "name": "Banco Itaú", "type": "banco" }],
+    "confirmers": [{ "id": 2, "name": "Óscar Giménez" }]
   }
 }
 ```
 
+- `confirmers` *(2026-10-05)*: quiénes confirman los depósitos (los que validan comprobantes: tesorero, protesorero,
+  admin o quien tenga el permiso), **sin quien deposita**. La app los nombra: uno → "La plata sigue en tu caja hasta que
+  Óscar Giménez confirme que llegó"; dos → "…hasta que Óscar Giménez o Ana Duarte lo confirmen"; más (o ninguno) →
+  "…hasta que alguien de la academia lo confirme" (con la palabra de la organización).
 - Sin caja todavía: `id` y `name` `null`, `active` `true`, todo en 0 y listas vacías (salvo `deposit_accounts`).
 - `available` = `balance` − `pending_deposits` (lo que puede depositar).
 - `movements`: los últimos 50, del más nuevo al más viejo. `kind`: `cobro`, `deposito`, `anulacion` u `otro`;
@@ -2163,7 +2196,9 @@ revisado → `422`. Avisa al técnico: "No confirmamos tu depósito de ₲ 300.0
 Por persona: quien **cobra directo** no tiene caja propia ni deposita; el efectivo entra en la Caja del club (o en otra
 cuenta del club que elija). Por defecto solo quien creó la organización (`PLAN_COBRO_EFECTIVO.md` §9).
 
-- `GET organization`: `membership.collects_to_org_cash` (`true`/`false`).
+- `GET organization`: `membership.collects_to_org_cash` (`true`/`false`) y `membership.cash_box_balance` *(entero,
+  2026-10-05)*: lo que tiene en su caja personal, con los depósitos por confirmar (0 sin caja). Quien cobra directo y
+  tiene la caja en 0 no ve "Mi caja" en el inicio; si le quedó plata de antes, la ve hasta dejarla en cero.
 - `GET collections/students/{id}` suma `collects_to_org_cash`, `collect_accounts` (`[{ "id", "name", "type" }]`, cuentas
   activas del club sin titular; vacío si no cobra directo) y `default_collect_account_id` (la Caja del club).
 - `POST collections` acepta `money_account_id` (opcional, solo si cobra directo: una de `collect_accounts`; sin elegir,

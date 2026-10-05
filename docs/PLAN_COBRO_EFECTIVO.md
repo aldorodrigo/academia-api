@@ -104,7 +104,8 @@ notificación y una cuenta para él."
   recibo: "Cobrado ₲ 150.000 · Recibo N° 000124" con "Ver recibo"; si sobra, "Quedan ₲ 20.000 a favor de la familia".
 - En la misma pantalla, **Efectivo / Transferencia**: con "Transferencia" se adjunta la captura o el PDF (como
   "Informar transferencia" del tutor), fecha, cuenta del club y N° de operación; el botón dice "Registrar
-  transferencia" y el texto avisa si queda aprobada con recibo o en revisión del tesorero.
+  transferencia" y el texto avisa si queda aprobada con recibo o en revisión de quién (`confirmers`: "…hasta que Óscar
+  Giménez la apruebe").
 - **"Mi caja"** (`/mi-caja`, botón del inicio con `collect_payments`): "En tu poder: ₲ 585.000", depósitos por
   confirmar, movimientos (cobros, depósitos, anulaciones) y **"Depositar"**: monto (por defecto todo lo disponible),
   dónde (cuentas del club), fecha y N° de boleta opcional.
@@ -137,7 +138,7 @@ notificación y una cuenta para él."
 - **Técnico que se va con plata:** al desactivar su membresía no entra más a la app, pero su caja sigue con el saldo y
   el nombre (se ve en Cuentas y en "Efectivo" como "ya no está en el club"). Cuando devuelve la plata, una transferencia
   a la Caja; si no la devuelve, un gasto desde su caja ("Faltante de caja"). No se borra nada.
-- **Caja cerrada** (cuenta inactiva): no puede cobrar ("Tu caja está cerrada. Hablá con el tesorero.") pero sí depositar
+- **Caja cerrada** (cuenta inactiva): no puede cobrar ("Tu caja está cerrada. Hablá con quien maneja las cuentas del club.") pero sí depositar
   lo que tiene.
 - **Alumno de otro grupo / de otra organización:** `404` (tenancy y alcance por grupos).
 - **Clases particulares:** `POST teacher/payments` no cambia (sigue entrando en la cuenta del perfil del profesor).
@@ -147,7 +148,7 @@ notificación y una cuenta para él."
 - Cobrar sin conexión, anular desde la app, foto de la boleta de depósito.
 - Arqueo o cierre de caja diario, tope de efectivo en poder y recordatorios de "tenés plata sin depositar".
 - Pagos o comisiones a los técnicos.
-- Mandar el recibo por WhatsApp desde la app (la familia lo recibe por push y correo y lo ve en su estado de cuenta).
+- ~~Mandar el recibo por WhatsApp desde la app~~: se hizo en §10 (solo para quien no tiene la app, con link `wa.me`).
 
 ## 8. Orden de trabajo
 
@@ -186,3 +187,18 @@ persona**.
 - Contrato: `membership.collects_to_org_cash` en `GET organization`; `collects_to_org_cash`, `collect_accounts` y
   `default_collect_account_id` en `GET collections/students/{id}`; `money_account_id` opcional en `POST collections`;
   `collects_to_org_cash` en `GET me/cash-box`; `collectors` en `GET cash-boxes` (`API_V1.md`).
+
+## 10. Decir la verdad sobre el recibo, quién confirma y "Mi caja" *(2026-10-05, hallazgos N8, N10 y N11)*
+
+- **A quién le llega el recibo (N8):** después de cobrar (app y "Registrar pago" del panel, que ahora también le avisa
+  a la familia) y al aprobar una transferencia registrada por alguien del club, no se dice "Le avisamos a la familia":
+  se dice por persona con los canales reales ("A Laura Benítez le llega en la app." / "Carlos Ortiz no tiene la app: no
+  le llega."). A quien no tiene la app y tiene celular: "Mandar recibo por WhatsApp a Carlos Ortiz" (`wa.me` con un
+  mensaje amable y el link al PDF, que vale 30 días: `ReceiptController::shareUrl`). `notice` en `POST collections`,
+  `POST collections/transfers` y `POST payment-reports/{id}/approve` (`ReceiptNotice`); en el panel,
+  `ReceiptNoticeNotification`.
+- **Quién confirma (N10):** `confirmers` en `GET me/cash-box` y `GET collections/students/{id}` (los que validan
+  comprobantes, sin quien deposita o cobra). Uno o dos se nombran; más, "alguien de la academia". Nada de "el tesorero"
+  fijo: puede no haberlo (en Jakare confirma el admin).
+- **"Mi caja" (N11):** `membership.cash_box_balance` en `GET organization`. Quien cobra directo con la caja en ₲ 0 no ve
+  "Mi caja" en el inicio; con plata de antes o depósitos por confirmar, sí, hasta dejarla en cero.

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Billing\CashCollectionAccess;
+use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Treasury\CashDeposits;
 use App\Filament\Support\Terms;
 use App\Http\Controllers\Controller;
@@ -44,6 +45,7 @@ class CashBoxController extends Controller
                 'balance' => 0, 'pending_deposits' => 0, 'available' => 0,
                 'movements' => [], 'deposits' => [], 'deposit_accounts' => $accounts,
                 'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $this->current->get()),
+                'confirmers' => PaymentReportAccess::confirmers($this->current->get(), $user),
             ]]);
         }
 
@@ -64,6 +66,8 @@ class CashBoxController extends Controller
             'deposits' => CashDepositResource::collection($deposits)->toArray($request),
             'deposit_accounts' => $accounts,
             'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $this->current->get()),
+            // Quiénes confirman los depósitos (los que validan comprobantes, sin quien deposita): la app los nombra.
+            'confirmers' => PaymentReportAccess::confirmers($this->current->get(), $user),
         ]]);
     }
 

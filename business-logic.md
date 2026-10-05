@@ -103,12 +103,19 @@ editan en Shield; † = funcionalidad todavía no construida, el alcance del rol
 - Se aplican al crear el rol; `organizations:sync-roles` los completa en los roles base que no tienen **ningún**
   permiso (no pisa lo que cambió el admin).
 - **Quien no es admin solo invita o asigna tutores y técnicos** (no cargos ni administrador).
+- **Borrar roles** *(2026-10-05)*: los roles base (Administrador, Presidente, Vicepresidente, Secretario, Prosecretario,
+  Tesorero, Protesorero, Vocal, Síndico, Técnico, Tutor) **no se borran nunca**. Un rol creado por la organización se
+  borra solo si nadie lo tiene (ni asignado, vigente o por empezar, ni en una invitación pendiente); se archiva (soft
+  delete: queda el historial de quién lo tuvo) y queda registrado quién lo borró con el nombre y los permisos del rol.
+  Sin borrado en masa. El administrador pasa por todo: en Roles dice "Todos" en permisos.
 - **Escritorio del panel:** arriba la guía (hasta completarla), botones a lo principal y tarjetas que se muestran por
   **permiso** (sirven para roles creados a mano): Hoy (clases del día y asistencia), Cobranza del mes (cobrado, falta
   del mes, vencido con días de gracia, vence esta semana), Morosos (5 familias con más deuda, con WhatsApp), Alumnos
   (activos, altas y bajas del mes, cupo por grupo), Caja, Para hacer (cada cosa para quien la puede resolver),
-  Cumpleaños y Balance del mes. **App:** la guía en el inicio y botones según permisos (Mis grupos, Estado de cuenta,
-  Mis reservas, Agenda, Informes).
+  Cumpleaños y Balance del mes. **App:** la guía en el inicio y botones según permisos y con el vocabulario de la
+  organización ("Mis categorías"/"Mis niveles", Cobrar, Mi caja, Estado de cuenta, Mis reservas, Agenda, Comprobantes,
+  Efectivo, "Cargar jugador", Solicitudes, Informes). "Mi caja" no aparece para quien cobra directo a la Caja con su
+  caja en ₲ 0.
 
 ### Asignaciones y mandatos
 - **`role_assignments` es la fuente de verdad** de quién tiene qué rol y desde/hasta cuándo;
@@ -365,11 +372,19 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   app" (técnico, tesorero y protesorero por defecto; el admin siempre) cobra a los alumnos de sus grupos (o a todos, si
   ve todos los alumnos) las cuotas pendientes de toda la familia. Es un pago normal: efectivo, fecha de hoy, imputación,
   pronto pago, saldo a favor y recibo de siempre. La familia recibe un aviso con el recibo.
+- **A quién le llega el recibo** *(2026-10-05)*: al cobrar (app o "Registrar pago" del panel, que también avisa a la
+  familia) y al aprobar una transferencia que registró alguien del club, nunca se promete "le avisamos": se dice la
+  verdad por persona ("A Laura Benítez le llega en la app.", "Carlos Ortiz no tiene la app: no le llega.") con los
+  canales reales (app, push, correo). A quien no tiene la app y tiene celular se le ofrece "Mandar recibo por WhatsApp
+  a …": link `wa.me` con un mensaje amable y el link al PDF del recibo, que vale **30 días** (los demás links al recibo
+  duran 30 minutos). No se usa la API de WhatsApp.
 - **Caja del técnico:** lo cobrado entra en la **caja personal** de quien cobra ("Caja de Juan Pérez", una cuenta del
   club con titular, creada con el primer cobro): es plata del club en su poder. Con la caja cerrada (cuenta inactiva)
   no puede cobrar.
 - **Depósito:** quien cobra informa que dejó la plata en una cuenta del club (Caja, banco o billetera); queda **por
-  confirmar** y la plata sigue en su caja. Quien valida comprobantes lo confirma (transferencia de su caja a esa
+  confirmar** y la plata sigue en su caja hasta que lo confirma alguien que valida comprobantes; la app nombra a quién
+  ("…hasta que Óscar Giménez confirme que llegó", con dos "…o Ana Duarte lo confirmen", con más "…hasta que alguien de
+  la academia lo confirme"), nunca "el tesorero" fijo: puede no haber tesorero. Quien valida comprobantes lo confirma (transferencia de su caja a esa
   cuenta, con la fecha del depósito) o lo rechaza con motivo; en los dos casos se le avisa. No se deposita más de lo
   disponible (saldo menos lo que ya está por confirmar). Anular un pago cobrado así saca la plata de su caja.
 - **Transferencia que la familia le mandó al club** (la captura de WhatsApp): quien cobra en efectivo también la
@@ -383,7 +398,8 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   queda registrado quién y cuándo. Si cobra directo, el efectivo entra en la Caja del club (o en otra cuenta del club
   que elija), sin caja personal ni depósito; si no, a su caja personal como siempre. Cada pago guarda **quién lo
   cobró** (lista de pagos, recibo y movimientos de la Caja). Si pasa a cobrar directo con plata en su caja, esa plata
-  sigue ahí hasta que la deposite.
+  sigue ahí hasta que la deposite. Quien cobra directo no ve "Mi caja" en el inicio de la app mientras su caja esté en
+  ₲ 0; si le quedó plata o depósitos por confirmar, la ve hasta dejarla en cero.
 - Las cajas personales no aparecen al elegir dónde entra un pago (registrar pago, aprobar comprobantes); sí en
   Cuentas, Transferencias y Gastos. Excepción: en "Registrar pago" del panel, quien registra ve **su** caja, que es la
   cuenta por defecto con método Efectivo (el efectivo queda en su poder hasta depositarlo, como en la app); si cobra

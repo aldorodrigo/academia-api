@@ -40,6 +40,7 @@ use App\Notifications\PaymentReportReviewed;
 use App\Support\Money;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
+use Filament\Notifications\Livewire\Notifications;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -247,7 +248,7 @@ describe('cobrar', function () {
 
         MoneyAccount::ensureCashBoxOf($this->coach, $this->jakare)->update(['is_active' => false]);
         collectFrom($this->coach)->assertUnprocessable()
-            ->assertJsonPath('errors.amount.0', 'Tu caja está cerrada. Hablá con el tesorero.');
+            ->assertJsonPath('errors.amount.0', 'Tu caja está cerrada. Hablá con quien maneja las cuentas del club.');
         expect(Payment::query()->count())->toBe(0);
     });
 });
@@ -519,7 +520,7 @@ describe('transferencia que la familia le mandó al club', function () {
             ->assertJsonPath('data.registered_by', 'Juan Pérez')
             ->assertJsonPath('data.proof_name', 'captura-whatsapp.jpg')
             ->assertJsonPath('data.receipt_number', null)
-            ->assertJsonPath('message', 'Transferencia registrada. Queda en revisión hasta que la apruebe el tesorero.');
+            ->assertJsonPath('message', 'Transferencia registrada. Queda en revisión hasta que Laura Gómez la apruebe.');
 
         $report = PaymentReport::query()->sole();
         expect($report->registered_by_staff)->toBeTrue()
@@ -815,5 +816,107 @@ describe('cobra directo a la Caja', function () {
             'money' => fn (int $amount) => Money::pyg($amount),
         ])->render();
         expect($html)->toContain('Cobró: Óscar Benítez');
+    });
+});
+
+describe('a quién le llega el recibo (N8)', function () {
+    beforeEach(function () {
+        // Carlos Ortiz, el otro tutor de la familia: solo tiene celular, sin cuenta.
+        $this->carlos = Guardian::factory()->for($this->jakare)->create([
+            'first_name' => 'Carlos', 'last_name' => 'Ortiz', 'user_id' => null, 'email' => null,
+            'phone' => '0981 123456', 'family_id' => $this->family->id,
+        ]);
+        $this->guardian->update(['first_name' => 'Ana', 'last_name' => 'Benítez']);
+    });
+
+    it('el cobro dice la verdad por tutor y trae el WhatsApp con el link al recibo de 30 días', function () {
+        $response = collectFrom($this->coach)->assertCreated();
+        $reach = collect($response->json('data.notice.reach'))->keyBy('name');
+
+        expect($reach['Ana Benítez']['channels'])->toContain('app')
+            ->and($reach['Ana Benítez']['description'])->toStartWith('A Ana Benítez le llega en la app')
+            ->and($reach['Ana Benítez']['whatsapp_url'])->toBeNull()
+            ->and($reach['Carlos Ortiz']['channels'])->toBe([])
+            ->and($reach['Carlos Ortiz']['description'])->toStartWith('Carlos Ortiz no tiene la app: no le llega.')
+            ->and($reach['Carlos Ortiz']['whatsapp_phone'])->toBe('595981123456');
+
+        $url = $response->json('data.notice.receipt_url');
+        parse_str((string) parse_url($url, PHP_URL_QUERY), $query);
+        expect((int) $query['expires'])->toBe(now()->addDays(30)->getTimestamp())
+            ->and($reach['Carlos Ortiz']['whatsapp_url'])->toStartWith('https://wa.me/595981123456?text=')
+            ->and(rawurldecode($reach['Carlos Ortiz']['whatsapp_url']))->toContain($url)
+            ->and($response->json('data.notice.message'))->toContain('recibo N°', 'el link vale 30 días');
+
+        // El link largo sigue abriendo el recibo a los 29 días; el de siempre dura media hora.
+        $short = ReceiptController::signedUrl(Payment::query()->sole());
+        $this->travel(29)->days();
+        $this->get($url)->assertOk();
+        $this->get($short)->assertForbidden();
+    });
+
+    it('la transferencia aprobada al registrarla también dice a quién le llega', function () {
+        Storage::fake('local');
+
+        cashApi($this->treasurer, 'POST', 'collections/transfers', [
+            'student_id' => $this->mateo->id,
+            'amount' => 150000,
+            'paid_on' => '2026-09-02',
+            'proof' => UploadedFile::fake()->image('captura.jpg'),
+        ])->assertCreated()
+            ->assertJsonPath('notice.reach.1.name', 'Carlos Ortiz')
+            ->assertJsonPath('notice.reach.1.channels', []);
+    });
+
+    it('en el panel, registrar un pago avisa a la familia y dice la verdad con WhatsApp para quien no tiene la app', function () {
+        auth()->shouldUse('web');
+        $this->actingAs($this->treasurer, 'web');
+        filament()->setTenant($this->jakare);
+
+        Livewire::test(ManagePayments::class)->mountAction('register')
+            ->set('mountedActions.0.data.family_id', $this->family->id)
+            ->set('mountedActions.0.data.amount', 150000)
+            ->set('mountedActions.0.data.method', 'transferencia')
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        Notification::assertSentTo($this->tutor, PaymentReceived::class, fn (PaymentReceived $n) => str_contains($n->body, 'por transferencia'));
+
+        $sent = new Notifications;
+        $sent->mount();
+        $notification = $sent->notifications->last();
+        expect($notification->getBody())->toContain('A Ana Benítez le llega en la app', 'Carlos Ortiz no tiene la app: no le llega.')
+            ->and(collect($notification->getActions())->map(fn ($action) => $action->getLabel()))->toContain('Mandar recibo por WhatsApp a Carlos Ortiz');
+    });
+});
+
+describe('quién confirma (N10) y Mi caja (N11)', function () {
+    it('Mi caja trae quiénes confirman los depósitos, sin quien deposita', function () {
+        $admin = memberOf($this->jakare, ['name' => 'Óscar Giménez']);
+        app(RoleAssigner::class)->assign($this->jakare, $admin, OrganizationRole::Admin);
+
+        $names = fn (User $user) => collect(cashApi($user, 'GET', 'me/cash-box')->assertOk()->json('data.confirmers'))->pluck('name')->sort()->values()->all();
+
+        expect($names($this->coach))->toBe(['Laura Gómez', 'Óscar Giménez'])
+            ->and($names($this->treasurer))->toBe(['Óscar Giménez']);
+    });
+
+    it('la transferencia en revisión nombra a quién la aprueba', function () {
+        Storage::fake('local');
+
+        cashApi($this->coach, 'POST', 'collections/transfers', [
+            'student_id' => $this->mateo->id,
+            'amount' => 150000,
+            'paid_on' => '2026-09-02',
+            'proof' => UploadedFile::fake()->image('captura.jpg'),
+        ])->assertCreated()
+            ->assertJsonPath('message', 'Transferencia registrada. Queda en revisión hasta que Laura Gómez la apruebe.');
+    });
+
+    it('GET organization manda el saldo de la caja personal', function () {
+        $balance = fn (User $user) => cashApi($user, 'GET', 'organization')->json('data.membership.cash_box_balance');
+
+        expect($balance($this->coach))->toBe(0);
+        collectFrom($this->coach)->assertCreated();
+        expect($balance($this->coach))->toBe(300000);
     });
 });

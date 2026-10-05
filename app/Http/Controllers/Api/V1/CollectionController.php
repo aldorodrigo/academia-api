@@ -6,6 +6,7 @@ use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\CollectCashPayment;
 use App\Actions\Billing\EarlyPaymentDiscount;
 use App\Actions\Billing\PaymentReportAccess;
+use App\Actions\Billing\ReceiptNotice;
 use App\Actions\Billing\RegisterPayment;
 use App\Actions\Billing\SubmitPaymentReport;
 use App\Enums\ChargeStatus;
@@ -118,6 +119,8 @@ class CollectionController extends Controller
                 'transfer_accounts' => PaymentReportAccess::clubTransferAccounts()
                     ->map(fn (MoneyAccount $account) => ['id' => $account->id, 'name' => $account->name])->values(),
                 'approves_transfers' => PaymentReportAccess::canReview($user, $this->current->get()),
+                // Si no la aprueba al registrarla: quiénes la aprueban (la app los nombra).
+                'confirmers' => PaymentReportAccess::confirmers($this->current->get(), $user),
                 // Cobra directo a la Caja: el efectivo entra en una cuenta del club (por defecto la Caja).
                 ...self::collectTarget($user, $this->current->get()),
             ],
@@ -175,9 +178,12 @@ class CollectionController extends Controller
 
         return response()->json([
             'data' => (new PaymentReportResource($report))->toArray($request),
+            // Aprobada al instante: a quién le llega el recibo (como en el cobro en efectivo).
+            'notice' => $report->payment !== null ? ReceiptNotice::toArray($report->payment) : null,
             'message' => $report->payment !== null
                 ? 'Transferencia registrada. Recibo N° '.$report->payment->receiptLabel().'.'
-                : 'Transferencia registrada. Queda en revisión hasta que la apruebe el tesorero.',
+                : 'Transferencia registrada. Queda en revisión '
+                    .PaymentReportAccess::untilConfirmed(PaymentReportAccess::confirmers($this->current->get(), $user), $this->current->get(), ['la apruebe', 'la aprueben']).'.',
         ], 201);
     }
 
@@ -224,6 +230,8 @@ class CollectionController extends Controller
                 'cash_box' => $payment->moneyAccount->isCashBox() ? $this->box($payment->moneyAccount) : null,
                 'account' => ['id' => $payment->moneyAccount->id, 'name' => $payment->moneyAccount->name],
                 'message' => 'Cobrado '.Money::pyg($payment->amount)->format().". Recibo N° {$payment->receiptLabel()}.",
+                // A quién le llega el recibo y por dónde, de verdad; a quien no, WhatsApp con el link (30 días).
+                'notice' => ReceiptNotice::toArray($payment),
             ],
         ], 201);
     }

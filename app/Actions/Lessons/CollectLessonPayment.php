@@ -36,7 +36,7 @@ class CollectLessonPayment
         $account = $profile->account();
 
         if ($account === null) {
-            throw ValidationException::withMessages(['amount' => 'No hay una cuenta para registrar el cobro. Pedile al tesorero que cree una.']);
+            throw ValidationException::withMessages(['amount' => 'No hay una cuenta para registrar el cobro: hay que crear una en el panel.']);
         }
 
         $family = Family::ensureFor($student);

@@ -97,7 +97,9 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `organization_id` y `data.format = tuku`; `GET me/notifications`, `NotificationInboxController`) salvo que el aviso
   sobreescriba `inInbox()` con `false` (los recordatorios de día de clase `ClassReminder` e `InstructorClassReminder`); los de Filament
   (`format = filament`) no se mezclan. Antes de prometer por dónde llega algo, usá los canales reales
-  (`WithdrawEnrollment::noticeReach()`/`channelsOf()`).
+  (`WithdrawEnrollment::noticeReach()`/`channelsOf()`; el recibo de un pago: `Billing\ReceiptNotice`, con el link de 30 días
+  `ReceiptController::shareUrl()` para mandarlo por `wa.me`; en el panel `Filament\Support\ReceiptNoticeNotification`).
+  Nunca "le avisamos" sin canal real, ni "el tesorero" fijo: nombrá a quién (`PaymentReportAccess::confirmers()`).
 - **Correos con la marca Tuku:** componentes en `resources/views/vendor/mail` (tema `tuku.css`, `mascot`, `buttons`) y
   `vendor/notifications/email.blade.php` en español. Los links de los correos que cambian algo abren una página
   (`site.aviso`) con un botón que hace el `POST`: los antivirus de correo abren los links solos.
@@ -172,7 +174,9 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Textos del panel con mayúscula solo al principio: todo recurso usa `App\Filament\Support\SentenceCaseLabels`
   ("Depósitos de efectivo"); "Roles y permisos" es `App\Filament\Resources\Roles\RoleResource` (extiende el de
   Shield: nombre visible con `OrganizationRole::labelFor()`, sin "Guard") y `App\Support\Roles\ShieldLabels` (permisos y
-  recursos sin Title Case). Fechas: `d/m/Y` y `d/m/Y H:i` por defecto (`AppServiceProvider::configurePanelFormats`), las
+  recursos sin Title Case). Borrar un rol: `App\Actions\Roles\DeleteRole` (solo creados y sin uso; los base nunca, lo
+  frena también `Role::deleting`); `roles` tiene soft delete (migración temprana `2026_09_26_212820`, porque migraciones
+  de datos posteriores usan el modelo). Fechas: `d/m/Y` y `d/m/Y H:i` por defecto (`AppServiceProvider::configurePanelFormats`), las
   que tienen hora en la zona de la organización (las fechas solas y los `TimePicker` no se convierten).
 
 ### Finanzas (cargos)

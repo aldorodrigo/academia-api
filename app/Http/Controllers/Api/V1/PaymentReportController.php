@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Billing\PaymentReportAccess;
+use App\Actions\Billing\ReceiptNotice;
 use App\Actions\Billing\ReviewPaymentReport;
 use App\Actions\Billing\SubmitPaymentReport;
 use App\Filament\Support\Terms;
@@ -122,7 +123,9 @@ class PaymentReportController extends Controller
             isset($data['amount']) ? (int) $data['amount'] : null,
         );
 
-        return new ReviewPaymentReportResource($report->load(['family.students', 'user', 'moneyAccount', 'payment']));
+        // Si la registró alguien del club, a quién le llega el recibo (a quien no, WhatsApp con el link).
+        return (new ReviewPaymentReportResource($report->load(['family.students', 'user', 'moneyAccount', 'payment'])))
+            ->additional(['notice' => $report->registered_by_staff ? ReceiptNotice::toArray($report->payment) : null]);
     }
 
     public function reject(Request $request, int $report, ReviewPaymentReport $review): ReviewPaymentReportResource

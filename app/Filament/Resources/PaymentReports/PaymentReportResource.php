@@ -8,6 +8,7 @@ use App\Enums\MoneyAccountType;
 use App\Enums\PaymentReportStatus;
 use App\Filament\Resources\PaymentReports\Pages\ManagePaymentReports;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\ReceiptNoticeNotification;
 use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Http\Controllers\PaymentProofController;
@@ -167,6 +168,14 @@ class PaymentReportResource extends Resource
                     (int) $data['amount'],
                 );
 
+                // La registró alguien del club (la familia no la informó): el recibo le llega a la familia solo si
+                // tiene la app; se dice la verdad y se ofrece WhatsApp. Si la informó el tutor, le llega en la app.
+                if ($record->registered_by_staff) {
+                    ReceiptNoticeNotification::make($report->payment, "Pago aprobado: recibo N° {$report->payment->receiptLabel()}.")->send();
+
+                    return;
+                }
+
                 Notification::make()
                     ->success()
                     ->title("Pago aprobado: recibo N° {$report->payment->receiptLabel()}.")
@@ -187,7 +196,9 @@ class PaymentReportResource extends Resource
             ->color('danger')
             ->visible(fn (PaymentReport $record) => $record->isPending())
             ->modalHeading('Rechazar comprobante')
-            ->modalDescription(fn (PaymentReport $record) => ucfirst(Terms::thePerson('guardian', 'Tutor', $record->reporterGender())).' recibe el motivo y puede informar el pago de nuevo.')
+            ->modalDescription(fn (PaymentReport $record) => $record->registered_by_staff
+                ? "{$record->user->name} lo registró: recibe el motivo y puede registrarlo de nuevo."
+                : ucfirst(Terms::thePerson('guardian', 'Tutor', $record->reporterGender())).' recibe el motivo y puede informar el pago de nuevo.')
             ->schema([
                 Textarea::make('reason')->label('Motivo')->placeholder('El comprobante no se lee, el monto no coincide…')
                     ->required()->maxLength(500),
@@ -195,7 +206,10 @@ class PaymentReportResource extends Resource
             ->action(function (PaymentReport $record, array $data): void {
                 app(ReviewPaymentReport::class)->reject($record, auth()->user(), $data['reason']);
 
-                Notification::make()->success()->title('Comprobante rechazado. Le avisamos '.Terms::toPerson('guardian', 'Tutor', $record->reporterGender()).'.')->send();
+                // Si la registró alguien del club, el motivo le llega a esa persona, no a la familia.
+                Notification::make()->success()->title('Comprobante rechazado. Le avisamos '.($record->registered_by_staff
+                    ? 'a '.$record->user->name
+                    : Terms::toPerson('guardian', 'Tutor', $record->reporterGender())).'.')->send();
             });
     }
 

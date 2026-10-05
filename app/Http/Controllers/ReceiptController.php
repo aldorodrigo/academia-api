@@ -18,9 +18,20 @@ class ReceiptController extends Controller
 {
     public const VALID_MINUTES = 30;
 
+    /** El link que se manda por WhatsApp a quien no tiene la app (lo abre días después). */
+    public const SHARE_DAYS = 30;
+
     public static function signedUrl(Payment $payment): string
     {
         return URL::temporarySignedRoute('receipts.show', now()->addMinutes(self::VALID_MINUTES), ['payment' => $payment->id]);
+    }
+
+    /**
+     * Link largo (30 días) solo para mandar el recibo por WhatsApp; los demás duran `VALID_MINUTES`.
+     */
+    public static function shareUrl(Payment $payment): string
+    {
+        return URL::temporarySignedRoute('receipts.show', now()->addDays(self::SHARE_DAYS), ['payment' => $payment->id]);
     }
 
     public function __invoke(int $payment): Response

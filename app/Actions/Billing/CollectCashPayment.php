@@ -118,7 +118,7 @@ class CollectCashPayment
 
         $box = MoneyAccount::ensureCashBoxOf($by, $organization);
         if (! $box->is_active) {
-            throw ValidationException::withMessages(['amount' => 'Tu caja está cerrada. Hablá con el tesorero.']);
+            throw ValidationException::withMessages(['amount' => 'Tu caja está cerrada. Hablá con quien maneja las cuentas '.Vocabulary::of($organization->typeNoun()).'.']);
         }
 
         return $box;

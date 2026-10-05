@@ -11,6 +11,7 @@ use App\Enums\Feature;
 use App\Http\Controllers\Controller;
 use App\Http\Middleware\EnsureCanConfigureOrganization;
 use App\Models\LessonProfile;
+use App\Models\MoneyAccount;
 use App\Models\RoleAssignment;
 use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
@@ -56,6 +57,9 @@ class CurrentOrganizationController extends Controller
                     'roles' => $roles,
                     // Lo que cobra en efectivo entra directo a la Caja del club (docs/PLAN_COBRO_EFECTIVO.md §9).
                     'collects_to_org_cash' => CashCollectionAccess::collectsToOrgCash($user, $organization),
+                    // Lo que tiene en su caja personal (con los depósitos por confirmar; 0 sin caja): quien cobra
+                    // directo no ve "Mi caja" mientras esté en cero.
+                    'cash_box_balance' => MoneyAccount::cashBoxOf($user, $organization)?->balance() ?? 0,
                     // Permisos que usa la app para mostrar secciones (ej. informes).
                     'permissions' => collect([
                         'view_reports' => 'View:Reports',

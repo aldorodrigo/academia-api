@@ -3,18 +3,20 @@
 namespace App\Filament\Resources\Payments\Pages;
 
 use App\Actions\Billing\CashCollectionAccess;
+use App\Actions\Billing\CollectCashPayment;
 use App\Actions\Billing\PaymentReportAccess;
 use App\Actions\Billing\RegisterPayment;
 use App\Enums\MoneyAccountType;
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\Payments\PaymentResource;
+use App\Filament\Support\ReceiptNoticeNotification;
 use App\Filament\Support\Terms;
-use App\Http\Controllers\ReceiptController;
 use App\Models\Charge;
 use App\Models\Family;
 use App\Models\Guardian;
 use App\Models\MoneyAccount;
 use App\Models\Payment;
+use App\Notifications\PaymentReceived;
 use App\Support\Money;
 use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
@@ -24,7 +26,6 @@ use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\DatePicker;
 use Filament\Forms\Components\Select;
 use Filament\Forms\Components\TextInput;
-use Filament\Notifications\Notification;
 use Filament\Resources\Pages\ManageRecords;
 use Filament\Schemas\Components\Grid;
 use Filament\Schemas\Components\Text;
@@ -32,6 +33,7 @@ use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Components\Utilities\Set;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Notification;
 
 class ManagePayments extends ManageRecords
 {
@@ -114,16 +116,14 @@ class ManagePayments extends ManageRecords
                     reference: $data['reference'] ?? null,
                 );
 
-                Notification::make()
-                    ->success()
-                    ->title("Pago registrado: recibo N° {$payment->receiptLabel()}.")
-                    ->body($payment->credit() > 0 ? 'Saldo a favor: '.Money::pyg($payment->credit())->format().'.' : null)
-                    ->actions([
-                        Action::make('receipt')->label('Descargar recibo')->button()
-                            ->url(ReceiptController::signedUrl($payment), shouldOpenInNewTab: true),
-                    ])
-                    ->persistent()
-                    ->send();
+                // Como el cobro desde la app: la familia recibe el aviso con el recibo, y acá se ve a quién le llega.
+                Notification::send(CollectCashPayment::familyUsers($family), new PaymentReceived($payment, auth()->user()));
+
+                ReceiptNoticeNotification::make(
+                    $payment,
+                    "Pago registrado: recibo N° {$payment->receiptLabel()}.",
+                    $payment->credit() > 0 ? 'Saldo a favor: '.Money::pyg($payment->credit())->format().'.' : null,
+                )->send();
             });
     }
 
