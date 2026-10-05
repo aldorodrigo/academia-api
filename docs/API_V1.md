@@ -1364,7 +1364,8 @@ de una familia → `422` "Elegí qué cuotas pagás."). Una cuota que ya está e
 
 #### `DELETE payment-reports/{id}`
 
-Retira un comprobante propio en revisión → `204`. Ya revisado → `422`.
+Retira un comprobante propio en revisión → `204` (soft delete: deja de aparecer; quedan el registro y el archivo). Ya
+revisado → `422`.
 
 ### Quien valida (permiso `review_payment_reports` en `GET organization`)
 
@@ -1587,7 +1588,8 @@ La transferencia que la familia le mandó a quien cobra (captura de WhatsApp). E
 
 #### `DELETE me/cash-box/deposits/{id}`
 
-Retira un depósito propio por confirmar → `204`. Ya revisado → `422`.
+Retira un depósito propio por confirmar → `204` (soft delete: deja de aparecer y de contar, el registro queda). Ya
+revisado → `422`.
 
 ### Quien valida (permiso `review_payment_reports`)
 
@@ -1635,3 +1637,7 @@ Con copia por correo. `data`: `{ "type": "payment_received", "route": "/estado-d
   Benítez que registraste. Recibo N° 000125." (`route`: `/cobrar`). Al rechazarlo, el motivo le llega solo a quien lo
   registró.
 - `money_accounts` (quien valida) y `POST payment-reports/{id}/approve` no incluyen las cajas personales.
+- `open` (en cada comprobante): `true` si va arriba en el estado de cuenta: en revisión, o **rechazado mientras alguna
+  de sus cuotas siga pendiente** (un rechazado sin cuotas, pago a cuenta, hasta 30 días después del rechazo). Los
+  aprobados y los rechazados ya resueltos vienen con `open: false`: son historial (`payment_reports` sigue trayendo los
+  últimos 20). Lo decide la API; la app muestra arriba solo los `open` (sin el campo, como antes: los no aprobados).

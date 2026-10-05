@@ -13,7 +13,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Notification;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 
@@ -129,9 +128,8 @@ class SubmitPaymentReport
         try {
             return app(ReviewPaymentReport::class)->approve($report, $staff);
         } catch (ValidationException $exception) {
-            // Sin cuenta donde registrarlo: no queda un comprobante a medias.
+            // Sin cuenta donde registrarlo: no queda un comprobante a medias (soft delete, con el archivo).
             $report->delete();
-            Storage::disk('local')->delete($report->proof_path);
 
             throw $exception;
         }

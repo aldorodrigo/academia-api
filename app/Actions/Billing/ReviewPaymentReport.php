@@ -111,7 +111,7 @@ class ReviewPaymentReport
      */
     private function lockPending(PaymentReport $report): PaymentReport
     {
-        $report = PaymentReport::query()->withoutGlobalScopes()->with(['family', 'user', 'guardian'])->lockForUpdate()->findOrFail($report->id);
+        $report = PaymentReport::query()->withoutGlobalScopes()->whereNull('deleted_at')->with(['family', 'user', 'guardian'])->lockForUpdate()->findOrFail($report->id);
 
         if (! $report->isPending()) {
             throw ValidationException::withMessages(['status' => 'Este comprobante ya fue revisado.']);

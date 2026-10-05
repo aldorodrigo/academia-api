@@ -13,12 +13,15 @@ return new class extends Migration
         Schema::table('payment_reports', function (Blueprint $table) {
             $table->boolean('registered_by_staff')->default(false)->after('user_id');
             $table->foreignId('guardian_id')->nullable()->after('registered_by_staff')->constrained()->nullOnDelete();
+            // Retirar un comprobante en revisión no lo borra (regla del proyecto: siempre soft delete).
+            $table->softDeletes();
         });
     }
 
     public function down(): void
     {
         Schema::table('payment_reports', function (Blueprint $table) {
+            $table->dropSoftDeletes();
             $table->dropConstrainedForeignId('guardian_id');
             $table->dropColumn('registered_by_staff');
         });

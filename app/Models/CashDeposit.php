@@ -9,17 +9,19 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
 
 /**
  * Depósito (rendición) de la plata de una caja personal a una cuenta del club. Queda por
  * confirmar hasta que quien valida lo confirma (se registra la transferencia) o lo rechaza.
+ * Retirarlo es un soft delete: no aparece en listas ni cuenta para lo disponible.
  */
 #[Fillable(['organization_id', 'money_account_id', 'user_id', 'to_account_id', 'amount', 'deposited_on', 'reference', 'notes', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'transfer_id'])]
 class CashDeposit extends Model
 {
-    use BelongsToOrganization, LogsActivity;
+    use BelongsToOrganization, LogsActivity, SoftDeletes;
 
     protected $attributes = ['status' => 'pendiente'];
 

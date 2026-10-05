@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Collection;
 use Spatie\Activitylog\Models\Concerns\LogsActivity;
 use Spatie\Activitylog\Support\LogOptions;
@@ -19,11 +20,12 @@ use Spatie\Activitylog\Support\LogOptions;
  * el pago con su recibo) o lo rechaza con motivo (business-logic.md regla 13).
  * También lo registra el club en nombre de la familia (`registered_by_staff`: la
  * captura que llegó por WhatsApp); ahí `user_id` es quien lo registró.
+ * Retirarlo es un soft delete (queda el registro y el archivo; no aparece en listas).
  */
 #[Fillable(['organization_id', 'family_id', 'user_id', 'registered_by_staff', 'guardian_id', 'money_account_id', 'amount', 'paid_on', 'reference', 'notes', 'charge_ids', 'proof_path', 'proof_name', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'payment_id'])]
 class PaymentReport extends Model
 {
-    use BelongsToOrganization, LogsActivity;
+    use BelongsToOrganization, LogsActivity, SoftDeletes;
 
     protected $attributes = ['status' => 'pendiente', 'charge_ids' => '[]'];
 
@@ -50,6 +52,25 @@ class PaymentReport extends Model
     public function isPending(): bool
     {
         return $this->status === PaymentReportStatus::Pending;
+    }
+
+    /** Días que un rechazado sin cuotas (pago a cuenta) sigue a la vista. */
+    public const REJECTED_VISIBLE_DAYS = 30;
+
+    /**
+     * Se muestra arriba en el estado de cuenta: en revisión, o rechazado mientras alguna de sus cuotas siga
+     * pendiente (sin cuotas, hasta 30 días después del rechazo). Los aprobados y los demás rechazados quedan
+     * como historial.
+     */
+    public function isOpen(): bool
+    {
+        return match ($this->status) {
+            PaymentReportStatus::Pending => true,
+            PaymentReportStatus::Approved => false,
+            PaymentReportStatus::Rejected => ($this->charge_ids ?? []) === []
+                ? $this->reviewed_at === null || $this->reviewed_at->gt(now()->subDays(self::REJECTED_VISIBLE_DAYS))
+                : $this->charges()->contains(fn (Charge $charge) => ! $charge->isVoided() && $charge->pendingAmount() > 0),
+        };
     }
 
     /**

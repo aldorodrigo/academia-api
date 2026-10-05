@@ -14,7 +14,6 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -74,8 +73,8 @@ class PaymentReportController extends Controller
             throw ValidationException::withMessages(['status' => 'Este comprobante ya fue revisado.']);
         }
 
+        // Soft delete: queda el registro y el archivo, y deja de aparecer.
         $report->delete();
-        Storage::disk('local')->delete($report->proof_path);
 
         return response()->noContent();
     }

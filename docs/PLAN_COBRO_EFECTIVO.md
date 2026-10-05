@@ -63,7 +63,19 @@ notificación y una cuenta para él."
 9. **Cajas personales fuera de los selectores** de cuenta donde entra un pago: "Registrar pago" del panel y aprobar
    comprobantes (panel y app). Siguen en Cuentas, Transferencias (el tesorero recibe la plata en mano) y Gastos (un
    faltante de caja se registra como gasto desde la caja del técnico). Las cuentas de clases particulares no cambian.
-10. **Cobrar requiere conexión.** No se encola sin señal (a diferencia de la asistencia): el número de recibo es
+10. **"Registrar pago" del panel** (tercera ronda): con método Efectivo la cuenta por defecto es la **caja personal de
+    quien registra** (la única caja personal que ve; se crea al registrar si no existe), igual que en la app. Con
+    transferencia o billetera, la primera cuenta bancaria o billetera del club. La Caja del club y las demás cuentas del
+    club se siguen pudiendo elegir; la caja de otra persona, no.
+11. **Comprobantes rechazados en el estado de cuenta** (tercera ronda, lo decide la API con `open`): un rechazado se ve
+    arriba mientras alguna de sus cuotas siga pendiente; cuando están todas pagadas (por otro comprobante, en efectivo o
+    como sea) pasa al historial. Sin cuotas, 30 días. En "Informar transferencia" el monto se completa con lo que falta
+    de las cuotas elegidas (mientras no se edite a mano) y avisa si es parcial o si sobra, igual que en Cobrar.
+12. **Soft delete** (regla del proyecto): retirar un depósito por confirmar o un comprobante en revisión (también el
+    que queda a medias si no se pudo aprobar al registrarlo) no borra el registro ni el archivo; deja de aparecer en
+    listas, en lo disponible de la caja y en lo "en revisión". Pagos, transferencias y movimientos ya no se borraban
+    (se anulan).
+13. **Cobrar requiere conexión.** No se encola sin señal (a diferencia de la asistencia): el número de recibo es
    correlativo y lo da la API. Un reintento por mala señal no duplica el cobro (`request_id`, ver §6).
 
 ## 3. Modelo

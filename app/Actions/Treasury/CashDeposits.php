@@ -34,7 +34,9 @@ class CashDeposits
 
     public static function pendingAmount(MoneyAccount $box): int
     {
-        return (int) CashDeposit::query()->withoutGlobalScopes()->where('money_account_id', $box->id)->pending()->sum('amount');
+        // Sin el scope de la organización, pero sin los retirados (soft delete).
+        return (int) CashDeposit::query()->withoutGlobalScopes()->whereNull('deleted_at')
+            ->where('money_account_id', $box->id)->pending()->sum('amount');
     }
 
     public function submit(
@@ -83,7 +85,7 @@ class CashDeposits
     }
 
     /**
-     * Retira un depósito propio por confirmar.
+     * Retira un depósito propio por confirmar (soft delete).
      */
     public function withdraw(CashDeposit $deposit): void
     {
@@ -149,7 +151,7 @@ class CashDeposits
      */
     private function lockPending(CashDeposit $deposit): CashDeposit
     {
-        $deposit = CashDeposit::query()->withoutGlobalScopes()
+        $deposit = CashDeposit::query()->withoutGlobalScopes()->whereNull('deleted_at')
             ->with(['cashBox', 'toAccount', 'user'])
             ->lockForUpdate()
             ->findOrFail($deposit->id);

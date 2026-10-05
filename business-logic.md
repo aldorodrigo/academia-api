@@ -301,7 +301,10 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   registró. Si quien la registra valida comprobantes, queda aprobada al instante con su recibo; si es el técnico, queda
   en revisión. La familia la ve en su estado de cuenta.
 - Las cajas personales no aparecen al elegir dónde entra un pago (registrar pago, aprobar comprobantes); sí en
-  Cuentas, Transferencias y Gastos.
+  Cuentas, Transferencias y Gastos. Excepción: en "Registrar pago" del panel, quien registra ve **su** caja, que es la
+  cuenta por defecto con método Efectivo (el efectivo queda en su poder hasta depositarlo, como en la app).
+- En el estado de cuenta, un comprobante rechazado se ve mientras alguna de sus cuotas siga pendiente (sin cuotas,
+  30 días); después queda como historial.
 
 ## 9. Gastos *(Sprint 4b)*
 

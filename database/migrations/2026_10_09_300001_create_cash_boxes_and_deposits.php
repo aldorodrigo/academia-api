@@ -36,6 +36,8 @@ return new class extends Migration
             $table->text('rejection_reason')->nullable();
             $table->foreignId('transfer_id')->nullable()->constrained()->nullOnDelete();
             $table->timestamps();
+            // Retirar un depósito por confirmar no lo borra (regla del proyecto: siempre soft delete).
+            $table->softDeletes();
 
             $table->index(['organization_id', 'status']);
             $table->index(['money_account_id', 'status']);

@@ -8,6 +8,7 @@ use App\Enums\PaymentMethod;
 use App\Enums\PaymentReportStatus;
 use App\Filament\Resources\CashDeposits\Pages\ManageCashDeposits;
 use App\Filament\Resources\MoneyAccounts\Pages\ListMoneyAccounts;
+use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Models\CashDeposit;
 use App\Models\Charge;
 use App\Models\Enrollment;
@@ -308,6 +309,15 @@ describe('mi caja', function () {
         cashApi($this->treasurer, 'DELETE', "me/cash-box/deposits/{$id}")->assertNotFound();
         cashApi($this->coach, 'DELETE', "me/cash-box/deposits/{$id}")->assertNoContent();
         expect(CashDeposit::query()->count())->toBe(0);
+        $this->assertSoftDeleted('cash_deposits', ['id' => $id]);
+
+        // Retirado no cuenta para lo disponible, no se lista ni se confirma.
+        cashApi($this->coach, 'GET', 'me/cash-box')
+            ->assertJsonPath('data.pending_deposits', 0)
+            ->assertJsonPath('data.available', 300000)
+            ->assertJsonPath('data.deposits', []);
+        cashApi($this->treasurer, 'GET', 'cash-boxes')->assertJsonPath('data.deposits', []);
+        cashApi($this->treasurer, 'POST', "cash-deposits/{$id}/confirm")->assertNotFound();
     });
 
     it('sin cobros no puede depositar', function () {
@@ -576,5 +586,90 @@ describe('transferencia que la familia le mandó al club', function () {
         $box = MoneyAccount::cashBoxOf($this->coach, $this->jakare);
         cashApi($this->treasurer, 'POST', 'payment-reports/'.PaymentReport::query()->sole()->id.'/approve', ['money_account_id' => $box->id])
             ->assertUnprocessable()->assertJsonValidationErrors('money_account_id');
+    });
+});
+
+describe('registrar pago en el panel', function () {
+    beforeEach(function () {
+        MoneyAccount::ensureCashBoxOf($this->coach, $this->jakare);
+        auth()->shouldUse('web');
+        $this->actingAs($this->treasurer, 'web');
+        filament()->setTenant($this->jakare);
+    });
+
+    it('en efectivo va a la caja de quien registra; con transferencia, al banco', function () {
+        $page = Livewire::test(ManagePayments::class)->mountAction('register');
+
+        // Sin caja todavía: "mi caja" (se crea al registrar). La caja de otro (el técnico) no se puede elegir.
+        $page->assertSet('mountedActions.0.data.money_account_id', 'mi-caja')
+            ->set('mountedActions.0.data.family_id', $this->family->id)
+            ->set('mountedActions.0.data.amount', 150000)
+            ->set('mountedActions.0.data.money_account_id', MoneyAccount::cashBoxOf($this->coach, $this->jakare)->id)
+            ->callMountedAction()
+            ->assertHasActionErrors(['money_account_id']);
+        expect(Payment::query()->count())->toBe(0);
+
+        $page->set('mountedActions.0.data.method', 'transferencia')
+            ->assertSet('mountedActions.0.data.money_account_id', $this->bank->id)
+            ->set('mountedActions.0.data.method', 'efectivo')
+            ->assertSet('mountedActions.0.data.money_account_id', 'mi-caja')
+            ->set('mountedActions.0.data.family_id', $this->family->id)
+            ->set('mountedActions.0.data.amount', 150000)
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        $box = MoneyAccount::cashBoxOf($this->treasurer, $this->jakare);
+        expect($box->name)->toBe('Caja de Laura Gómez')
+            ->and(Payment::query()->sole()->money_account_id)->toBe($box->id)
+            ->and($box->balance())->toBe(150000);
+
+        // Con la caja ya creada, es la cuenta por defecto.
+        Livewire::test(ManagePayments::class)->mountAction('register')
+            ->assertSet('mountedActions.0.data.money_account_id', $box->id);
+    });
+
+    it('la Caja del club sigue elegible', function () {
+        Livewire::test(ManagePayments::class)
+            ->mountAction('register')
+            ->set('mountedActions.0.data.family_id', $this->family->id)
+            ->set('mountedActions.0.data.amount', 150000)
+            ->set('mountedActions.0.data.money_account_id', $this->cash->id)
+            ->callMountedAction()
+            ->assertHasNoActionErrors();
+
+        expect(Payment::query()->sole()->money_account_id)->toBe($this->cash->id);
+    });
+});
+
+describe('comprobantes rechazados en el estado de cuenta', function () {
+    function rejectedReport(array $chargeIds, string $reviewedAt = '2026-09-02 10:00:00'): PaymentReport
+    {
+        return PaymentReport::query()->create([
+            'organization_id' => test()->jakare->id, 'family_id' => test()->family->id, 'user_id' => test()->tutor->id,
+            'amount' => 150000, 'paid_on' => '2026-09-01', 'charge_ids' => $chargeIds, 'proof_path' => 'x.jpg', 'proof_name' => 'x.jpg',
+            'status' => PaymentReportStatus::Rejected, 'reviewed_at' => $reviewedAt, 'rejection_reason' => 'No se lee.',
+        ]);
+    }
+
+    it('se ve mientras alguna de sus cuotas siga pendiente; después queda como historial', function () {
+        $report = rejectedReport([cashCharge($this->mateo, '2026-08')->id]);
+
+        cashApi($this->tutor, 'GET', 'account')
+            ->assertJsonPath('data.payment_reports.0.id', $report->id)
+            ->assertJsonPath('data.payment_reports.0.open', true);
+
+        collectFrom($this->coach, ['charge_ids' => [cashCharge($this->mateo, '2026-08')->id], 'amount' => 150000])->assertCreated();
+
+        cashApi($this->tutor, 'GET', 'account')
+            ->assertJsonPath('data.payment_reports.0.id', $report->id)
+            ->assertJsonPath('data.payment_reports.0.open', false);
+    });
+
+    it('un rechazado sin cuotas se ve 30 días', function () {
+        $recent = rejectedReport([], '2026-08-20 10:00:00');
+        $old = rejectedReport([], '2026-07-20 10:00:00');
+
+        expect($recent->fresh()->isOpen())->toBeTrue()
+            ->and($old->fresh()->isOpen())->toBeFalse();
     });
 });
