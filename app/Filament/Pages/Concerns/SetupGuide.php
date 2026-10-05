@@ -6,12 +6,14 @@ use App\Actions\Academic\CreatePrograms;
 use App\Actions\Academic\SaveGroups;
 use App\Actions\Onboarding\ManageInstructors;
 use App\Actions\Organizations\UpdateTerminology;
+use App\Enums\Gender;
 use App\Enums\GroupCriterion;
 use App\Enums\OrganizationType;
 use App\Filament\Actions\ShowInvitationLinkAction;
 use App\Filament\Pages\Dashboard;
 use App\Filament\Resources\Seasons\SeasonResource;
 use App\Filament\Support\ContactField;
+use App\Filament\Support\GenderField;
 use App\Filament\Support\Terms;
 use App\Filament\Support\VenueField;
 use App\Models\Group;
@@ -312,7 +314,7 @@ trait SetupGuide
                     ->label(fn () => ucfirst($this->plural('group')))
                     ->description(fn () => '¿Qué '.$this->plural('group').' tienen?')
                     ->schema([
-                        Text::make(fn () => 'Las familias eligen '.$this->g('group', 'el', 'la').' '.$this->term('group').' al inscribirse. Te sugerimos una lista: cambiá lo que haga falta.'),
+                        Text::make(fn () => 'Las familias eligen '.Terms::the('group', 'group').' al inscribirse. Te sugerimos una lista: cambiá lo que haga falta.'),
                         Select::make('program_id')
                             ->label(fn () => ucfirst($this->term('program')))
                             ->options(fn () => Program::query()->orderBy('name')->pluck('name', 'id'))
@@ -619,7 +621,7 @@ trait SetupGuide
                     ->options(fn () => Group::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
                     ->columns(3)
                     ->required(fn (Get $get) => (bool) $get('teaches'))
-                    ->validationMessages(['required' => fn () => 'Elegí al menos '.$this->g('group', 'un', 'una').' '.$this->term('group').'.'])
+                    ->validationMessages(['required' => fn () => 'Elegí al menos '.Terms::a('group', 'group').'.'])
                     ->visible(fn (Get $get) => $get('teaches')),
             ])
             ->action(function (array $data, ManageInstructors $manage) {
@@ -632,13 +634,14 @@ trait SetupGuide
     public function inviteInstructorAction(): Action
     {
         return Action::make('inviteInstructor')
-            ->label(fn () => 'Invitar a '.$this->g('instructor', 'un', 'una').' '.$this->term('instructor'))
+            ->label(fn () => 'Invitar a '.Terms::a('instructor', 'instructor'))
             ->icon(Heroicon::OutlinedUserPlus)
-            ->modalHeading(fn () => 'Invitar a '.$this->g('instructor', 'un', 'una').' '.$this->term('instructor'))
+            ->modalHeading(fn () => 'Invitar a '.Terms::a('instructor', 'instructor'))
             ->modalDescription('Con el celular, le mandás el link por WhatsApp; con el correo, también le llega por email.')
             ->schema([
                 TextInput::make('name')->label('Nombre y apellido')->required()->maxLength(255),
                 ContactField::make(),
+                GenderField::make(),
                 CheckboxList::make('group_ids')
                     ->label('¿Qué da?')
                     ->options(fn () => Group::query()->where('is_active', true)->orderBy('name')->pluck('name', 'id'))
@@ -646,11 +649,11 @@ trait SetupGuide
             ])
             ->action(function (array $data, ManageInstructors $manage) {
                 $contact = ContactField::split($data['contact']);
-                $result = $manage->invite($this->tenant(), auth()->user(), $data['name'], $contact['email'], $data['group_ids'] ?? [], $contact['phone']);
+                $result = $manage->invite($this->tenant(), auth()->user(), $data['name'], $contact['email'], $data['group_ids'] ?? [], $contact['phone'], Gender::parse($data['gender'] ?? null));
 
                 if ($result['token'] === null) {
                     $this->warnInstructor(ScheduleConflicts::forInstructor($result['user'], $result['user']->instructedGroups()->pluck('groups.id')->all()));
-                    $this->notifyDone('Ya era '.$this->term('instructor').': le asignamos lo que da.');
+                    $this->notifyDone('Ya era '.mb_strtolower($this->tenant()->term('instructor', $result['user']->genderIn($this->tenant()))).': le asignamos lo que da.');
 
                     return;
                 }

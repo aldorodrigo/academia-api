@@ -7,6 +7,7 @@ use App\Enums\OrganizationType;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Support\Organizations\Slug;
+use App\Support\Vocabulary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -43,7 +44,8 @@ class OrganizationController extends Controller
             'terminology' => ['nullable', 'array:'.implode(',', array_keys(Organization::DEFAULT_TERMINOLOGY))],
             'terminology.*' => ['nullable', 'string', 'max:30'],
         ], [
-            'name.required' => 'Ingresá el nombre del club.',
+            // Todavía no existe: el tipo es el que eligió en "Tu club".
+            'name.required' => 'Ingresá el nombre '.Vocabulary::of(OrganizationType::tryFrom((string) $request->input('type'))?->noun() ?? 'club').'.',
             ...Slug::messages(),
         ]);
 

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Enums\EnrollmentRequestStatus;
+use App\Enums\Gender;
 use App\Enums\GuardianRelationship;
 use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
@@ -20,7 +21,7 @@ use Spatie\Activitylog\Support\LogOptions;
  * permiso la confirma (se emiten las cuotas) o la rechaza (sale de la lista). La ficha médica viaja cifrada, no la
  * ve quien confirma y pasa a la ficha del alumno al confirmar.
  */
-#[Fillable(['organization_id', 'user_id', 'first_name', 'last_name', 'document', 'birth_date', 'relationship', 'season_id', 'group_id', 'notes', 'medical', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'student_id', 'enrollment_id', 'student_created', 'previous_enrollment_status', 'guardian_linked'])]
+#[Fillable(['organization_id', 'user_id', 'first_name', 'last_name', 'document', 'birth_date', 'relationship', 'season_id', 'group_id', 'notes', 'medical', 'status', 'reviewed_by', 'reviewed_at', 'rejection_reason', 'student_id', 'enrollment_id', 'student_created', 'previous_enrollment_status', 'guardian_linked', 'gender'])]
 #[Hidden(['medical'])]
 class EnrollmentRequest extends Model
 {
@@ -32,6 +33,7 @@ class EnrollmentRequest extends Model
     {
         return [
             'birth_date' => 'date',
+            'gender' => Gender::class,
             'relationship' => GuardianRelationship::class,
             'medical' => 'encrypted:array',
             'status' => EnrollmentRequestStatus::class,
@@ -130,5 +132,14 @@ class EnrollmentRequest extends Model
     public function reviewedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'reviewed_by');
+    }
+
+    /**
+     * El género de quien pidió la inscripción (para "Le avisamos a la tutora"): el de su cuenta o el del
+     * parentesco que eligió.
+     */
+    public function requesterGender(): ?Gender
+    {
+        return $this->user?->gender ?? $this->relationship?->gender();
     }
 }

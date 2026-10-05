@@ -9,6 +9,12 @@ return [
             'search_prompt' => 'Escribí para buscar…',
         ],
     ],
+    // "Todos :label" no concuerda con "categorías" (ver docs/PLAN_GENERO.md).
+    'summary' => [
+        'subheadings' => [
+            'all' => 'En total (:label)',
+        ],
+    ],
     'empty' => [
         'description' => 'Todavía no hay nada cargado.',
     ],

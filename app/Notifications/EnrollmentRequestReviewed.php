@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Enums\EnrollmentRequestStatus;
 use App\Models\EnrollmentRequest;
 use App\Support\Push\PushMessage;
+use App\Support\Vocabulary;
 
 /**
  * Aviso al tutor: su solicitud se aprobó (ya ve al hijo, sus clases y sus cuotas) o no (con el motivo).
@@ -26,7 +27,8 @@ class EnrollmentRequestReviewed extends PushNotification
 
         [$this->title, $this->body, $this->route] = $this->approved
             ? ['Inscripción aprobada', "Aprobamos la inscripción de {$request->first_name} en {$place}. Ya ves sus clases y sus cuotas en la app.", "/hijos/{$request->student_id}"]
-            : ['Inscripción no aprobada', "El club no aprobó la inscripción de {$request->first_name}: {$request->rejection_reason}", '/hijos'];
+            : ['Inscripción no aprobada', ucfirst(Vocabulary::the($request->organization->typeNoun()))
+                ." no aprobó la inscripción de {$request->first_name}: {$request->rejection_reason}", '/hijos'];
     }
 
     public function toPush(object $notifiable): PushMessage

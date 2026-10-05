@@ -9,6 +9,7 @@ use App\Enums\PaymentReportStatus;
 use App\Filament\Resources\PaymentReports\Pages\ManagePaymentReports;
 use App\Filament\Support\MoneyColumn;
 use App\Filament\Support\SentenceCaseLabels;
+use App\Filament\Support\Terms;
 use App\Http\Controllers\PaymentProofController;
 use App\Http\Controllers\ReceiptController;
 use App\Models\Charge;
@@ -169,7 +170,7 @@ class PaymentReportResource extends Resource
                 Notification::make()
                     ->success()
                     ->title("Pago aprobado: recibo N° {$report->payment->receiptLabel()}.")
-                    ->body('Le avisamos al tutor.')
+                    ->body('Le avisamos '.Terms::toPerson('guardian', 'Tutor', $record->reporterGender()).'.')
                     ->actions([
                         Action::make('receipt')->label('Descargar recibo')->button()
                             ->url(ReceiptController::signedUrl($report->payment), shouldOpenInNewTab: true),
@@ -186,7 +187,7 @@ class PaymentReportResource extends Resource
             ->color('danger')
             ->visible(fn (PaymentReport $record) => $record->isPending())
             ->modalHeading('Rechazar comprobante')
-            ->modalDescription('El tutor recibe el motivo y puede informar el pago de nuevo.')
+            ->modalDescription(fn (PaymentReport $record) => ucfirst(Terms::thePerson('guardian', 'Tutor', $record->reporterGender())).' recibe el motivo y puede informar el pago de nuevo.')
             ->schema([
                 Textarea::make('reason')->label('Motivo')->placeholder('El comprobante no se lee, el monto no coincide…')
                     ->required()->maxLength(500),
@@ -194,7 +195,7 @@ class PaymentReportResource extends Resource
             ->action(function (PaymentReport $record, array $data): void {
                 app(ReviewPaymentReport::class)->reject($record, auth()->user(), $data['reason']);
 
-                Notification::make()->success()->title('Comprobante rechazado. Le avisamos al tutor.')->send();
+                Notification::make()->success()->title('Comprobante rechazado. Le avisamos '.Terms::toPerson('guardian', 'Tutor', $record->reporterGender()).'.')->send();
             });
     }
 

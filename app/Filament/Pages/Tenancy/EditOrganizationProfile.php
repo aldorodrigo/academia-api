@@ -9,6 +9,7 @@ use App\Enums\OrganizationType;
 use App\Filament\Support\Terms;
 use App\Models\Organization;
 use App\Support\Onboarding\Templates;
+use App\Support\Vocabulary;
 use Filament\Facades\Filament;
 use Filament\Forms\Components\CheckboxList;
 use Filament\Forms\Components\Repeater;
@@ -20,6 +21,7 @@ use Filament\Schemas\Components\Fieldset;
 use Filament\Schemas\Components\Section;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Schemas\Schema;
+use Illuminate\Support\Str;
 
 /**
  * Configuración de la organización: datos, vocabulario, cobros, asistencia y módulos.
@@ -60,8 +62,7 @@ class EditOrganizationProfile extends EditTenantProfile
                 ]),
             Section::make('Vocabulario')
                 ->description('¿Cómo les dicen? Las pantallas de la app y del panel usan estas palabras (en singular). '
-                    .'Vacía = la que se usa en '.(($tenant->type ?? OrganizationType::Club) === OrganizationType::Club ? 'un ' : 'una ')
-                    .($tenant->type ?? OrganizationType::Club)->noun().'.')
+                    .'Vacía = la que se usa en '.Vocabulary::a(($tenant->type ?? OrganizationType::Club)->noun()).'.')
                 ->columns(2)
                 ->schema(collect($questions)->map(
                     fn (string $label, string $key) => TextInput::make("terminology.{$key}")
@@ -71,6 +72,17 @@ class EditOrganizationProfile extends EditTenantProfile
                         ->helperText('Ej.: '.collect(Templates::terminologyOptions()[$key] ?? [$typeTerms[$key]])->take(3)->implode(', ').'.')
                         ->maxLength(30),
                 )->values()->all()),
+            Section::make('Para nombrar a una mujer')
+                ->description('Cuando se sabe que es una mujer (su género, o el parentesco de un tutor) la nombramos así: '
+                    .'"Te invitaron como Técnica", "Jugadora" en el recibo. Vacía = la que sale de la palabra de arriba.')
+                ->columns(3)
+                ->collapsed()
+                ->schema(collect(Organization::PERSON_TERMS)->map(
+                    fn (string $key) => TextInput::make("terminology_feminine.{$key}")
+                        ->label(fn (Get $get) => $get("terminology.{$key}") ?: $typeTerms[$key])
+                        ->placeholder(fn (Get $get) => Vocabulary::feminine($get("terminology.{$key}") ?: $typeTerms[$key]))
+                        ->maxLength(30),
+                )->all()),
             Section::make('Cobros')
                 ->description('Vencimiento de las cuotas, orden de los descuentos y mora.')
                 ->columns(2)
@@ -114,11 +126,11 @@ class EditOrganizationProfile extends EditTenantProfile
                 ->schema([
                     TextInput::make('class_reminder_hours')
                         ->label('Aviso de día de clase')
-                        ->helperText('Horas antes de cada clase en que sale el aviso "¿Lo llevás?" a los tutores que lo pidieron. Si cae de noche, sale a las 20:00 del día anterior.')
+                        ->helperText(fn () => 'Horas antes de cada clase en que sale el aviso "¿Lo llevás?" a '.Terms::the('guardian', 'Tutor', plural: true).' que lo pidieron. Si cae de noche, sale a las 20:00 del día anterior.')
                         ->numeric()->integer()->minValue(1)->maxValue(24)->suffix('horas antes')->required(),
                     TextInput::make('instructor_reminder_hours')
-                        ->label(fn () => 'Aviso '.Terms::gendered('instructor', 'Técnico', 'al', 'a la').' '.Terms::singular('instructor', 'Técnico'))
-                        ->helperText(fn () => 'Horas antes de cada clase en que '.Terms::gendered('instructor', 'Técnico', 'el', 'la').' '.Terms::singular('instructor', 'Técnico').' recibe "Hoy tenés clase…" con cuántos van. Cada usuario puede elegir sus propios avisos en la app.')
+                        ->label(fn () => 'Aviso '.Terms::to('instructor', 'Técnico'))
+                        ->helperText(fn () => 'Horas antes de cada clase en que '.Terms::the('instructor', 'Técnico').' recibe "Hoy tenés clase…" con cuántos van. Cada usuario puede elegir sus propios avisos en la app.')
                         ->numeric()->integer()->minValue(1)->maxValue(24)->suffix('horas antes')->required(),
                 ])
                 ->columns(2),
@@ -142,6 +154,7 @@ class EditOrganizationProfile extends EditTenantProfile
         $data['instructor_reminder_hours'] ??= Filament::getTenant()->instructor_reminder_hours ?? 2;
         // Las palabras que usan hoy las pantallas (lo guardado o el valor por defecto).
         $data['terminology'] = array_merge(Organization::DEFAULT_TERMINOLOGY, Filament::getTenant()->terminology ?? []);
+        $data['terminology_feminine'] = Filament::getTenant()->terminology_feminine ?? [];
 
         return $data;
     }
@@ -163,6 +176,13 @@ class EditOrganizationProfile extends EditTenantProfile
         $data['terminology'] = collect(UpdateTerminology::KEYS)
             ->mapWithKeys(fn (string $key) => [$key => filled($data['terminology'][$key] ?? null) ? trim($data['terminology'][$key]) : $typeTerms[$key]])
             ->all();
+
+        // Formas femeninas: solo las que no salen por regla (vacía o igual a la regla = se deriva).
+        $feminine = collect(Organization::PERSON_TERMS)
+            ->mapWithKeys(fn (string $key) => [$key => filled($data['terminology_feminine'][$key] ?? null) ? Str::ucfirst(trim($data['terminology_feminine'][$key])) : null])
+            ->filter(fn (?string $word, string $key) => $word !== null && $word !== Vocabulary::feminine($data['terminology'][$key]))
+            ->all();
+        $data['terminology_feminine'] = $feminine === [] ? null : $feminine;
 
         // Cambió el vocabulario: ya decidió cómo les dicen (no se le proponen las palabras de deporte).
         $this->terminologyChanged = collect(UpdateTerminology::KEYS)

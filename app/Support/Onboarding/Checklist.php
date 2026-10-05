@@ -5,11 +5,14 @@ namespace App\Support\Onboarding;
 use App\Enums\OrganizationType;
 use App\Filament\Support\Terms;
 use App\Models\Group;
+use App\Models\Invitation;
 use App\Models\Organization;
 use App\Models\Program;
 use App\Models\Season;
+use App\Models\User;
 use App\Support\Tenancy\CurrentOrganization;
 use App\Support\Vocabulary;
+use Illuminate\Support\Collection;
 
 /**
  * Guía "Primeros pasos": cada paso está hecho si existe lo que pide (aunque se haya hecho
@@ -92,7 +95,7 @@ class Checklist
             ],
             'groups' => [
                 'title' => ucfirst($group).' y horarios',
-                'description' => 'Las familias eligen '.Vocabulary::gendered($organization->term('group'), 'el', 'la').' '.mb_strtolower($organization->term('group')).' al inscribirse.',
+                'description' => 'Las familias eligen '.Vocabulary::the($organization->term('group')).' al inscribirse.',
                 'done' => $groups > 0,
                 'blocked_by' => $programs->isEmpty() ? 'programs' : null,
                 'summary' => $groups > 0
@@ -114,7 +117,7 @@ class Checklist
                 'description' => Vocabulary::gendered($organization->term('instructor'), 'Invitalos', 'Invitalas').' para que tomen asistencia desde la app.',
                 'done' => $instructors->isNotEmpty() || $invitations->isNotEmpty(),
                 'blocked_by' => $groups === 0 ? 'groups' : null,
-                'summary' => $this->teamSummary($instructors->count(), $invitations->count(), $instructor),
+                'summary' => $this->teamSummary($instructors, $invitations),
                 'minutes' => 2,
             ],
         ];
@@ -152,11 +155,25 @@ class Checklist
         };
     }
 
-    private function teamSummary(int $active, int $invited, string $plural): ?string
+    /**
+     * "2 técnicas y 1 invitado": nombra a las personas según su género (femenino si son todas mujeres).
+     *
+     * @param  Collection<int, User>  $instructors
+     * @param  Collection<int, Invitation>  $invitations
+     */
+    private function teamSummary(Collection $instructors, Collection $invitations): ?string
     {
+        $organization = $this->organization;
+        $active = $instructors->count();
+        $invited = $invitations->count();
+        $activeGender = Vocabulary::groupGender($instructors->map(fn (User $user) => $user->genderIn($organization)));
+        $invitedGender = Vocabulary::groupGender($invitations->map(fn (Invitation $invitation) => $invitation->gender));
+
         $parts = array_filter([
-            $active > 0 ? "{$active} ".($active === 1 ? mb_strtolower($this->organization->term('instructor')) : $plural) : null,
-            $invited > 0 ? "{$invited} ".($invited === 1 ? 'invitado' : 'invitados') : null,
+            $active > 0 ? "{$active} ".mb_strtolower($active === 1
+                ? $organization->term('instructor', $activeGender)
+                : Vocabulary::plural($organization->term('instructor', $activeGender))) : null,
+            $invited > 0 ? "{$invited} ".Vocabulary::agree('invitado', $invitedGender, 'invitado', 'invitada').($invited === 1 ? '' : 's') : null,
         ]);
 
         return $parts === [] ? null : implode(' y ', $parts);

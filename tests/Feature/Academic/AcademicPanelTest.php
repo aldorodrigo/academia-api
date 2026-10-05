@@ -135,7 +135,7 @@ it('el importador procesa la fila en la organización de la opción', function (
 
     StudentImporter::test(options: ['organization_id' => $this->jakare->id], import: $import)
         ->import(['first_name' => 'X', 'last_name' => 'Y', 'birth_date' => '01/01/2015', 'program' => 'Fútbol', 'group' => 'Sub-99'])
-        ->assertHasRowFailure('No existe Categoría "Sub-99" en Fútbol.');
+        ->assertHasRowFailure('No existe la categoría "Sub-99" en Fútbol.');
 });
 
 it('la lista de alumnos muestra la acción de importar', function () {

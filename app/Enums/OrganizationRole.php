@@ -3,6 +3,7 @@
 namespace App\Enums;
 
 use App\Models\Organization;
+use App\Support\Vocabulary;
 use Illuminate\Support\Str;
 
 /**
@@ -30,12 +31,26 @@ enum OrganizationRole: string
      * Etiqueta de cualquier rol: los base según el enum, los creados a mano en
      * Shield a partir de su nombre.
      */
-    public static function labelFor(string $name, ?Organization $organization = null): string
+    public static function labelFor(string $name, ?Organization $organization = null, ?Gender $gender = null): string
     {
-        return self::tryFrom($name)?->label($organization) ?? Str::headline($name);
+        return self::tryFrom($name)?->label($organization, $gender) ?? Str::headline($name);
     }
 
-    public function label(?Organization $organization = null): string
+    /**
+     * Con $gender, como se nombra a esa persona: "Presidenta", "Técnica", "Tutora" (Organization::term).
+     */
+    public function label(?Organization $organization = null, ?Gender $gender = null): string
+    {
+        $organization ??= new Organization;
+
+        return match ($this) {
+            self::Instructor => $organization->term('instructor', $gender),
+            self::Guardian => $organization->term('guardian', $gender),
+            default => Vocabulary::forPerson($this->baseLabel(), $gender),
+        };
+    }
+
+    private function baseLabel(): string
     {
         return match ($this) {
             self::Admin => 'Administrador',
@@ -47,8 +62,8 @@ enum OrganizationRole: string
             self::DeputyTreasurer => 'Protesorero',
             self::Member => 'Vocal',
             self::Auditor => 'Síndico',
-            self::Instructor => $organization?->term('instructor') ?? Organization::DEFAULT_TERMINOLOGY['instructor'],
-            self::Guardian => $organization?->term('guardian') ?? Organization::DEFAULT_TERMINOLOGY['guardian'],
+            self::Instructor => 'Técnico',
+            self::Guardian => 'Tutor',
         };
     }
 

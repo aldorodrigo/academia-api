@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Notifications\CashDepositReported;
 use App\Notifications\CashDepositReviewed;
 use App\Support\Money;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
@@ -49,7 +50,7 @@ class CashDeposits
         ?string $notes = null,
     ): CashDeposit {
         if ($to->isCashBox() || ! $to->is_active || $to->organization_id !== $box->organization_id) {
-            throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta del club.']);
+            throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta '.Vocabulary::of($box->organization->typeNoun()).'.']);
         }
         if ($amount <= 0) {
             throw ValidationException::withMessages(['amount' => 'El monto tiene que ser mayor a cero.']);

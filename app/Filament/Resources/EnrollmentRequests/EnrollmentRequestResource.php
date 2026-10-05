@@ -12,6 +12,7 @@ use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\EnrollmentRequest;
 use App\Models\Group;
+use App\Support\Vocabulary;
 use BackedEnum;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
@@ -121,7 +122,7 @@ class EnrollmentRequestResource extends Resource
         return collect([
             (int) $record->birth_date->diffInYears($record->organization->today()).' años',
             $record->document ? "Doc. {$record->document}" : null,
-            $existing ? 'Ya estaba cargado'.($existing->guardians->isEmpty() ? '' : ' (tutores: '.$existing->guardians->pluck('full_name')->join(', ').')') : null,
+            $existing ? 'Ya estaba cargado'.($existing->guardians->isEmpty() ? '' : ' ('.Terms::plural('guardian', 'tutor').': '.$existing->guardians->pluck('full_name')->join(', ').')') : null,
             $record->medical !== null ? 'Cargó la ficha médica' : null,
             $record->notes,
         ])->filter()->join(' · ');
@@ -143,7 +144,7 @@ class EnrollmentRequestResource extends Resource
             ])
             ->schema(fn (EnrollmentRequest $record) => [
                 Text::make("{$record->fullName()} ya va a clases. Al confirmar se emiten sus cuotas según el plan de la temporada {$record->season->name}"
-                    .($record->preexistingStudent() ? ' y se le suma este tutor.' : '.')),
+                    .($record->preexistingStudent() ? ' y se le suma '.Vocabulary::agree('tutor', $record->requesterGender(), 'este', 'esta').' '.Terms::person('guardian', 'Tutor', $record->requesterGender()).'.' : '.')),
                 Select::make('group_id')->label(Terms::label('group', 'Categoría'))
                     ->options(fn () => collect(self::groupOptions($record))->mapWithKeys(fn (array $group) => [$group['id'] => self::groupLabel($group)]))
                     ->required()
@@ -169,7 +170,7 @@ class EnrollmentRequestResource extends Resource
                 Notification::make()
                     ->success()
                     ->title("Inscripción confirmada: {$request->fullName()} en {$request->group->name}.")
-                    ->body('Le avisamos al tutor.')
+                    ->body('Le avisamos '.Terms::toPerson('guardian', 'Tutor', $record->requesterGender()).'.')
                     ->actions([
                         Action::make('student')->label('Ver ficha')->button()
                             ->url(StudentResource::getUrl('edit', ['record' => $request->student_id])),
@@ -186,7 +187,7 @@ class EnrollmentRequestResource extends Resource
             ->color('danger')
             ->visible(fn (EnrollmentRequest $record) => $record->isPending())
             ->modalHeading('Rechazar solicitud')
-            ->modalDescription('Sale de la lista de la categoría. El tutor recibe el motivo y puede mandarla de nuevo.')
+            ->modalDescription(fn (EnrollmentRequest $record) => 'Sale de la lista '.Terms::of('group', 'Categoría').'. '.ucfirst(Terms::thePerson('guardian', 'Tutor', $record->requesterGender())).' recibe el motivo y puede mandarla de nuevo.')
             ->schema([
                 Textarea::make('reason')->label('Motivo')->placeholder('No hay lugar este año, falta un dato…')
                     ->required()->maxLength(500),
@@ -194,7 +195,7 @@ class EnrollmentRequestResource extends Resource
             ->action(function (EnrollmentRequest $record, array $data): void {
                 app(ReviewEnrollmentRequest::class)->reject($record, auth()->user(), $data['reason']);
 
-                Notification::make()->success()->title('Solicitud rechazada. Le avisamos al tutor.')->send();
+                Notification::make()->success()->title('Solicitud rechazada. Le avisamos '.Terms::toPerson('guardian', 'Tutor', $record->requesterGender()).'.')->send();
             });
     }
 

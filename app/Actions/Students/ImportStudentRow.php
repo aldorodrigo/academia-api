@@ -3,6 +3,7 @@
 namespace App\Actions\Students;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\Gender;
 use App\Exceptions\ImportRowException;
 use App\Models\Group;
 use App\Models\Organization;
@@ -11,6 +12,7 @@ use App\Models\Season;
 use App\Models\Student;
 use App\Models\User;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use DateTimeInterface;
 use Throwable;
@@ -30,7 +32,7 @@ class ImportStudentRow
     ) {}
 
     /**
-     * @param  array{first_name: ?string, last_name: ?string, document?: ?string, birth_date: mixed, shirt_size?: ?string, position?: ?string, program?: ?string, group?: ?string, season?: ?string, status?: ?string, guardians?: list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string}>}  $row
+     * @param  array{first_name: ?string, last_name: ?string, document?: ?string, birth_date: mixed, gender?: ?string, shirt_size?: ?string, position?: ?string, program?: ?string, group?: ?string, season?: ?string, status?: ?string, guardians?: list<array{first_name?: ?string, last_name?: ?string, document?: ?string, email?: ?string, phone?: ?string, relationship?: ?string}>}  $row
      */
     public function handle(Organization $organization, array $row, bool $invite = false, ?User $invitedBy = null): Student
     {
@@ -58,6 +60,8 @@ class ImportStudentRow
                     'last_name' => $row['last_name'],
                     'document' => $row['document'] ?? null,
                     'birth_date' => $birthDate,
+                    // Columna opcional `genero` (F / M, femenino / masculino); vacía o desconocida = sin especificar.
+                    'gender' => Gender::parse($row['gender'] ?? null),
                     'shirt_size' => $row['shirt_size'] ?? null,
                     'position' => $row['position'] ?? null,
                 ],
@@ -77,7 +81,7 @@ class ImportStudentRow
         }
 
         return Program::query()->where('name', $name)->first()
-            ?? throw new ImportRowException("No existe {$organization->term('program')} \"{$name}\".");
+            ?? throw new ImportRowException('No existe '.Vocabulary::the($organization->term('program'))." \"{$name}\".");
     }
 
     /**
@@ -109,13 +113,14 @@ class ImportStudentRow
     {
         if ($groupName === null) {
             return Group::suggestFor($birthDate, $season, $programName)
-                ?? throw new ImportRowException("Falta {$organization->term('group')} y no hay una que corresponda por edad.");
+                ?? throw new ImportRowException('Falta '.Vocabulary::the($organization->term('group')).' y no hay '
+                    .Vocabulary::gendered($organization->term('group'), 'uno', 'una').' que corresponda por edad.');
         }
 
         $programs = Program::query()->when($programName, fn ($query) => $query->where('name', $programName))->get();
 
         if ($programName !== null && $programs->isEmpty()) {
-            throw new ImportRowException("No existe {$organization->term('program')} \"{$programName}\".");
+            throw new ImportRowException('No existe '.Vocabulary::the($organization->term('program'))." \"{$programName}\".");
         }
 
         $groups = Group::query()->whereIn('program_id', $programs->modelKeys())->where('name', $groupName)->get();
@@ -123,9 +128,10 @@ class ImportStudentRow
         return match ($groups->count()) {
             1 => $groups->first(),
             0 => throw new ImportRowException($programName !== null
-                ? "No existe {$organization->term('group')} \"{$groupName}\" en {$programs->first()->name}."
-                : "No existe {$organization->term('group')} \"{$groupName}\"."),
-            default => throw new ImportRowException("Hay varias {$organization->term('group')} \"{$groupName}\": indicá {$organization->term('program')}."),
+                ? 'No existe '.Vocabulary::the($organization->term('group'))." \"{$groupName}\" en {$programs->first()->name}."
+                : 'No existe '.Vocabulary::the($organization->term('group'))." \"{$groupName}\"."),
+            default => throw new ImportRowException('Hay '.Vocabulary::gendered($organization->term('group'), 'varios', 'varias')
+                .' '.mb_strtolower(Vocabulary::plural($organization->term('group')))." \"{$groupName}\": indicá ".Vocabulary::the($organization->term('program')).'.'),
         };
     }
 

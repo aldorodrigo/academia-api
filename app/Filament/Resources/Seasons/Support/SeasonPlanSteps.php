@@ -178,7 +178,7 @@ class SeasonPlanSteps
                         ->label('¿Qué días se cuentan?')
                         ->options(DailyBasis::class)
                         ->descriptions(fn (Get $get) => [
-                            DailyBasis::Training->value => 'Los días con horario '.Terms::gendered('group', 'Categoría', 'del', 'de la').' '.Terms::singular('group', 'Categoría').'.',
+                            DailyBasis::Training->value => 'Los días con horario '.Terms::of('group', 'Categoría').'.',
                             DailyBasis::Attendance->value => 'Las clases a las que vino, según la asistencia. La cuota se crea '.self::afterUnit($get).'.',
                             DailyBasis::Taught->value => 'Las clases que se dieron: las suspendidas no se cobran y las recuperaciones sí. La cuota se crea '.self::afterUnit($get).'.',
                         ])
@@ -300,7 +300,7 @@ class SeasonPlanSteps
                         ? (self::value($get, 'daily_basis') === DailyBasis::Taught->value
                             ? 'Con las clases que se dieron '.(self::unit($get) ?? BillingUnit::Month)->within().'.'
                             : 'Con las clases a las que vino según la asistencia (unos días después, para que '
-                                .Terms::gendered('instructor', 'Técnico', 'el', 'la').' '.Terms::singular('instructor', 'Técnico').' pueda corregirla).')
+                                .Terms::the('instructor', 'Técnico').' pueda corregirla).')
                         : 'La familia ve solo la cuota '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().'.',
                     '1' => 'La familia ve '.SeasonPlan::allPeriods(SeasonPlan::periodsCount(self::state($get))).': la '.(self::unit($get) ?? BillingUnit::Month)->ofCurrent().' en "A pagar" y el resto en "Próximas". Si se da de baja, las futuras sin pagar se anulan solas.',
                 ])

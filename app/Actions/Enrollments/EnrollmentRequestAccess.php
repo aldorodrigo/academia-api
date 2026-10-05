@@ -6,6 +6,7 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\MembershipStatus;
 use App\Enums\MidPeriod;
 use App\Filament\Support\MidPeriodPreview;
+use App\Filament\Support\Terms;
 use App\Models\Enrollment;
 use App\Models\EnrollmentRequest;
 use App\Models\Group;
@@ -88,7 +89,7 @@ class EnrollmentRequestAccess
 
         $group = Group::query()->where('is_active', true)->with('program')->find($groupId);
         if ($group === null || ! Season::query()->whereKey($season->id)->forProgram($group->program_id)->exists()) {
-            throw ValidationException::withMessages(['group_id' => 'Elegí una categoría de la temporada.']);
+            throw ValidationException::withMessages(['group_id' => 'Elegí '.Terms::a('group', 'categoría').' de la temporada.']);
         }
 
         return [$season, $group];

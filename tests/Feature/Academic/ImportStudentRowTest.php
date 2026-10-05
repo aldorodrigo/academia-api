@@ -77,8 +77,8 @@ it('reimportar no duplica y los hermanos comparten familia y tutores', function 
 it('informa errores de la fila', function (array $overrides, string $message) {
     expect(fn () => importRow($this->jakare, $overrides))->toThrow(ImportRowException::class, $message);
 })->with([
-    'grupo inexistente' => [['group' => 'Sub-99'], 'No existe Categoría "Sub-99" en Fútbol.'],
-    'programa inexistente' => [['program' => 'Pádel'], 'No existe Disciplina "Pádel".'],
+    'grupo inexistente' => [['group' => 'Sub-99'], 'No existe la categoría "Sub-99" en Fútbol.'],
+    'programa inexistente' => [['program' => 'Pádel'], 'No existe la disciplina "Pádel".'],
     'fecha inválida' => [['birth_date' => '31/02/2016x'], 'Fecha de nacimiento inválida'],
     'estado inválido' => [['status' => 'libre'], 'Estado "libre" inválido'],
     'email inválido' => [['guardians' => [['first_name' => 'Ana', 'email' => 'no-es-email']]], 'Email de tutor inválido'],
@@ -103,7 +103,7 @@ it('no usa grupos de otra organización', function () {
     Season::factory()->for($ajena)->create();
 
     importRow($ajena);
-})->throws(ImportRowException::class, 'No existe Disciplina "fútbol".');
+})->throws(ImportRowException::class, 'No existe la disciplina "fútbol".');
 
 it('sin categoría usa la que corresponde por edad', function () {
     $this->season->update(['starts_on' => '2026-01-01', 'ends_on' => '2026-12-31']);

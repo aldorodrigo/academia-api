@@ -8,6 +8,7 @@ use App\Actions\Billing\RegisterPayment;
 use App\Enums\MoneyAccountType;
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\Payments\PaymentResource;
+use App\Filament\Support\Terms;
 use App\Http\Controllers\ReceiptController;
 use App\Models\Charge;
 use App\Models\Family;
@@ -15,6 +16,7 @@ use App\Models\Guardian;
 use App\Models\MoneyAccount;
 use App\Models\Payment;
 use App\Support\Money;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -182,7 +184,7 @@ class ManagePayments extends ManageRecords
         }
 
         $account = MoneyAccount::query()->findOrFail($id);
-        abort_if($account->isCashBox() && $account->user_id !== $user->id, 403, 'Elegí tu caja o una cuenta del club.');
+        abort_if($account->isCashBox() && $account->user_id !== $user->id, 403, 'Elegí tu caja o una cuenta '.Vocabulary::of(Terms::organization()).'.');
 
         return $account;
     }

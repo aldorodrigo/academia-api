@@ -4,13 +4,17 @@ namespace App\Filament\Resources\Members\Tables;
 
 use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Billing\SetCollectsToOrgCash;
+use App\Enums\Gender;
 use App\Enums\MembershipStatus;
+use App\Filament\Support\GenderField;
 use App\Filament\Support\RoleFields;
+use App\Filament\Support\Terms;
 use App\Models\Membership;
 use App\Models\Organization;
 use App\Models\Role;
 use App\Models\RoleAssignment;
 use App\Support\Roles\RoleAssigner;
+use App\Support\Vocabulary;
 use Filament\Actions\Action;
 use Filament\Actions\ActionGroup;
 use Filament\Facades\Filament;
@@ -52,7 +56,9 @@ class MembersTable
                     ->badge(),
                 TextColumn::make('status')
                     ->label('Estado')
-                    ->formatStateUsing(fn (MembershipStatus $state) => $state === MembershipStatus::Active ? 'Activo' : 'Inactivo')
+                    ->formatStateUsing(fn (MembershipStatus $state, Membership $record) => $state === MembershipStatus::Active
+                        ? Vocabulary::agree('miembro', $record->user->genderIn(self::organization()), 'Activo', 'Activa')
+                        : Vocabulary::agree('miembro', $record->user->genderIn(self::organization()), 'Inactivo', 'Inactiva'))
                     ->color(fn (MembershipStatus $state) => $state === MembershipStatus::Active ? 'success' : 'gray')
                     ->badge(),
             ])
@@ -98,6 +104,17 @@ class MembersTable
                             app(RoleAssigner::class)->end($assignment);
                             Notification::make()->title('Rol quitado')->success()->send();
                         }),
+                    Action::make('gender')
+                        ->label('Género')
+                        ->icon(Heroicon::OutlinedUser)
+                        ->authorize('update')
+                        ->modalDescription('Opcional, para nombrarla bien ("Técnica", "Tesorera"). Es el mismo que la persona elige en "Mi cuenta" de la app.')
+                        ->fillForm(fn (Membership $record) => ['gender' => $record->user->gender])
+                        ->schema([GenderField::make()->helperText(null)])
+                        ->action(function (Membership $record, array $data) {
+                            $record->user->forceFill(['gender' => Gender::parse($data['gender'] ?? null)])->save();
+                            Notification::make()->title('Guardado')->success()->send();
+                        }),
                     Action::make('history')
                         ->label('Historial de roles')
                         ->icon(Heroicon::OutlinedClock)
@@ -121,7 +138,7 @@ class MembersTable
                             : "{$record->user->name} cobra directo a la Caja")
                         ->modalDescription(fn (Membership $record) => $record->collects_to_org_cash
                             ? 'Lo que cobre en efectivo queda en su caja hasta que lo deposite y alguien confirme el depósito.'
-                            : 'Lo que cobre en efectivo entra directo en la Caja del club (o en la cuenta del club que elija), sin caja propia ni depósito. Lo que ya tiene en su caja sigue ahí hasta que lo deposite.')
+                            : 'Lo que cobre en efectivo entra directo en la Caja '.Vocabulary::of(Terms::organization()).' (o en la cuenta '.Vocabulary::of(Terms::organization()).' que elija), sin caja propia ni depósito. Lo que ya tiene en su caja sigue ahí hasta que lo deposite.')
                         ->action(function (Membership $record): void {
                             app(SetCollectsToOrgCash::class)->handle($record, ! $record->collects_to_org_cash, auth()->user());
                             Notification::make()->success()->title($record->collects_to_org_cash ? 'Cobra directo a la Caja.' : 'Rinde lo que cobra.')->send();

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Actions\Billing\CashCollectionAccess;
 use App\Actions\Treasury\CashDeposits;
+use App\Filament\Support\Terms;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Resources\Api\V1\CashDepositResource;
@@ -14,6 +15,7 @@ use App\Models\Payment;
 use App\Models\Transfer;
 use App\Models\User;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -88,7 +90,7 @@ class CashBoxController extends Controller
         }
         $to = MoneyAccount::query()->find($data['money_account_id']);
         if ($to === null) {
-            throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta del club.']);
+            throw ValidationException::withMessages(['money_account_id' => 'Elegí una cuenta '.Vocabulary::of(Terms::organization()).'.']);
         }
 
         $deposit = $deposits->submit(

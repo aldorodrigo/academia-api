@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -20,7 +21,7 @@ class EnsureCanConfigureOrganization
         abort_unless(
             self::allows($request, $this->current),
             Response::HTTP_FORBIDDEN,
-            'Solo los administradores configuran el club.',
+            'Solo los administradores configuran '.Vocabulary::the($this->current->get()?->typeNoun() ?? 'club').'.',
         );
 
         return $next($request);

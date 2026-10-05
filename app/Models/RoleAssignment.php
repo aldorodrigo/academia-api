@@ -83,9 +83,12 @@ class RoleAssignment extends Model
         return OrganizationRole::tryFrom($this->role->name);
     }
 
+    /**
+     * Como se nombra a esa persona: "Tesorera", "Técnica", "Tutora" según su género (User::genderIn).
+     */
     public function label(): string
     {
-        return OrganizationRole::labelFor($this->role->name, $this->organization);
+        return OrganizationRole::labelFor($this->role->name, $this->organization, $this->user?->genderIn($this->organization));
     }
 
     /**

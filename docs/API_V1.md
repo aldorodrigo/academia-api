@@ -1772,7 +1772,7 @@ desde la app (`POST students`). Plan: `docs/PLAN_INSCRIPCION_TUTOR.md`. Todo con
 ```
 
 - `status`: `pendiente` ("Por confirmar"), `aprobada` ("Aprobada"), `rechazada` ("No aprobada") o `cancelada` ("Cancelada").
-- `relationship`: `padre`, `madre`, `tutor`, `abuelo` u `otro`.
+- `relationship`: `padre`, `madre`, `tutor`, `abuelo`, `abuela`, `tio`, `tia` u `otro` (ver "Género y concordancia").
 - `has_medical`: si cargó la ficha médica (los datos no se devuelven: pasan a la ficha del alumno al confirmar).
 - `student_id`: el alumno (existe desde que se pide; `null` si la solicitud se rechazó o canceló y el alta quedó archivada).
 - `reviewed_by`: nombre de quien la confirmó o la rechazó; `self_approved: true` si se confirmó sola.
@@ -2200,3 +2200,61 @@ Con copia por correo. `data`: `{ "type": "payment_received", "route": "/estado-d
   de sus cuotas siga pendiente** (un rechazado sin cuotas, pago a cuenta, hasta 30 días después del rechazo). Los
   aprobados y los rechazados ya resueltos vienen con `open: false`: son historial (`payment_reports` sigue trayendo los
   últimos 20). Lo decide la API; la app muestra arriba solo los `open` (sin el campo, como antes: los no aprobados).
+
+## Género y concordancia (ver `PLAN_GENERO.md`)
+
+La API decide la concordancia (`App\Support\Vocabulary`); la app la recibe y no repite las reglas.
+
+### `GET organization` (se amplía)
+
+```json
+"terminology_feminine": { "instructor": "Entrenadora" },
+"vocabulary": {
+  "group":   { "word": "Categoría", "plural": "Categorías", "gender": "f", "article": "la" },
+  "space":   { "word": "Aula", "plural": "Aulas", "gender": "f", "article": "el" },
+  "student": { "word": "Jugador", "plural": "Jugadores", "gender": "m", "article": "el",
+               "feminine": "Jugadora", "feminine_plural": "Jugadoras", "masculine": "Jugador", "masculine_plural": "Jugadores" },
+  "instructor": { "word": "Coach", "plural": "Coaches", "gender": "m", "article": "el",
+               "feminine": "Entrenadora", "feminine_plural": "Entrenadoras", "masculine": "Coach", "masculine_plural": "Coaches" },
+  "organization": { "word": "academia", "plural": "academias", "gender": "f", "article": "la" }
+}
+```
+
+- Una entrada por clave de `terminology` (`program, group, student, instructor, guardian, space`) más `organization`:
+  qué es la organización según su tipo (`club`, `academia`, `escuela`, `comisión`), para "del club" / "de la academia".
+- `gender`: `m`, `f` o `c` (género común: Atleta, Estudiante, Responsable; concuerda en masculino salvo que se trate de
+  una mujer concreta). `article`: el artículo definido en singular (`el aula`: femenina con "el").
+- Las de persona (`student`, `instructor`, `guardian`) traen sus formas para nombrar a una persona concreta
+  (`feminine`, `masculine`) y a un grupo (`*_plural`). `feminine` usa `terminology_feminine` si la organización la
+  ajustó; si no, la regla (Jugador → Jugadora, Técnico → Técnica, Atleta → Atleta).
+- `membership.roles[].label` nombra al usuario según su género: "Técnica", "Tesorera", "Tutora" (un tutor sin género
+  elegido: por su parentesco).
+
+### `PUT organization/terminology` (se amplía)
+
+Acepta `feminine` (opcional): `{ "terminology": {}, "feminine": { "instructor": "Entrenadora" } }`. Claves `student`,
+`instructor`, `guardian`; hasta 30 caracteres; vacía o igual a la regla = la de la regla. La respuesta suma
+`terminology_feminine` y `vocabulary`.
+
+### `GET me` (se amplía) · **nuevo** `PATCH me`
+
+`GET me` suma `gender`: `female`, `male` o `null` (sin especificar). `PATCH me` con `{ "gender": "female" | "male" | null }`
+→ lo mismo que `GET me`. Otro valor → `422` en `gender`. Es de la persona (vale en todas sus organizaciones).
+
+### Alumnos
+
+- `GET students`, `GET students/{id}`: `gender` (`female`, `male` o `null`).
+- En la ficha, `enrollments[].group.instructors[]` suma `gender` de cada técnico.
+- `POST students` (alta del admin) y `POST enrollment-requests` (inscripción del tutor) aceptan `gender` opcional.
+
+### Invitaciones
+
+- `GET invitations/{token}` suma `gender` (el que cargó quien invitó) y `roles[].label` nombra a la persona: el género
+  de la invitación, si no el de su cuenta (si ya tiene) o el del parentesco (invitación de tutor).
+- `POST setup/instructors` acepta `gender` opcional y cada técnico de `GET setup/instructors` lo trae (`gender`). Al aceptar la invitación, si la cuenta no tiene género, toma el de
+  la invitación.
+
+### Parentesco (`relationship`)
+
+Suma `abuela`, `tio` y `tia`. `abuelo` pasa a ser "Abuelo" y `tutor` se muestra "Tutor/a". Madre, Abuela, Tía →
+femenino; Padre, Abuelo, Tío → masculino; Tutor/a y Otro → sin especificar.

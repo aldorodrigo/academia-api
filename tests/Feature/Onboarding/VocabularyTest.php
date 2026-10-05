@@ -145,10 +145,11 @@ describe('cómo les dicen (API)', function () {
 
         vocabularyApi($admin, 'PUT', 'organization/terminology', [
             'terminology' => ['group' => 'Categoría', 'instructor' => 'profesor', 'space' => 'Cancha'],
-        ])->assertOk()->assertExactJson(['data' => ['terminology' => [
+        ])->assertOk()->assertJsonPath('data.terminology', [
             'program' => 'Disciplina', 'group' => 'Categoría', 'student' => 'Alumno',
             'instructor' => 'Profesor', 'guardian' => 'Tutor', 'space' => 'Cancha',
-        ]]]);
+        ])->assertJsonPath('data.vocabulary.group.article', 'la')
+            ->assertJsonPath('data.vocabulary.instructor.feminine', 'Profesora');
 
         expect($organization->refresh()->term('group'))->toBe('Categoría')
             ->and($organization->terminology_confirmed_at)->not->toBeNull();

@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\Enrollment;
 use App\Models\User;
 use App\Support\Push\PushMessage;
+use App\Support\Vocabulary;
 
 /**
  * Aviso a quienes pueden dar de baja: el técnico avisó que un alumno dejó de venir o el tutor que
@@ -21,7 +22,7 @@ class DropoutReported extends PushNotification
         $enrollment->loadMissing(['student', 'group', 'organization']);
         $note = filled($enrollment->dropout_note) ? ": «{$enrollment->dropout_note}»" : '.';
         $what = $enrollment->dropout_source === 'guardian'
-            ? "{$by->name} (familia) avisó que {$enrollment->student->full_name} deja el club"
+            ? "{$by->name} (familia) avisó que {$enrollment->student->full_name} deja ".Vocabulary::the($enrollment->organization->typeNoun())
             : "{$by->name} avisó que {$enrollment->student->full_name} ({$enrollment->group->name}) dejó de venir";
 
         $this->body = $what.$note.' Decidí si le das la baja.';

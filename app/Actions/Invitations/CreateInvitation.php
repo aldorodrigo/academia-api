@@ -2,6 +2,7 @@
 
 namespace App\Actions\Invitations;
 
+use App\Enums\Gender;
 use App\Enums\OrganizationRole;
 use App\Mail\InvitationMail;
 use App\Models\Guardian;
@@ -10,6 +11,7 @@ use App\Models\Organization;
 use App\Models\User;
 use App\Support\Phone;
 use App\Support\Tenancy\CurrentOrganization;
+use App\Support\Vocabulary;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Mail;
@@ -29,7 +31,7 @@ class CreateInvitation
 
     /**
      * Con $guardian, al aceptarla el tutor queda vinculado a la cuenta y ve a sus hijos.
-     * Con $groupIds (técnico), queda asignado a esas categorías.
+     * Con $groupIds (técnico), queda asignado a esas categorías. $gender: opcional, para nombrarlo bien.
      *
      * @param  list<array{role: string, starts_on?: ?string, ends_on?: ?string}>  $roles
      * @param  list<int>  $groupIds
@@ -44,6 +46,7 @@ class CreateInvitation
         ?string $name = null,
         array $groupIds = [],
         ?string $phone = null,
+        ?Gender $gender = null,
     ): array {
         $roles = $this->normalizeRoles($roles);
         $phone = filled($phone) ? Phone::mobile($phone) : null;
@@ -53,7 +56,7 @@ class CreateInvitation
             throw ValidationException::withMessages(['email' => 'Ingresá el celular o el correo.']);
         }
 
-        return $this->current->run($organization, function (Organization $organization) use ($email, $phone, $roles, $invitedBy, $guardian, $name, $groupIds) {
+        return $this->current->run($organization, function (Organization $organization) use ($email, $phone, $roles, $invitedBy, $guardian, $name, $groupIds, $gender) {
             // Una sola invitación abierta por persona: se reutiliza la pendiente (o vencida) con los datos nuevos y
             // un link nuevo, en lugar de sumar otra. Si quedaran otras abiertas, se revocan.
             $open = $this->openFor($phone, $email)->orderByDesc('id')->get();
@@ -69,6 +72,8 @@ class CreateInvitation
                 'group_ids' => $groupIds === [] ? null : array_values(array_map('intval', $groupIds)),
                 'guardian_id' => $guardian?->id,
                 'invited_by' => $invitedBy?->id,
+                // Opcional, para nombrarlo bien ("Te invitaron como Técnica"); al aceptar pasa a su cuenta.
+                'gender' => $gender,
             ]);
 
             return [$invitation, $this->issue($invitation)];
@@ -142,7 +147,7 @@ class CreateInvitation
         $phone = Phone::mobile($guardian->phone);
 
         if ($phone === null && blank($guardian->email)) {
-            throw ValidationException::withMessages(['email' => 'El tutor no tiene celular ni correo.']);
+            throw ValidationException::withMessages(['email' => ucfirst(Vocabulary::the($guardian->organization->term('guardian', $guardian->gender()), person: $guardian->gender())).' no tiene celular ni correo.']);
         }
 
         // Con correo se le manda por email; con celular, se comparte por WhatsApp (con los dos, por los dos).

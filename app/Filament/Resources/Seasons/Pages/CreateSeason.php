@@ -77,7 +77,7 @@ class CreateSeason extends CreateRecord
 
         return $notification
             ->body($players === 1
-                ? '¿Pasamos '.Terms::gendered('student', 'Jugador', 'al', 'a la').' '.Terms::singular('student', 'Jugador')." de {$previous->name} ahora?"
+                ? '¿Pasamos '.Terms::to('student', 'Jugador')." de {$previous->name} ahora?"
                 : '¿Pasamos a '.Terms::gendered('student', 'Jugador', 'los', 'las')." {$players} ".Terms::plural('student', 'Jugador')." de {$previous->name} ahora?")
             ->persistent()
             ->actions([

@@ -8,6 +8,7 @@ use App\Actions\Enrollments\WithdrawEnrollment;
 use App\Enums\EnrollmentStatus;
 use App\Models\Enrollment;
 use App\Support\Money;
+use App\Support\Vocabulary;
 use Filament\Actions\Action;
 use Filament\Actions\BulkAction;
 use Filament\Forms\Components\DatePicker;
@@ -40,7 +41,7 @@ class WithdrawalActions
             ->modalDescription(fn (Enrollment $record) => self::effect($record))
             ->fillForm(fn (Enrollment $record) => [
                 'ended_on' => $record->organization->today()->toDateString(),
-                'withdrawal_reason' => $record->dropout_note ?? ($record->hasDropoutReport() ? ($record->dropout_source === 'guardian' ? 'Deja el club' : 'Dejó de venir') : null),
+                'withdrawal_reason' => $record->dropout_note ?? ($record->hasDropoutReport() ? ($record->dropout_source === 'guardian' ? 'Deja '.Vocabulary::the($record->organization->typeNoun()) : 'Dejó de venir') : null),
                 'notify' => WithdrawEnrollment::noticeRecipients($record->student)->isNotEmpty(),
                 'message' => WithdrawEnrollment::defaultNotice($record),
             ])
@@ -79,7 +80,7 @@ class WithdrawalActions
             ->schema([
                 ...self::fields(),
                 Toggle::make('notify')->label('Avisar a las familias con el mensaje sugerido')
-                    ->helperText('Un mensaje amable, con las puertas abiertas: a los tutores con cuenta les queda en «Avisos» de la app (y les llega como notificación o por correo si los tienen). Para cambiarlo, ver a quién le llega o mandarlo por WhatsApp a quien no tiene la app, dalas de baja de a una.'),
+                    ->helperText(fn () => 'Un mensaje amable, con las puertas abiertas: a '.Terms::the('guardian', 'Tutor', plural: true).' con cuenta les queda en «Avisos» de la app (y les llega como notificación o por correo si los tienen). Para cambiarlo, ver a quién le llega o mandarlo por WhatsApp a quien no tiene la app, dalas de baja de a una.'),
             ])
             ->modalSubmitActionLabel('Dar de baja')
             ->action(function (Collection $records, array $data, BulkAction $action): void {
@@ -150,9 +151,9 @@ class WithdrawalActions
 
         if ($record->hasDropoutReport()) {
             $guardian = $record->dropout_source === 'guardian';
-            $by = $record->dropoutReportedBy?->name ?? ($guardian ? 'La familia' : 'El técnico');
+            $by = $record->dropoutReportedBy?->name ?? ($guardian ? 'La familia' : ucfirst(Terms::the('instructor', 'Técnico')));
 
-            return "{$by} avisó que ".($guardian ? 'deja el club' : 'dejó de venir')
+            return "{$by} avisó que ".($guardian ? 'deja '.Vocabulary::the($record->organization->typeNoun()) : 'dejó de venir')
                 ." ({$record->dropout_reported_at->setTimezone($record->organization->timezone)->format('d/m')})"
                 .($record->dropout_note ? ": {$record->dropout_note}" : '');
         }
@@ -168,7 +169,7 @@ class WithdrawalActions
         $reach = WithdrawEnrollment::noticeReach($record->student);
 
         if ($reach === []) {
-            return 'No tiene tutores cargados: si querés avisarle, hacelo por otro medio.';
+            return 'No tiene '.Terms::plural('guardian', 'tutor').' '.Terms::gendered('guardian', 'Tutor', 'cargados', 'cargadas').': si querés avisarle, hacelo por otro medio.';
         }
 
         return collect($reach)->map(fn (array $person) => WithdrawEnrollment::describeReach($person))->join(' ');
@@ -218,7 +219,7 @@ class WithdrawalActions
             DatePicker::make('ended_on')->label('Fecha de baja')->required()
                 ->maxDate(fn () => filament()->getTenant()->today()),
             Textarea::make('withdrawal_reason')->label('Motivo')->required()->maxLength(255)
-                ->placeholder('Ej.: se mudó, dejó de venir, cambió de club'),
+                ->placeholder('Ej.: se mudó, dejó de venir, cambió de '.Terms::organization()),
         ];
     }
 

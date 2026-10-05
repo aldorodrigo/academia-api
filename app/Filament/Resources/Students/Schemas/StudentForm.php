@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Students\Schemas;
 use App\Enums\GuardianRelationship;
 use App\Filament\Resources\Students\Pages\EditStudent;
 use App\Filament\Support\EnrollmentForm;
+use App\Filament\Support\GenderField;
 use App\Filament\Support\Terms;
 use App\Models\Guardian;
 use App\Models\Student;
@@ -76,6 +77,7 @@ class StudentForm
                             $set('group_id', $groupId);
                         }
                     }),
+                GenderField::make(),
                 TextInput::make('shirt_size')->label('Talle')->maxLength(10),
                 TextInput::make('position')->label('Posición')->maxLength(50),
                 Select::make('user_id')
@@ -124,7 +126,7 @@ class StudentForm
                 ->schema(EnrollmentForm::fields(details: false)),
             Section::make(ucfirst(Terms::plural('guardian', 'Tutor')))
                 ->description(fn () => 'Con el celular (WhatsApp) o el correo, después de crear los invitás a la app desde la ficha '
-                    .Terms::gendered('student', 'Jugador', 'del', 'de la').' '.Terms::singular('student', 'Jugador').': al aceptar ven a sus hijos.')
+                    .Terms::of('student', 'Jugador').': al aceptar ven a sus hijos.')
                 ->visibleOn('create')
                 ->columnSpanFull()
                 ->schema([
@@ -132,11 +134,11 @@ class StudentForm
                         ->hiddenLabel()
                         ->columns(3)
                         ->defaultItems(1)
-                        ->addActionLabel('Agregar otro tutor')
+                        ->addActionLabel(fn () => 'Agregar '.Terms::gendered('guardian', 'Tutor', 'otro', 'otra').' '.Terms::singular('guardian', 'Tutor'))
                         // Un menor necesita al menos un tutor; un adulto puede ser su propio responsable.
                         ->minItems(fn (Get $get) => self::isMinor($get('birth_date')) ? 1 : 0)
-                        ->validationMessages(['min' => fn () => Terms::gendered('student', 'Jugador', 'El', 'La').' '.Terms::singular('student', 'Jugador')
-                            .' es menor de edad: cargá al menos '.Terms::gendered('guardian', 'Tutor', 'un', 'una').' '.Terms::singular('guardian', 'Tutor').'.'])
+                        ->validationMessages(['min' => fn () => ucfirst(Terms::the('student', 'Jugador'))
+                            .' es menor de edad: cargá al menos '.Terms::a('guardian', 'Tutor').'.'])
                         ->schema([
                             TextInput::make('phone')
                                 ->label('Celular (WhatsApp)')

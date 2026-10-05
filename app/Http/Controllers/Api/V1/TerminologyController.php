@@ -19,15 +19,21 @@ class TerminologyController extends Controller
         $data = $request->validate([
             'terminology' => ['present', 'array:'.implode(',', UpdateTerminology::KEYS)],
             'terminology.*' => ['nullable', 'string', 'max:30'],
+            // Formas femeninas de las palabras de persona, si la regla no alcanza (vacía = la de la regla).
+            'feminine' => ['sometimes', 'array:'.implode(',', Organization::PERSON_TERMS)],
+            'feminine.*' => ['nullable', 'string', 'max:30'],
         ], [
             'terminology.*.max' => 'Usá una palabra de hasta 30 letras.',
+            'feminine.*.max' => 'Usá una palabra de hasta 30 letras.',
         ]);
 
-        $organization = $update->handle($current->get(), $data['terminology']);
+        $organization = $update->handle($current->get(), $data['terminology'], $data['feminine'] ?? null);
 
         return response()->json([
             'data' => [
                 'terminology' => array_merge(Organization::DEFAULT_TERMINOLOGY, $organization->terminology ?? []),
+                'terminology_feminine' => (object) ($organization->terminology_feminine ?? []),
+                'vocabulary' => $organization->vocabulary(),
             ],
         ]);
     }
