@@ -8,4 +8,6 @@ use BezhanSalleh\FilamentShield\Resources\Roles\Pages\CreateRole as ShieldCreate
 class CreateRole extends ShieldCreateRole
 {
     protected static string $resource = RoleResource::class;
+
+    protected static ?string $title = 'Crear rol';
 }
