@@ -94,7 +94,8 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - **Avisos:** extender `App\Notifications\PushNotification` (bandeja + push + correo con la marca a partir de `toPush()`;
   `mailActions()` y `mailPose()` para los botones y la mascota). No crear notificaciones solo push. Cada aviso queda en
   la bandeja "Avisos" de la app (canal `inbox`, `App\Support\Notifications\InboxChannel`: tabla `notifications` con
-  `organization_id` y `data.format = tuku`; `GET me/notifications`, `NotificationInboxController`); los de Filament
+  `organization_id` y `data.format = tuku`; `GET me/notifications`, `NotificationInboxController`) salvo que el aviso
+  sobreescriba `inInbox()` con `false` (los recordatorios de día de clase `ClassReminder` e `InstructorClassReminder`); los de Filament
   (`format = filament`) no se mezclan. Antes de prometer por dónde llega algo, usá los canales reales
   (`WithdrawEnrollment::noticeReach()`/`channelsOf()`).
 - **Correos con la marca Tuku:** componentes en `resources/views/vendor/mail` (tema `tuku.css`, `mascot`, `buttons`) y

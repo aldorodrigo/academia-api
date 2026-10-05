@@ -88,6 +88,15 @@ class ClassReminder extends PushNotification
         };
     }
 
+    /**
+     * Recordatorio de día de clase ("¿Lo llevás?" del tutor): llega por push y correo, pero no queda en la bandeja
+     * "Avisos" (se repite hasta 3 veces por clase y vence al empezar).
+     */
+    public function inInbox(): bool
+    {
+        return false;
+    }
+
     public function toPush(object $notifiable): PushMessage
     {
         return new PushMessage('Día de clase', $this->body, $this->data, withActions: true, category: 'CLASS_REMINDER');

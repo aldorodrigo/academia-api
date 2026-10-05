@@ -7,6 +7,7 @@ use App\Notifications\StudentWithdrawn;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
 use Filament\Notifications\Notification as FilamentNotification;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 
 /**
@@ -40,6 +41,8 @@ it('guarda cada aviso en la bandeja aunque no haya push ni correo', function () 
     sendIn($this->jakare, $this->laura, 'Baja de Matías');
 
     Mail::assertNothingSent();
+    // La baja crea su fila en `notifications`.
+    expect(DB::table('notifications')->where('notifiable_id', $this->laura->id)->where('type', StudentWithdrawn::class)->count())->toBe(1);
     inboxApi($this->laura, 'GET', 'me/notifications')
         ->assertOk()
         ->assertJsonPath('meta.unread', 1)

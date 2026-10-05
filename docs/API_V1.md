@@ -1696,6 +1696,11 @@ no está condonada o falta el motivo.
 Cada aviso (push y su copia por correo) queda guardado para la cuenta, en la organización en la que se mandó: le
 llega aunque no tenga la app instalada con notificaciones ni un correo verificado. Con token + `X-Organization`.
 
+**No entran** los recordatorios de día de clase: `class_reminder` del tutor ("¿Lo llevás?" con "Sí, va" / "No va") y
+`class_today` del técnico ("Tomar asistencia"). Se repiten (hasta 3 por clase) y vencen al empezar la clase; siguen
+llegando por push y correo como siempre. Todo lo demás (bajas, comprobantes, depósitos, inscripciones, cambios de
+clase, clases particulares…) sí entra.
+
 ### `GET me/notifications?page=1`
 
 Los avisos de la organización activa (y los que no son de ninguna), los más nuevos primero, de a 20.

@@ -36,6 +36,7 @@ use App\Notifications\ClassReminder;
 use App\Notifications\ClassRescheduled;
 use App\Notifications\ClassSuspended;
 use App\Notifications\InstructorClassReminder;
+use App\Support\Notifications\InboxChannel;
 use App\Support\Push\FcmPushSender;
 use App\Support\Push\PushChannel;
 use App\Support\Push\PushMessage;
@@ -43,6 +44,9 @@ use App\Support\Push\PushSender;
 use App\Support\Roles\RoleAssigner;
 use App\Support\Tenancy\CurrentOrganization;
 use Carbon\CarbonImmutable;
+use Illuminate\Notifications\ChannelManager;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Notification;
 use Kreait\Firebase\Contract\Messaging;
 use Kreait\Firebase\Messaging\MulticastSendReport;
@@ -932,6 +936,32 @@ describe('copia por correo de los avisos', function () {
         expect($instructor->viewData['actions'])->toBe([
             ['label' => 'Tomar asistencia', 'url' => rtrim(config('app.frontend_url'), '/')."/clases/{$session->id}"],
         ]);
+    });
+
+    it('los recordatorios de día de clase no quedan en la bandeja; los demás avisos sí', function () {
+        Mail::fake();
+        $session = ClassSession::query()->withoutGlobalScopes()->find(todayClassId($this->instructor));
+        $guardianReminder = new ClassReminder($session, $this->mateo, $this->jakare->today(), $this->tutor->id);
+        $instructorReminder = new InstructorClassReminder($session, $this->jakare->today());
+
+        // Push y correo como siempre, sin el canal de la bandeja.
+        expect($guardianReminder->inInbox())->toBeFalse()
+            ->and($guardianReminder->via($this->tutor))->toBe(['push', 'mail'])
+            ->and($instructorReminder->via($this->instructor))->not->toContain('inbox')
+            ->and((new ClassSuspended($session))->inInbox())->toBeTrue();
+
+        // Mandados de verdad (sin el fake): el recordatorio no crea una fila en `notifications`; la suspensión sí.
+        $channels = (new ChannelManager(app()))
+            ->extend('push', fn ($app) => $app->make(PushChannel::class))
+            ->extend('inbox', fn ($app) => $app->make(InboxChannel::class));
+        app(CurrentOrganization::class)->run($this->jakare, function () use ($channels, $guardianReminder, $instructorReminder, $session) {
+            $channels->sendNow($this->tutor, $guardianReminder);
+            $channels->sendNow($this->instructor, $instructorReminder);
+            $channels->sendNow($this->tutor, new ClassSuspended($session));
+        });
+
+        expect(DB::table('notifications')->where('notifiable_id', $this->instructor->id)->count())->toBe(0)
+            ->and(DB::table('notifications')->where('notifiable_id', $this->tutor->id)->pluck('type')->all())->toBe([ClassSuspended::class]);
     });
 
     it('"Sí, va" y "No va" del correo abren una página y la respuesta se guarda con su botón', function () {

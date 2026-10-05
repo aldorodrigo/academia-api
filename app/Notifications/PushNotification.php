@@ -11,7 +11,7 @@ use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * Aviso de la app: queda en la bandeja "Avisos" de la cuenta (canal `inbox`, siempre), va por push a sus
+ * Aviso de la app: queda en la bandeja "Avisos" de la cuenta (canal `inbox`, salvo `inInbox()` false), va por push a sus
  * dispositivos y, si la cuenta tiene un correo para copias (`User::mailableEmail()`), también por correo con la
  * marca Tuku. La bandeja y el correo salen del mismo `toPush()`: título, texto y la pantalla del aviso.
  */
@@ -35,7 +35,20 @@ abstract class PushNotification extends Notification implements ShouldQueue
             return ['push'];
         }
 
-        return $notifiable->mailableEmail() !== null ? ['inbox', 'push', 'mail'] : ['inbox', 'push'];
+        return array_values(array_filter([
+            $this->inInbox() ? 'inbox' : null,
+            'push',
+            $notifiable->mailableEmail() !== null ? 'mail' : null,
+        ]));
+    }
+
+    /**
+     * Si queda en la bandeja "Avisos" de la app. Sí por defecto; los recordatorios de día de clase
+     * (que se repiten y vencen al empezar la clase) lo sobreescriben con `false`.
+     */
+    public function inInbox(): bool
+    {
+        return true;
     }
 
     /**

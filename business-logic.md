@@ -407,7 +407,9 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - Push (Firebase) + email; confirmación de lectura.
 - **Bandeja "Avisos"** *(2026-10-05)*: cada aviso (todo `PushNotification`) queda guardado para la cuenta, en la
   organización en la que se mandó, con leído / no leído. Es el único canal seguro: le llega aunque use la app web sin
-  notificaciones y no tenga un correo verificado.
+  notificaciones y no tenga un correo verificado. **No entran los recordatorios de día de clase** ("¿Lo llevás?" del
+  tutor y "Tomar asistencia" del técnico): se repiten y vencen al empezar la clase, así que solo van por push y correo.
+  Cada aviso declara si entra (`PushNotification::inInbox()`, sí por defecto).
 - Envíos masivos por lotes en la cola `notifications` (Horizon).
 - Una **resolución** publicada a un grupo notifica a sus tutores y puede generar un cargo. *(Fase 2)*
 
