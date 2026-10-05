@@ -62,11 +62,19 @@ describe('E3 · borrador del paso 2 en el servidor', function () {
 
         $draft = stepsApi('GET', 'onboarding/steps/groups/draft')->assertOk()->json('data.draft');
         expect($draft)->not->toHaveKey('basura')
+            // El cupo, las edades y los niveles también quedan (antes se perdían en la validación).
+            ->and($draft['capacity'])->toBe(20)
+            ->and($draft['ages'])->toBe(['from' => 5, 'to' => 16, 'span' => 2])
+            ->and($draft['levels'])->toBe(['Inicial'])
             ->and($draft['groups'])->toHaveCount(1)
             ->and($draft['groups'][0]['slots'][0])->toBe(['weekdays' => [2, 4], 'starts_at' => '17:00', 'ends_at' => '18:30', 'venue_id' => null])
             ->and(OnboardingDraft::withoutGlobalScopes()->count())->toBe(1);
 
-        stepsApi('POST', 'setup/groups', ['program_id' => $this->futbol->id, 'groups' => [['name' => 'Sub-8', 'schedules' => []]]])->assertCreated();
+        stepsApi('PUT', 'onboarding/steps/groups/draft', ['draft' => [...groupsDraft($this->futbol->id), 'capacity' => 0]])
+            ->assertUnprocessable()->assertJsonValidationErrors('draft.capacity');
+
+        stepsApi('POST', 'setup/groups', ['program_id' => $this->futbol->id, 'groups' => [['name' => 'Sub-8', 'capacity' => $draft['capacity'], 'schedules' => []]]])
+            ->assertCreated()->assertJsonPath('data.0.capacity', 20);
 
         stepsApi('GET', 'onboarding/steps/groups/draft')->assertJsonPath('data.draft', null);
         expect(OnboardingDraft::withoutGlobalScopes()->withTrashed()->sole()->trashed())->toBeTrue();
@@ -103,9 +111,12 @@ describe('E3 · borrador del paso 2 en el servidor', function () {
             ->assertActionDataSet(fn (array $data) => collect($data['groups'])->pluck('name')->all() === ['Sub-9', 'Sub-11']
                 && $data['capacity'] === 20)
             // Como llega del navegador (un cambio en el formulario).
-            ->set('mountedActions.0.data.groups', [['name' => 'Sub-13', 'min_age' => 12, 'max_age' => 13, 'level' => null]]);
+            ->set('mountedActions.0.data.groups', [['name' => 'Sub-13', 'min_age' => 12, 'max_age' => 13, 'level' => null]])
+            ->set('mountedActions.0.data.capacity', '25');
 
-        expect(collect(StepDrafts::get($this->org, 'groups')['draft']['groups'])->pluck('name')->all())->toBe(['Sub-13']);
+        $draft = StepDrafts::get($this->org, 'groups')['draft'];
+        expect(collect($draft['groups'])->pluck('name')->all())->toBe(['Sub-13'])
+            ->and($draft['capacity'])->toBe(25);
     });
 });
 

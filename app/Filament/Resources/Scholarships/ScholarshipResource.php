@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Scholarships;
 use App\Actions\Billing\ScholarshipDecision;
 use App\Enums\ScholarshipStatus;
 use App\Filament\Resources\Scholarships\Pages\ManageScholarships;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\Charge;
 use App\Models\Scholarship;
@@ -26,6 +27,8 @@ use UnitEnum;
  */
 class ScholarshipResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Scholarship::class;
 
     protected static ?string $slug = 'becas';

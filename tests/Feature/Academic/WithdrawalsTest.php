@@ -19,6 +19,7 @@ use App\Filament\Resources\Students\Pages\EditStudent;
 use App\Filament\Resources\Students\RelationManagers\ChargesRelationManager;
 use App\Filament\Resources\Students\RelationManagers\EnrollmentsRelationManager;
 use App\Filament\Support\ChargeHistory;
+use App\Filament\Support\WithdrawalActions;
 use App\Models\Charge;
 use App\Models\ChargeCondonation;
 use App\Models\Enrollment;
@@ -635,6 +636,57 @@ describe('app', function () {
         withdrawalApi($this->treasurer, 'POST', "enrollments/{$this->enrollment->id}/withdraw", ['ended_on' => '2026-06-03', 'reason' => 'x'])->assertForbidden();
         withdrawalApi($this->secretary, 'POST', "enrollments/{$this->enrollment->id}/withdraw", ['ended_on' => '2026-06-03', 'reason' => 'Otra'])
             ->assertUnprocessable();
+    });
+
+    it('dice a quién le llega el aviso y por dónde, y ofrece WhatsApp a quien no tiene la app (N1)', function () {
+        // Rosa usa la app web (sin push) y su correo no está verificado: solo le llega en "Avisos".
+        $this->tutor->forceFill(['phone' => '+595981111222', 'email_verified_at' => null])->save();
+        $pedro = Guardian::factory()->for($this->jakare)->create(['family_id' => $this->family->id, 'first_name' => 'Pedro', 'last_name' => 'Zárate', 'phone' => '+595981222333']);
+        $pedro->students()->attach($this->matias);
+
+        withdrawalApi($this->secretary, 'GET', "staff/students/{$this->matias->id}")
+            ->assertOk()
+            ->assertJsonPath('data.notice.recipients', 1)
+            ->assertJsonPath('data.notice.reach', [
+                ['name' => 'Rosa Zárate', 'channels' => ['app'], 'phone' => null, 'whatsapp_phone' => null],
+                ['name' => 'Pedro Zárate', 'channels' => [], 'phone' => '0981 222 333', 'whatsapp_phone' => '595981222333'],
+            ]);
+
+        $this->tutor->deviceTokens()->create(['token' => 'tok-rosa', 'platform' => 'android']);
+        $this->tutor->forceFill(['email_verified_at' => now()])->save();
+        $reach = WithdrawEnrollment::noticeReach($this->matias->fresh());
+        expect($reach[0]['channels'])->toBe(['app', 'push', 'mail'])
+            ->and(WithdrawEnrollment::describeReach($reach[0]))->toBe('A Rosa Zárate le llega en la app, como notificación en el celular y por correo.')
+            ->and(WithdrawEnrollment::describeReach($reach[1]))->toBe('Pedro Zárate no tiene la app: no le llega. Podés mandárselo por WhatsApp.')
+            ->and(WithdrawEnrollment::describeReach(['name' => 'Rosa Zárate', 'channels' => ['app'], 'whatsapp_phone' => null]))->toBe('A Rosa Zárate le llega en la app.')
+            ->and(WithdrawEnrollment::whatsappUrl('595981222333', 'Hola, ¡gracias!'))->toBe('https://wa.me/595981222333?text=Hola%2C%20%C2%A1gracias%21');
+
+        withdrawalApi($this->secretary, 'POST', "enrollments/{$this->enrollment->id}/withdraw", [
+            'ended_on' => '2026-06-03', 'reason' => 'Se mudó', 'notify' => true, 'message' => '¡Gracias!',
+        ])->assertOk()->assertJsonPath('data.notified', 1);
+
+        // El registro guarda los canales reales.
+        $log = Activity::query()->where('description', 'Aviso de baja a la familia')->sole();
+        expect($log->properties['channels'])->toBe([
+            ['name' => 'Rosa Zárate', 'channels' => ['app', 'push', 'mail']],
+            ['name' => 'Pedro Zárate', 'channels' => []],
+        ])->and($log->causer_id)->toBe($this->secretary->id);
+    });
+
+    it('el panel muestra a quién le llega y el botón de WhatsApp (N1)', function () {
+        $this->tutor->forceFill(['phone' => '+595981111222', 'email_verified_at' => null])->save();
+        $pedro = Guardian::factory()->for($this->jakare)->create(['family_id' => $this->family->id, 'first_name' => 'Pedro', 'last_name' => 'Zárate', 'phone' => '+595981222333']);
+        $pedro->students()->attach($this->matias);
+        withdrawalPanel($this->admin);
+
+        expect(WithdrawalActions::reachText($this->enrollment))
+            ->toBe('A Rosa Zárate le llega en la app. Pedro Zárate no tiene la app: no le llega. Podés mandárselo por WhatsApp.');
+
+        Livewire::test(ManageEnrollments::class)
+            ->mountTableAction('withdraw', $this->enrollment)
+            ->assertMountedActionModalSee(['A Rosa Zárate le llega en la app.', 'Mandar por WhatsApp a Pedro Zárate'])
+            ->assertMountedActionModalSeeHtml('https://wa.me/595981222333?text=')
+            ->assertMountedActionModalDontSee('por la app y por correo');
     });
 
     it('"Sigue viniendo" desde la app', function () {

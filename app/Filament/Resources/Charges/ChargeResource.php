@@ -7,6 +7,7 @@ use App\Enums\ChargeStatus;
 use App\Filament\Resources\Charges\Pages\ManageCharges;
 use App\Filament\Support\ChargeHistory;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Filament\Support\WaiveChargeAction;
 use App\Models\Charge;
@@ -33,6 +34,8 @@ use UnitEnum;
  */
 class ChargeResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Charge::class;
 
     protected static ?string $slug = 'cargos';

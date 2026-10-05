@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Transfers;
 use App\Actions\Treasury\TransferFunds;
 use App\Filament\Resources\Transfers\Pages\ManageTransfers;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\Transfer;
 use BackedEnum;
 use Filament\Actions\Action;
@@ -22,6 +23,8 @@ use UnitEnum;
  */
 class TransferResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Transfer::class;
 
     protected static ?string $slug = 'transferencias';

@@ -15,6 +15,7 @@ use Filament\Forms\Components\Select;
 use Filament\Forms\Components\Textarea;
 use Filament\Forms\Components\Toggle;
 use Filament\Notifications\Notification;
+use Filament\Schemas\Components\Actions;
 use Filament\Schemas\Components\Utilities\Get;
 use Filament\Support\Icons\Heroicon;
 use Illuminate\Database\Eloquent\Collection;
@@ -47,13 +48,14 @@ class WithdrawalActions
                 ...self::fields(),
                 Toggle::make('notify')->label('Avisar a la familia')->live()
                     ->disabled(fn () => WithdrawEnrollment::noticeRecipients($record->student)->isEmpty())
-                    ->helperText(fn () => WithdrawEnrollment::noticeRecipients($record->student)->isEmpty()
-                        ? 'No tiene tutores con la app: si querés avisarle, hacelo por WhatsApp.'
-                        : 'Le llega por la app y por correo a: '.WithdrawEnrollment::noticeRecipients($record->student)->pluck('name')->join(', ').'.'),
+                    ->helperText(fn () => self::reachText($record)),
                 Textarea::make('message')->label('Mensaje para la familia')->rows(4)->maxLength(1000)
                     ->helperText('Podés cambiarlo antes de mandarlo.')
-                    ->visible(fn (Get $get) => (bool) $get('notify'))
+                    // El link de WhatsApp lleva el mensaje como quedó.
+                    ->live(onBlur: true)
+                    ->visible(fn (Get $get) => (bool) $get('notify') || self::withoutApp($record) !== [])
                     ->required(fn (Get $get) => (bool) $get('notify')),
+                ...self::whatsappButtons($record),
             ])
             ->modalSubmitActionLabel('Dar de baja')
             ->action(function (Enrollment $record, array $data, Action $action): void {
@@ -77,7 +79,7 @@ class WithdrawalActions
             ->schema([
                 ...self::fields(),
                 Toggle::make('notify')->label('Avisar a las familias con el mensaje sugerido')
-                    ->helperText('Un mensaje amable, con las puertas abiertas, a los tutores con la app. Para cambiarlo, dalas de baja de a una.'),
+                    ->helperText('Un mensaje amable, con las puertas abiertas: a los tutores con cuenta les queda en «Avisos» de la app (y les llega como notificación o por correo si los tienen). Para cambiarlo, ver a quién le llega o mandarlo por WhatsApp a quien no tiene la app, dalas de baja de a una.'),
             ])
             ->modalSubmitActionLabel('Dar de baja')
             ->action(function (Collection $records, array $data, BulkAction $action): void {
@@ -156,6 +158,55 @@ class WithdrawalActions
         }
 
         return null;
+    }
+
+    /**
+     * A quién le llega el aviso y por dónde (lo que de verdad pasa): "A Laura Benítez le llega en la app."
+     */
+    public static function reachText(Enrollment $record): string
+    {
+        $reach = WithdrawEnrollment::noticeReach($record->student);
+
+        if ($reach === []) {
+            return 'No tiene tutores cargados: si querés avisarle, hacelo por otro medio.';
+        }
+
+        return collect($reach)->map(fn (array $person) => WithdrawEnrollment::describeReach($person))->join(' ');
+    }
+
+    /**
+     * Tutores sin la app con celular: se les manda por WhatsApp a mano.
+     *
+     * @return list<array{name: string, whatsapp_phone: string}>
+     */
+    private static function withoutApp(Enrollment $record): array
+    {
+        return collect(WithdrawEnrollment::noticeReach($record->student))
+            ->filter(fn (array $person) => $person['channels'] === [] && $person['whatsapp_phone'] !== null)
+            ->values()->all();
+    }
+
+    /**
+     * "Mandar por WhatsApp a …" (con el mensaje ya escrito) para los tutores sin la app.
+     *
+     * @return list<Actions>
+     */
+    private static function whatsappButtons(Enrollment $record): array
+    {
+        $people = self::withoutApp($record);
+
+        if ($people === []) {
+            return [];
+        }
+
+        return [
+            Actions::make(collect($people)->map(fn (array $person, int $i) => Action::make("whatsapp{$i}")
+                ->label("Mandar por WhatsApp a {$person['name']}")
+                ->icon(Heroicon::OutlinedChatBubbleLeftRight)
+                ->color('success')
+                ->url(fn (Get $get) => WithdrawEnrollment::whatsappUrl($person['whatsapp_phone'], (string) ($get('message') ?: WithdrawEnrollment::defaultNotice($record))))
+                ->openUrlInNewTab())->all()),
+        ];
     }
 
     /**

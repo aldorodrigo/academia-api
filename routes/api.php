@@ -18,6 +18,7 @@ use App\Http\Controllers\Api\V1\Lessons\LessonController;
 use App\Http\Controllers\Api\V1\Lessons\LessonProfileController;
 use App\Http\Controllers\Api\V1\Lessons\TeacherController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\NotificationInboxController;
 use App\Http\Controllers\Api\V1\NotificationSettingsController;
 use App\Http\Controllers\Api\V1\OnboardingController;
 use App\Http\Controllers\Api\V1\OrganizationController;
@@ -143,6 +144,10 @@ Route::prefix('v1')->name('api.v1.')->group(function () {
             Route::get('venues', [VenueController::class, 'index'])->name('venues.index');
             Route::get('me/notification-settings', [NotificationSettingsController::class, 'show'])->name('notification-settings.show');
             Route::put('me/notification-settings', [NotificationSettingsController::class, 'update'])->name('notification-settings.update');
+            // Bandeja "Avisos": la copia de cada push y correo.
+            Route::get('me/notifications', [NotificationInboxController::class, 'index'])->name('notifications.index');
+            Route::post('me/notifications/read-all', [NotificationInboxController::class, 'readAll'])->name('notifications.read-all');
+            Route::post('me/notifications/{notification}/read', [NotificationInboxController::class, 'read'])->whereUuid('notification')->name('notifications.read');
             Route::get('groups', [GroupController::class, 'index'])->name('groups.index');
             Route::get('groups/{group}', [GroupController::class, 'show'])->whereNumber('group')->name('groups.show');
             // "Dejó de venir": el técnico avisa; la baja la decide el club en el panel.

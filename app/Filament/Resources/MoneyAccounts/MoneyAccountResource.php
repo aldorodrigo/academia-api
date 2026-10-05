@@ -6,6 +6,7 @@ use App\Enums\MoneyAccountType;
 use App\Filament\Resources\MoneyAccounts\Pages\ListMoneyAccounts;
 use App\Filament\Resources\MoneyAccounts\Pages\ViewMoneyAccount;
 use App\Filament\Resources\MoneyAccounts\RelationManagers\EntriesRelationManager;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\MoneyAccount;
 use App\Support\Money;
 use BackedEnum;
@@ -30,6 +31,8 @@ use UnitEnum;
  */
 class MoneyAccountResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = MoneyAccount::class;
 
     protected static ?string $slug = 'cuentas';

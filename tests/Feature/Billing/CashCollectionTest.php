@@ -6,6 +6,7 @@ use App\Enums\CashDepositStatus;
 use App\Enums\OrganizationRole;
 use App\Enums\PaymentMethod;
 use App\Enums\PaymentReportStatus;
+use App\Filament\Resources\CashDeposits\CashDepositResource;
 use App\Filament\Resources\CashDeposits\Pages\ManageCashDeposits;
 use App\Filament\Resources\MoneyAccounts\Pages\ListMoneyAccounts;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
@@ -436,12 +437,21 @@ describe('panel', function () {
     it('lista los depósitos, confirma y rechaza', function () {
         [$first, $second] = CashDeposit::query()->orderBy('id')->get()->all();
 
-        $this->get('/admin/jakare/depositos-de-efectivo')->assertOk()->assertSee('Juan Pérez');
+        $this->get('/admin/jakare/depositos-de-efectivo')->assertOk()->assertSee('Juan Pérez')
+            // El menú con mayúscula solo al principio (N5).
+            ->assertSee('Depósitos de efectivo')->assertDontSee('Depósitos De Efectivo');
 
         Livewire::test(ManageCashDeposits::class)
             ->assertCanSeeTableRecords([$first, $second])
-            ->callTableAction('confirm', $first)
-            ->assertHasNoTableActionErrors()
+            // Confirmar pregunta antes, con quién, cuánto, a qué cuenta y cuándo (N4).
+            ->mountTableAction('confirm', $first)
+            ->assertMountedActionModalSee(['¿Confirmás que llegaron ₲ 100.000 de Juan Pérez a '.$this->bank->name.'?', 'Depositado el 03/09/2026'])
+            ->callMountedTableAction()
+            ->assertHasNoTableActionErrors();
+
+        expect(CashDepositResource::confirmQuestion($second))->toBe('¿Confirmás que llegaron ₲ 50.000 de Juan Pérez a '.$this->cash->name.'?');
+
+        Livewire::test(ManageCashDeposits::class)
             ->callTableAction('reject', $second, data: ['reason' => 'No me lo dio.'])
             ->assertHasNoTableActionErrors();
 

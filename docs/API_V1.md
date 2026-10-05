@@ -1091,8 +1091,10 @@ cada cambio).
 - `PUT` `{ "draft": { "program_id": 1, "ages": { "from": 5, "to": 16, "span": 2 }, "levels": ["Inicial"], "capacity": 20,
   "groups": [ { "name": "Sub-8", "min_age": 7, "max_age": 8, "level": null,
   "slots": [ { "weekdays": [2, 4], "starts_at": "17:00", "ends_at": "18:30", "venue_id": 11 } ] } ] } }` → el mismo
-  objeto. Se guarda solo lo que el paso entiende (hasta 40 categorías y 10 horarios cada una). La app manda los cambios
-  con una pausa de 800 ms y lo pendiente al salir de la pantalla.
+  objeto. Se guarda solo lo que el paso entiende (hasta 40 categorías y 10 horarios cada una), también el cupo
+  (`capacity`, entero de 1 a 1000 o `null`; 422 si no), las edades y los niveles. La app manda los cambios con una
+  pausa de 800 ms y lo pendiente al salir de la pantalla; al retomar, el cupo vuelve al campo y se manda en cada
+  categoría de `POST setup/groups`.
 - `DELETE` → `204` (no hay nada a medio armar).
 - `POST setup/groups` (y el panel al crear) lo da por usado. Nunca se borra: queda como usado (soft delete).
 - Otra clave que `groups` → `404`. Sin `configure_organization` → `403`.
@@ -1636,6 +1638,20 @@ Avisos de baja sin decidir, el más viejo primero.
   puede editarla.
 - `notice.recipients`: tutores con la app (y el alumno adulto con cuenta) que recibirían el aviso de baja;
   `notice.message`: el mensaje sugerido.
+- `notice.reach` *(2026-10-05)*: a quién le llega y por dónde, de verdad (cada tutor y el alumno adulto con cuenta):
+
+  ```json
+  "reach": [
+    { "name": "Laura Benítez", "channels": ["app"], "phone": null, "whatsapp_phone": null },
+    { "name": "Pedro Benítez", "channels": [], "phone": "0981 222 333", "whatsapp_phone": "595981222333" }
+  ]
+  ```
+
+  `channels`: `app` (tiene cuenta: le queda en "Avisos", siempre), `push` (tiene la app instalada con notificaciones),
+  `mail` (tiene un correo para copias). Vacío = no tiene cuenta, no le llega: con `whatsapp_phone` (solo dígitos) la app
+  ofrece "Mandar por WhatsApp" (`https://wa.me/{whatsapp_phone}?text=…` con el mensaje como quedó). El texto lo arma la
+  app: "A Laura Benítez le llega en la app, como notificación en el celular y por correo." / "Pedro Benítez no tiene la
+  app: no le llega. Podés mandárselo por WhatsApp." El registro de actividad del aviso guarda estos canales.
 - `charges`: solo con `waive_charges` (si no, `null`). Son las cuotas sin anular y las condonadas, las más nuevas
   primero. `balance` es lo que debe sin las próximas.
 
@@ -1674,6 +1690,43 @@ no está condonada o falta el motivo.
 - `dropout_reported` (`route: "/bajas"`): "Aviso de baja". Ejemplo: "Rosa Zárate (familia) avisó que Matías Zárate
   deja el club: «…». Decidí si le das la baja."
 - `student_withdrawn` (`route: "/inicio"`): "Baja de Matías", con el mensaje que eligió quien dio la baja.
+
+## Bandeja de avisos (2026-10-05)
+
+Cada aviso (push y su copia por correo) queda guardado para la cuenta, en la organización en la que se mandó: le
+llega aunque no tenga la app instalada con notificaciones ni un correo verificado. Con token + `X-Organization`.
+
+### `GET me/notifications?page=1`
+
+Los avisos de la organización activa (y los que no son de ninguna), los más nuevos primero, de a 20.
+
+```json
+{
+  "data": [
+    {
+      "id": "9b1c6f0e-…",
+      "type": "student_withdrawn",
+      "title": "Baja de Matías",
+      "body": "Hola, te contamos que registramos la baja de Matías en Club Jakare. …",
+      "route": "/inicio",
+      "read_at": null,
+      "created_at": "2026-10-05T11:32:00-03:00"
+    }
+  ],
+  "meta": { "current_page": 1, "last_page": 1, "per_page": 20, "total": 1, "unread": 1 }
+}
+```
+
+- `type` y `route`: los mismos del push (`route` puede ser `null`). Fechas en la hora de la organización.
+- `meta.unread`: sin leer en la organización (para el contador del inicio y de "Mi cuenta").
+
+### `POST me/notifications/{id}/read`
+
+Lo marca leído y responde el aviso. 404 si no es de la cuenta o de otra organización.
+
+### `POST me/notifications/read-all`
+
+Marca leídos todos los de la organización activa. Responde `{ "data": { "unread": 0 } }`.
 
 ## Inscripción desde la app
 
@@ -2099,6 +2152,29 @@ revisado → `422`.
 
 `{ "reason": "No llegó al banco." }` (obligatorio, hasta 500) → el depósito rechazado; la plata sigue en su caja. Ya
 revisado → `422`. Avisa al técnico: "No confirmamos tu depósito de ₲ 300.000: No llegó al banco.".
+
+### Cobra directo a la Caja (2026-10-05)
+
+Por persona: quien **cobra directo** no tiene caja propia ni deposita; el efectivo entra en la Caja del club (o en otra
+cuenta del club que elija). Por defecto solo quien creó la organización (`PLAN_COBRO_EFECTIVO.md` §9).
+
+- `GET organization`: `membership.collects_to_org_cash` (`true`/`false`).
+- `GET collections/students/{id}` suma `collects_to_org_cash`, `collect_accounts` (`[{ "id", "name", "type" }]`, cuentas
+  activas del club sin titular; vacío si no cobra directo) y `default_collect_account_id` (la Caja del club).
+- `POST collections` acepta `money_account_id` (opcional, solo si cobra directo: una de `collect_accounts`; sin elegir,
+  la Caja). Si no cobra directo y lo manda → `422` "Lo que cobrás queda en tu caja hasta que lo deposites.". Cobrando
+  directo, la respuesta trae `cash_box: null` y `account: { "id": 1, "name": "Caja" }`; su caja personal (si la tenía)
+  no cambia ni importa si está cerrada.
+- `GET me/cash-box` suma `collects_to_org_cash`. Si pasó a cobrar directo con plata en su caja, la sigue viendo y la
+  deposita como siempre.
+- `GET cash-boxes` suma `collectors` **solo para quien administra los miembros** (si no, no viene): quienes pueden
+  cobrar en efectivo (miembros activos), por nombre:
+  `[{ "user_id": 5, "name": "Juan Pérez", "collects_to_org_cash": false, "owner": false }]` (`owner`: creó la
+  organización).
+- `PUT cash-collectors/{user_id}` `{ "collects_to_org_cash": true }` → el `collector`. Queda quién lo cambió y cuándo
+  (registro de actividad). Sin permiso de miembros → `403`; alguien que no es miembro activo o no puede cobrar → `404`.
+- Cada pago guarda quién lo cobró (`created_by`): se ve en el recibo ("Cobró: Juan Pérez") y en el panel (lista de
+  pagos y movimientos de la Caja).
 
 ### Push
 

@@ -353,7 +353,9 @@ trait SetupGuide
                             ->addActionLabel(fn () => 'Agregar '.$this->g('group', 'otro', 'otra')),
                         TextInput::make('capacity')
                             ->label(fn () => 'Cupo por cada '.$this->g('group', 'uno', 'una').' (opcional)')
-                            ->numeric()->minValue(1),
+                            ->numeric()->minValue(1)
+                            // "Se guarda solo": el cupo va al borrador al salir del campo.
+                            ->live(onBlur: true),
                     ])
                     // Arma la pantalla de horarios con la lista (conserva lo ya cargado).
                     ->afterValidation(function (Get $get, Set $set) {

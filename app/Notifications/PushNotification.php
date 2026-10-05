@@ -4,19 +4,23 @@ namespace App\Notifications;
 
 use App\Models\User;
 use App\Support\Push\PushMessage;
+use App\Support\Tenancy\CurrentOrganization;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 /**
- * Aviso de la app: va por push y, si la cuenta tiene un correo para copias (`User::mailableEmail()`), también
- * por correo con la marca Tuku. El correo sale del mismo `toPush()`: título, texto y un botón que abre la app
- * en la pantalla del aviso.
+ * Aviso de la app: queda en la bandeja "Avisos" de la cuenta (canal `inbox`, siempre), va por push a sus
+ * dispositivos y, si la cuenta tiene un correo para copias (`User::mailableEmail()`), también por correo con la
+ * marca Tuku. La bandeja y el correo salen del mismo `toPush()`: título, texto y la pantalla del aviso.
  */
 abstract class PushNotification extends Notification implements ShouldQueue
 {
     use Queueable;
+
+    /** Organización activa al mandarlo (la bandeja de cada organización muestra los suyos). */
+    public ?int $organizationId = null;
 
     abstract public function toPush(object $notifiable): PushMessage;
 
@@ -25,7 +29,31 @@ abstract class PushNotification extends Notification implements ShouldQueue
      */
     public function via(object $notifiable): array
     {
-        return $notifiable instanceof User && $notifiable->mailableEmail() !== null ? ['push', 'mail'] : ['push'];
+        $this->organizationId ??= app(CurrentOrganization::class)->id();
+
+        if (! $notifiable instanceof User) {
+            return ['push'];
+        }
+
+        return $notifiable->mailableEmail() !== null ? ['inbox', 'push', 'mail'] : ['inbox', 'push'];
+    }
+
+    /**
+     * Copia para la bandeja de la app (`GET me/notifications`).
+     *
+     * @return array{format: string, type: ?string, title: string, body: string, route: ?string}
+     */
+    public function toDatabase(object $notifiable): array
+    {
+        $push = $this->toPush($notifiable);
+
+        return [
+            'format' => 'tuku',
+            'type' => $push->data['type'] ?? null,
+            'title' => $push->title,
+            'body' => $push->body,
+            'route' => $push->data['route'] ?? null,
+        ];
     }
 
     public function toMail(object $notifiable): MailMessage

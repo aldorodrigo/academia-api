@@ -211,8 +211,12 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   (admin; secretario y prosecretario por defecto). "Estado" ya no ofrece "Baja".
 - **Aviso a la familia:** al dar de baja se pregunta si se le avisa (prendido si hay tutores con la app). El mensaje
   viene prellenado, amable y con las puertas abiertas ("…Las puertas siempre van a estar abiertas: cuando quieran
-  volver, escribinos y los esperamos"), sin hablar de plata, y se puede cambiar en el momento. Va por push y correo a
-  los tutores con la app (y al alumno adulto con cuenta); no por WhatsApp.
+  volver, escribinos y los esperamos"), sin hablar de plata, y se puede cambiar en el momento. Les llega a los tutores
+  con cuenta (y al alumno adulto con cuenta): siempre en la bandeja **"Avisos"** de la app, y además por push si tienen
+  la app instalada con notificaciones y por correo si tienen uno para copias. **El formulario dice la verdad:** antes de
+  mandarlo muestra a quién le llega y por dónde ("A Laura Benítez le llega en la app") y, a los tutores sin cuenta con
+  celular, ofrece "Mandar por WhatsApp" (link `wa.me` con el mensaje ya escrito, se manda a mano; no hay API de
+  WhatsApp). El registro de actividad guarda los canales reales de cada uno. *(2026-10-05)*
 - **La deuda queda como histórica:** las cuotas impagas, **también la del período en curso** si ya empezó, siguen
   pendientes hasta que se pagan, se anulan o se condonan (§5). Nunca se borran ni se anulan solas; solo se anulan
   solas las **futuras** sin pagos.
@@ -372,9 +376,18 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   registra desde la app como un comprobante de transferencia en nombre de la familia, con la imagen o el PDF y quién lo
   registró. Si quien la registra valida comprobantes, queda aprobada al instante con su recibo; si es el técnico, queda
   en revisión. La familia la ve en su estado de cuenta.
+- **Cobra directo a la Caja** *(2026-10-05, `PLAN_COBRO_EFECTIVO.md` §9)*: se elige por persona (sí/no en su
+  membresía). Por defecto **sí** solo para quien creó la organización (el dueño: el usuario del alta autoservicio o el
+  primer administrador que acepta la invitación de la plataforma; en las que ya existían, la membresía más vieja con rol
+  de administrador); **no** para todos los demás, también un segundo admin. Lo cambia quien administra los miembros y
+  queda registrado quién y cuándo. Si cobra directo, el efectivo entra en la Caja del club (o en otra cuenta del club
+  que elija), sin caja personal ni depósito; si no, a su caja personal como siempre. Cada pago guarda **quién lo
+  cobró** (lista de pagos, recibo y movimientos de la Caja). Si pasa a cobrar directo con plata en su caja, esa plata
+  sigue ahí hasta que la deposite.
 - Las cajas personales no aparecen al elegir dónde entra un pago (registrar pago, aprobar comprobantes); sí en
   Cuentas, Transferencias y Gastos. Excepción: en "Registrar pago" del panel, quien registra ve **su** caja, que es la
-  cuenta por defecto con método Efectivo (el efectivo queda en su poder hasta depositarlo, como en la app).
+  cuenta por defecto con método Efectivo (el efectivo queda en su poder hasta depositarlo, como en la app); si cobra
+  directo a la Caja, la cuenta por defecto es la Caja del club.
 - En el estado de cuenta, un comprobante rechazado se ve mientras alguna de sus cuotas siga pendiente (sin cuotas,
   30 días); después queda como historial.
 
@@ -392,6 +405,9 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 
 - Avisos segmentados: toda la organización, programa, grupo, familia.
 - Push (Firebase) + email; confirmación de lectura.
+- **Bandeja "Avisos"** *(2026-10-05)*: cada aviso (todo `PushNotification`) queda guardado para la cuenta, en la
+  organización en la que se mandó, con leído / no leído. Es el único canal seguro: le llega aunque use la app web sin
+  notificaciones y no tenga un correo verificado.
 - Envíos masivos por lotes en la cola `notifications` (Horizon).
 - Una **resolución** publicada a un grupo notifica a sus tutores y puede generar un cargo. *(Fase 2)*
 

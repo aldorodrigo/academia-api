@@ -8,6 +8,7 @@ use App\Enums\MoneyAccountType;
 use App\Enums\PaymentReportStatus;
 use App\Filament\Resources\PaymentReports\Pages\ManagePaymentReports;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Http\Controllers\PaymentProofController;
 use App\Http\Controllers\ReceiptController;
 use App\Models\Charge;
@@ -38,6 +39,8 @@ use UnitEnum;
  */
 class PaymentReportResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = PaymentReport::class;
 
     protected static ?string $slug = 'comprobantes';

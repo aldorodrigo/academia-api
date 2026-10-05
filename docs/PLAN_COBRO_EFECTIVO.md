@@ -161,3 +161,28 @@ comprobantes).
 3. API: migración (incluye dar `Collect:Payments` a los roles técnico, tesorero y protesorero que ya existen), acciones,
    endpoints, permiso en `GET organization`, avisos, panel; tests de feature.
 4. `business-logic.md` §2 (permisos por defecto) y §8 (cobro en efectivo y caja del técnico).
+
+## 9. Cobra directo a la Caja (2026-10-05)
+
+Problema: cuando la organización es del técnico (dueño y admin, como Óscar en una academia chica), su efectivo iba a
+"Caja de Óscar" y después tenía que "depositarlo" y confirmárselo a sí mismo. Decisión del usuario: **se elige por
+persona**.
+
+- **"Cobra directo a la Caja"** (sí/no) en la membresía de cada persona que puede cobrar (`memberships.
+  collects_to_org_cash`, con quién y cuándo lo cambió y el registro de actividad). Lo cambia quien administra los
+  miembros (permiso de editar miembros; el admin siempre): en el panel en **Miembros** ("Cobra directo a la Caja" /
+  "Rinde lo que cobra") y en la app en **Efectivo** ("Quién cobra directo a la Caja", `PUT cash-collectors/{user}`).
+- **Por defecto:** sí solo para **quien creó la organización** (`organizations.owner_id`: el usuario del alta
+  autoservicio; en las creadas desde la plataforma, el primer administrador que acepta la invitación). No para todos
+  los demás, incluido un segundo admin. Las organizaciones que ya existían: el dueño es el de la membresía más vieja con
+  el rol de administrador (si no hay, la membresía más vieja) — la migración lo completa así.
+- **Si cobra directo:** el efectivo (app y panel) entra en la **Caja del club** (o en otra cuenta del club que elija),
+  sin caja personal ni depósito. En el panel, "Registrar pago" con Efectivo propone la Caja. **Si no:** como antes, su
+  caja personal y después deposita.
+- **Quién cobró** queda siempre en el pago (`payments.created_by`): se ve en la lista de pagos ("Cobró"), en el recibo
+  y en los movimientos de la Caja. Así, con varias personas cobrando a la Caja, se sabe quién cobró qué.
+- **Cambiar de "rinde" a "cobra directo" con plata en su caja:** esa plata sigue en su caja hasta que la deposite (no se
+  mueve sola); "Mi caja" sigue disponible para depositarla.
+- Contrato: `membership.collects_to_org_cash` en `GET organization`; `collects_to_org_cash`, `collect_accounts` y
+  `default_collect_account_id` en `GET collections/students/{id}`; `money_account_id` opcional en `POST collections`;
+  `collects_to_org_cash` en `GET me/cash-box`; `collectors` en `GET cash-boxes` (`API_V1.md`).

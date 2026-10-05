@@ -6,6 +6,7 @@ use App\Actions\Billing\VoidPayment;
 use App\Enums\PaymentMethod;
 use App\Filament\Resources\Payments\Pages\ManagePayments;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Http\Controllers\ReceiptController;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
@@ -28,6 +29,8 @@ use UnitEnum;
  */
 class PaymentResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Payment::class;
 
     protected static ?string $slug = 'pagos';

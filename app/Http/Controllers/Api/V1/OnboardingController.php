@@ -58,13 +58,16 @@ class OnboardingController extends Controller
 
     public function saveDraft(Request $request, CurrentOrganization $current, string $key): JsonResponse
     {
-        $data = $request->validate([
+        $request->validate([
             'draft' => ['required', 'array'],
             'draft.program_id' => ['nullable', 'integer'],
+            'draft.capacity' => ['nullable', 'integer', 'min:1', 'max:1000'],
             'draft.groups' => ['nullable', 'array', 'max:40'],
         ]);
 
-        return response()->json(['data' => StepDrafts::put($current->get(), $key, $data['draft'])]);
+        // Todo el borrador (edades, niveles, cupo…): `validated()` deja afuera las claves sin regla de un
+        // arreglo con reglas anidadas. `StepDrafts` guarda solo lo que el paso entiende.
+        return response()->json(['data' => StepDrafts::put($current->get(), $key, (array) $request->input('draft'))]);
     }
 
     public function forgetDraft(CurrentOrganization $current, string $key): Response

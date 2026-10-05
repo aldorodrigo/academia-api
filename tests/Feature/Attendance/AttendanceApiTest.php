@@ -916,9 +916,9 @@ describe('copia por correo de los avisos', function () {
 
         $phoneOnly = User::factory()->create(['email' => null, 'phone' => '+595981000111', 'phone_verified_at' => now()]);
         $unconfirmed = User::factory()->unverified()->create(['phone' => '+595981000222', 'phone_verified_at' => now()]);
-        expect($suspended->via($this->tutor))->toBe(['push', 'mail'])
-            ->and($suspended->via($phoneOnly))->toBe(['push'])
-            ->and($suspended->via($unconfirmed))->toBe(['push']);
+        expect($suspended->via($this->tutor))->toBe(['inbox', 'push', 'mail'])
+            ->and($suspended->via($phoneOnly))->toBe(['inbox', 'push'])
+            ->and($suspended->via($unconfirmed))->toBe(['inbox', 'push']);
 
         $mail = $suspended->toMail($this->tutor);
         expect($mail->subject)->toBe('Clase suspendida')

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Lessons;
 use App\Actions\Lessons\CancelBooking;
 use App\Enums\BookingStatus;
 use App\Filament\Resources\Lessons\Pages\ListBookings;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\Booking;
 use App\Models\User;
 use App\Support\Money;
@@ -25,6 +26,7 @@ use UnitEnum;
 class BookingResource extends Resource
 {
     use LessonsModule;
+    use SentenceCaseLabels;
 
     protected static ?string $model = Booking::class;
 

@@ -5,6 +5,7 @@ namespace App\Filament\Resources\Tariffs;
 use App\Enums\FeeConceptKind;
 use App\Filament\Resources\Tariffs\Pages\ManageTariffs;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\Season;
 use App\Models\Tariff;
@@ -28,6 +29,8 @@ use UnitEnum;
  */
 class TariffResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Tariff::class;
 
     protected static ?string $slug = 'tarifas';

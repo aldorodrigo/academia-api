@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Members;
 
 use App\Filament\Resources\Members\Pages\ListMembers;
 use App\Filament\Resources\Members\Tables\MembersTable;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\Membership;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -16,6 +17,8 @@ use UnitEnum;
  */
 class MemberResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Membership::class;
 
     protected static ?string $slug = 'miembros';

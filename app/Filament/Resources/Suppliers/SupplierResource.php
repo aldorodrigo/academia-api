@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Suppliers;
 
 use App\Filament\Resources\Suppliers\Pages\ManageSuppliers;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\Supplier;
 use App\Support\Money;
 use BackedEnum;
@@ -19,6 +20,8 @@ use UnitEnum;
 
 class SupplierResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Supplier::class;
 
     protected static ?string $slug = 'proveedores';

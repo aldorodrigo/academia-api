@@ -3,6 +3,7 @@
 namespace App\Filament\Resources\Sites;
 
 use App\Filament\Resources\Sites\Pages\ManageSites;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\Group;
 use App\Models\Site;
@@ -24,6 +25,8 @@ use UnitEnum;
  */
 class SiteResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Site::class;
 
     protected static ?string $slug = 'lugares';

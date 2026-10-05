@@ -7,7 +7,9 @@ use App\Actions\Treasury\CashDeposits;
 use App\Enums\CashDepositStatus;
 use App\Filament\Resources\CashDeposits\Pages\ManageCashDeposits;
 use App\Filament\Support\MoneyColumn;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\CashDeposit;
+use App\Support\Money;
 use BackedEnum;
 use Filament\Actions\Action;
 use Filament\Facades\Filament;
@@ -27,6 +29,8 @@ use UnitEnum;
  */
 class CashDepositResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = CashDeposit::class;
 
     protected static ?string $slug = 'depositos-de-efectivo';
@@ -95,8 +99,10 @@ class CashDepositResource extends Resource
                     ->color('success')
                     ->visible(fn (CashDeposit $record) => $record->isPending())
                     ->requiresConfirmation()
-                    ->modalHeading('Confirmar depósito')
-                    ->modalDescription(fn (CashDeposit $record) => "Se registra una transferencia de «{$record->cashBox->name}» a «{$record->toAccount->name}» y le avisamos a {$record->user->name}.")
+                    ->modalHeading(fn (CashDeposit $record) => self::confirmQuestion($record))
+                    ->modalDescription(fn (CashDeposit $record) => 'Depositado el '.$record->deposited_on->format('d/m/Y')
+                        .($record->reference ? " (ref. {$record->reference})" : '')
+                        .". Se registra una transferencia de «{$record->cashBox->name}» a «{$record->toAccount->name}» y le avisamos a {$record->user->name}.")
                     ->modalSubmitActionLabel('Confirmar')
                     ->action(function (CashDeposit $record): void {
                         app(CashDeposits::class)->confirm($record, auth()->user());
@@ -120,6 +126,14 @@ class CashDepositResource extends Resource
                         Notification::make()->success()->title('Depósito rechazado. Le avisamos.')->send();
                     }),
             ]);
+    }
+
+    /**
+     * "¿Confirmás que llegaron ₲ 300.000 de Lucas Ferreira a Banco Itaú?" (lo mismo que pregunta la app).
+     */
+    public static function confirmQuestion(CashDeposit $record): string
+    {
+        return '¿Confirmás que llegaron '.Money::pyg($record->amount)->format()." de {$record->user->name} a {$record->toAccount->name}?";
     }
 
     public static function getPages(): array

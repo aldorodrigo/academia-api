@@ -4,6 +4,7 @@ namespace App\Filament\Resources\Invitations;
 
 use App\Filament\Resources\Invitations\Pages\ListInvitations;
 use App\Filament\Resources\Invitations\Tables\InvitationsTable;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\Invitation;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -13,6 +14,8 @@ use UnitEnum;
 
 class InvitationResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Invitation::class;
 
     protected static ?string $slug = 'invitaciones';

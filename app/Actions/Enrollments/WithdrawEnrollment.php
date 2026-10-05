@@ -6,9 +6,11 @@ use App\Enums\EnrollmentStatus;
 use App\Models\Charge;
 use App\Models\Enrollment;
 use App\Models\Guardian;
+use App\Models\Invitation;
 use App\Models\Student;
 use App\Models\User;
 use App\Notifications\StudentWithdrawn;
+use App\Support\Phone;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
@@ -23,8 +25,10 @@ use Illuminate\Validation\ValidationException;
  * cuotas futuras sin pagos (VoidFutureCharges, desde el modelo). Si el técnico había avisado que
  * dejó de venir, el aviso se cierra.
  *
- * Quien da la baja elige si le avisa a la familia (push y correo a los tutores con la app): el
- * mensaje viene prellenado, amable y con las puertas abiertas, y se puede cambiar.
+ * Quien da la baja elige si le avisa a la familia: el mensaje viene prellenado, amable y con las
+ * puertas abiertas, y se puede cambiar. Antes de mandarlo se ve a quién le llega y por dónde
+ * (`noticeReach`): a los tutores con cuenta les queda en "Avisos" de la app, y además push si tienen
+ * la app instalada y correo si tienen uno para copias; a los que no tienen cuenta, por WhatsApp a mano.
  */
 class WithdrawEnrollment
 {
@@ -79,7 +83,101 @@ class WithdrawEnrollment
     }
 
     /**
+     * A quién le llega el aviso y por dónde, de verdad: cada tutor (y el alumno adulto con cuenta) con
+     * sus canales. `app`: tiene cuenta (le queda en "Avisos"); `push`: tiene la app instalada con
+     * notificaciones; `mail`: tiene un correo para copias. Sin cuenta no le llega nada: si tiene
+     * celular, `whatsapp_phone` para mandárselo por WhatsApp a mano.
+     *
+     * @return list<array{name: string, user_id: ?int, channels: list<string>, phone: ?string, whatsapp_phone: ?string}>
+     */
+    public static function noticeReach(Student $student): array
+    {
+        $student->loadMissing(['guardians.user.deviceTokens', 'user.deviceTokens']);
+        $seen = [];
+        $reach = [];
+
+        foreach ($student->guardians as $guardian) {
+            $user = $guardian->user;
+            if ($user !== null && isset($seen[$user->id])) {
+                continue;
+            }
+            if ($user !== null) {
+                $seen[$user->id] = true;
+            }
+
+            $mobile = $user === null ? Phone::mobile($guardian->phone) : null;
+            $reach[] = [
+                'name' => $guardian->full_name ?: (string) $user?->name,
+                'user_id' => $user?->id,
+                'channels' => $user === null ? [] : self::channelsOf($user),
+                'phone' => $user === null ? Phone::display($guardian->phone) : null,
+                'whatsapp_phone' => $mobile === null ? null : Phone::digits($mobile),
+            ];
+        }
+
+        if ($student->user !== null && ! isset($seen[$student->user->id])) {
+            $reach[] = [
+                'name' => $student->user->name,
+                'user_id' => $student->user->id,
+                'channels' => self::channelsOf($student->user),
+                'phone' => null,
+                'whatsapp_phone' => null,
+            ];
+        }
+
+        return $reach;
+    }
+
+    /**
+     * Por dónde le llega un aviso a una cuenta (lo mismo que decide `PushNotification::via()`).
+     *
+     * @return list<string>
+     */
+    public static function channelsOf(User $user): array
+    {
+        $tokens = $user->relationLoaded('deviceTokens') ? $user->deviceTokens->isNotEmpty() : $user->deviceTokens()->exists();
+
+        return array_values(array_filter([
+            'app',
+            $tokens ? 'push' : null,
+            $user->mailableEmail() !== null ? 'mail' : null,
+        ]));
+    }
+
+    /**
+     * "A Laura Benítez le llega en la app y por correo." / "Pedro Benítez no tiene la app: …".
+     *
+     * @param  array{name: string, channels: list<string>, whatsapp_phone: ?string}  $person
+     */
+    public static function describeReach(array $person): string
+    {
+        if ($person['channels'] === []) {
+            return "{$person['name']} no tiene la app: no le llega. "
+                .($person['whatsapp_phone'] !== null ? 'Podés mandárselo por WhatsApp.' : 'Avisale por otro medio.');
+        }
+
+        $words = array_map(fn (string $channel) => match ($channel) {
+            'app' => 'en la app',
+            'push' => 'como notificación en el celular',
+            'mail' => 'por correo',
+            default => $channel,
+        }, $person['channels']);
+        $last = array_pop($words);
+
+        return "A {$person['name']} le llega ".($words === [] ? $last : implode(', ', $words)." y {$last}").'.';
+    }
+
+    /**
+     * Link de WhatsApp con el mensaje ya escrito, para un tutor sin la app.
+     */
+    public static function whatsappUrl(string $whatsappPhone, string $message): string
+    {
+        return Invitation::whatsappLink('+'.$whatsappPhone, trim($message));
+    }
+
+    /**
      * Avisa a la familia (mensaje ya revisado por quien da la baja). Devuelve a cuántos les llegó.
+     * El registro de actividad guarda por dónde le llegó a cada uno.
      */
     public function notify(Enrollment $enrollment, string $message, ?User $by): int
     {
@@ -88,11 +186,17 @@ class WithdrawEnrollment
         }
 
         $recipients = self::noticeRecipients($enrollment->student);
+        $reach = collect(self::noticeReach($enrollment->student));
         $notification = new StudentWithdrawn("Baja de {$enrollment->student->first_name}", trim($message));
         $recipients->each(fn (User $user) => $user->notify($notification));
 
         activity('academic')->performedOn($enrollment)->causedBy($by)
-            ->withProperties(['student_id' => $enrollment->student_id, 'recipients' => $recipients->count(), 'message' => trim($message)])
+            ->withProperties([
+                'student_id' => $enrollment->student_id,
+                'recipients' => $recipients->count(),
+                'channels' => $reach->map(fn (array $person) => ['name' => $person['name'], 'channels' => $person['channels']])->values()->all(),
+                'message' => trim($message),
+            ])
             ->log('Aviso de baja a la familia');
 
         return $recipients->count();

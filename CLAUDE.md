@@ -91,8 +91,12 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   también van por correo. Correo para copias: `User::mailableEmail()` (el verificado o, sin celular, el de la cuenta).
   Cada dato se verifica por separado: un celular o correo sin verificar no ocupa el dato (`User::owning()`,
   `User::releaseContacts()`, regla `ContactAvailable`).
-- **Avisos:** extender `App\Notifications\PushNotification` (push + correo con la marca a partir de `toPush()`;
-  `mailActions()` y `mailPose()` para los botones y la mascota). No crear notificaciones solo push.
+- **Avisos:** extender `App\Notifications\PushNotification` (bandeja + push + correo con la marca a partir de `toPush()`;
+  `mailActions()` y `mailPose()` para los botones y la mascota). No crear notificaciones solo push. Cada aviso queda en
+  la bandeja "Avisos" de la app (canal `inbox`, `App\Support\Notifications\InboxChannel`: tabla `notifications` con
+  `organization_id` y `data.format = tuku`; `GET me/notifications`, `NotificationInboxController`); los de Filament
+  (`format = filament`) no se mezclan. Antes de prometer por dónde llega algo, usá los canales reales
+  (`WithdrawEnrollment::noticeReach()`/`channelsOf()`).
 - **Correos con la marca Tuku:** componentes en `resources/views/vendor/mail` (tema `tuku.css`, `mascot`, `buttons`) y
   `vendor/notifications/email.blade.php` en español. Los links de los correos que cambian algo abren una página
   (`site.aviso`) con un botón que hace el `POST`: los antivirus de correo abren los links solos.
@@ -164,6 +168,11 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Cantidades con su plural: `Vocabulary::count()`; nombres de temporada: `Vocabulary::season()`.
 - Importar Excel: `App\Filament\Actions\SpreadsheetImportAction` (.xlsx y .csv). Textos de Filament en voseo:
   overrides en `lang/vendor/*/es` (solo las claves que cambian). Marca del panel: "Tuku" (no `APP_NAME`).
+- Textos del panel con mayúscula solo al principio: todo recurso usa `App\Filament\Support\SentenceCaseLabels`
+  ("Depósitos de efectivo"); "Roles y permisos" es `App\Filament\Resources\Roles\RoleResource` (extiende el de
+  Shield: nombre visible con `OrganizationRole::labelFor()`, sin "Guard") y `App\Support\Roles\ShieldLabels` (permisos y
+  recursos sin Title Case). Fechas: `d/m/Y` y `d/m/Y H:i` por defecto (`AppServiceProvider::configurePanelFormats`), las
+  que tienen hora en la zona de la organización (las fechas solas y los `TimePicker` no se convierten).
 
 ### Finanzas (cargos)
 - `Charge` es inmutable (no se edita ni se borra): se anula con `VoidCharge` (motivo). Estado calculado: `Charge::status()`.

@@ -6,6 +6,7 @@ use App\Enums\EnrollmentStatus;
 use App\Filament\Resources\Enrollments\Pages\ManageEnrollments;
 use App\Filament\Resources\Enrollments\Pages\SeasonTransfer;
 use App\Filament\Resources\Students\StudentResource;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Filament\Support\WithdrawalActions;
 use App\Models\Enrollment;
@@ -26,6 +27,8 @@ use UnitEnum;
 
 class EnrollmentResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Enrollment::class;
 
     protected static ?string $slug = 'inscripciones';

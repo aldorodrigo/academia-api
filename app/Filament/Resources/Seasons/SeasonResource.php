@@ -7,6 +7,7 @@ use App\Filament\Resources\Seasons\Pages\EditSeason;
 use App\Filament\Resources\Seasons\Pages\ListSeasons;
 use App\Filament\Resources\Seasons\Schemas\SeasonForm;
 use App\Filament\Resources\Seasons\Tables\SeasonsTable;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Models\Season;
 use BackedEnum;
 use Filament\Resources\Resource;
@@ -17,6 +18,8 @@ use UnitEnum;
 
 class SeasonResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = Season::class;
 
     protected static ?string $slug = 'temporadas';

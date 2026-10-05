@@ -8,6 +8,7 @@ use App\Enums\EnrollmentRequestStatus;
 use App\Enums\MidPeriod;
 use App\Filament\Resources\EnrollmentRequests\Pages\ManageEnrollmentRequests;
 use App\Filament\Resources\Students\StudentResource;
+use App\Filament\Support\SentenceCaseLabels;
 use App\Filament\Support\Terms;
 use App\Models\EnrollmentRequest;
 use App\Models\Group;
@@ -35,6 +36,8 @@ use UnitEnum;
  */
 class EnrollmentRequestResource extends Resource
 {
+    use SentenceCaseLabels;
+
     protected static ?string $model = EnrollmentRequest::class;
 
     protected static ?string $slug = 'solicitudes-de-inscripcion';
