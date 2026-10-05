@@ -40,7 +40,8 @@ class EnrollmentRequestResource extends JsonResource
                 'program' => ['id' => $this->group->program->id, 'name' => $this->group->program->name],
             ],
             'rejection_reason' => $this->rejection_reason,
-            'student_id' => $this->student_id,
+            // Null si se archivó (solicitud rechazada o cancelada).
+            'student_id' => $this->student?->id,
             'created_at' => $this->created_at->toIso8601String(),
             'reviewed_at' => $this->reviewed_at?->toIso8601String(),
             // Quién la confirmó o la rechazó (el mismo tutor si se confirmó sola).

@@ -8,6 +8,7 @@ use App\Models\Concerns\BelongsToOrganization;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Un alumno en una clase: la marca del técnico y la respuesta del tutor.
@@ -15,7 +16,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 #[Fillable(['organization_id', 'class_session_id', 'student_id', 'status', 'note', 'marked_by', 'marked_at', 'guardian_response', 'responded_by', 'responded_at'])]
 class Attendance extends Model
 {
-    use BelongsToOrganization;
+    use BelongsToOrganization, SoftDeletes;
 
     protected static function booted(): void
     {

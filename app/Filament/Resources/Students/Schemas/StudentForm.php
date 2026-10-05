@@ -61,7 +61,7 @@ class StudentForm
                     ->required(fn (string $operation) => $operation === 'create')
                     ->live(onBlur: true)
                     ->unique(ignoreRecord: true, modifyRuleUsing: fn (Unique $rule, ?Student $record) => $rule
-                        ->where('organization_id', filament()->getTenant()?->getKey()))
+                        ->where('organization_id', filament()->getTenant()?->getKey())->whereNull('deleted_at'))
                     ->validationMessages(['unique' => fn (string $operation) => $operation === 'create'
                         ? self::ALREADY_LOADED
                         : 'Ya hay otro jugador con este documento.']),

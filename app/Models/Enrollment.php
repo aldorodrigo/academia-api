@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Inscripción = alumno + grupo + temporada. Cada una genera sus propios cargos (Sprint 3).
@@ -24,7 +25,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Enrollment extends Model
 {
     /** @use HasFactory<EnrollmentFactory> */
-    use BelongsToOrganization, HasFactory;
+    use BelongsToOrganization, HasFactory, SoftDeletes;
 
     protected $attributes = ['status' => 'pendiente'];
 

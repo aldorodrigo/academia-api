@@ -204,6 +204,11 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - **Familia:** agrupa alumnos y tutores. Un tutor puede tener varios hijos; un hijo varios tutores.
 - Alumno adulto sin tutor: es su propio responsable.
 - Ficha médica: visible solo para roles autorizados.
+- **Nada se borra (soft delete):** alumnos, inscripciones y asistencias se **archivan** (incluido "Borrar" en el panel)
+  y dejan de aparecer en listas, cuentas, informes y el Escritorio, pero queda el historial. El documento sigue siendo
+  único por organización contando los archivados: cargar de nuevo ese documento (app, panel o importación)
+  **restaura al mismo alumno** con sus asistencias en vez de crear otro, y una inscripción archivada vuelve como nueva
+  (desde ese día, con sus cargos).
 
 ### Inscripción desde la app *(2026-10-04, `docs/PLAN_INSCRIPCION_TUTOR.md`)*
 - **"Entra ya, se confirma después".** Un **miembro activo** (normalmente un tutor) pide la inscripción de un hijo:
@@ -224,9 +229,10 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
 - **Al confirmar**, la inscripción pasa a `activo`: se emiten el cargo de inscripción y las cuotas desde el día en que
   empezó a ir. El tutor queda vinculado a su cuenta sin invitación (su ficha de tutor si ya tenía, sin pisarla), la
   ficha médica pasa a la del alumno si no tenía y, si no tenía el rol `tutor`, se le asigna.
-- **Rechazar** pide motivo y saca al chico de la lista: se borra la inscripción pendiente (o vuelve a la baja que
-  tenía) y el alumno si lo creó la solicitud y no tiene nada más. El tutor también puede cancelarla mientras está por
-  confirmar (mismo efecto, sin aviso). Confirmar y rechazar avisan al tutor (push y correo); una solicitud nueva avisa a
+- **Rechazar** pide motivo y saca al chico de la lista (también de la lista del mes del grupo) sin borrar nada: se
+  archiva la inscripción pendiente (o vuelve a la baja que tenía) y, si el alumno lo creó o restauró la solicitud y no
+  tiene nada más, el alumno y sus asistencias. El tutor también puede cancelarla mientras está por confirmar (mismo
+  efecto, sin aviso). Confirmar y rechazar avisan al tutor (push y correo); una solicitud nueva avisa a
   quienes pueden confirmar en esa categoría.
 - Si quien pide puede confirmar en esa categoría, **se confirma sola**. Siempre queda registrado quién confirmó o rechazó.
 - La ficha médica de la solicitud se guarda cifrada, no la ve quien confirma y se borra al confirmar (ya está en la

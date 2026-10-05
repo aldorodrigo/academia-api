@@ -49,8 +49,12 @@ class SubmitEnrollmentRequest
         ];
 
         $this->ensureNotRepeated($user, $child);
-        $existing = Student::findExisting($child['document'], $child['first_name'], $child['last_name'], $child['birth_date']);
-        $previous = $existing?->enrollments()->where('group_id', $group->id)->where('season_id', $season->id)->first();
+        // También los archivados (ej. una solicitud rechazada): vuelve el mismo alumno, con su historial.
+        $existing = Student::findExisting($child['document'], $child['first_name'], $child['last_name'], $child['birth_date'], withTrashed: true);
+        $wasArchived = $existing?->trashed() ?? false;
+        $previous = $existing?->enrollments()->withTrashed()
+            ->where('group_id', $group->id)->where('season_id', $season->id)
+            ->orderByRaw('deleted_at IS NOT NULL')->first();
         $this->ensureNotEnrolled($user, $existing, $previous, $season, $group);
 
         $relationship = GuardianRelationship::parse($data['relationship'] ?? null);
@@ -59,11 +63,11 @@ class SubmitEnrollmentRequest
             ->filter()
             ->all();
 
-        $request = DB::transaction(function () use ($organization, $user, $data, $season, $group, $child, $existing, $previous, $relationship, $medical) {
+        $request = DB::transaction(function () use ($organization, $user, $data, $season, $group, $child, $existing, $wasArchived, $previous, $relationship, $medical) {
             // Al chico de otra familia (ya cargado, con tutores) el tutor se le vincula recién al confirmar:
             // hasta entonces no ve sus datos.
             $linkNow = $existing === null
-                || Student::query()->inChargeOf($user)->whereKey($existing->id)->exists()
+                || Student::query()->withTrashed()->inChargeOf($user)->whereKey($existing->id)->exists()
                 || $existing->guardians()->doesntExist();
 
             try {
@@ -99,8 +103,9 @@ class SubmitEnrollmentRequest
                 'medical' => $medical === [] ? null : $medical,
                 'student_id' => $student->id,
                 'enrollment_id' => $enrollment->id,
-                'student_created' => $existing === null,
-                'previous_enrollment_status' => $previous?->status->value,
+                // Uno restaurado cuenta como creado por la solicitud: al rechazarla se vuelve a archivar.
+                'student_created' => $existing === null || $wasArchived,
+                'previous_enrollment_status' => $previous !== null && ! $previous->trashed() ? $previous->status->value : null,
                 'guardian_linked' => $linkNow,
             ]);
         });
@@ -180,7 +185,7 @@ class SubmitEnrollmentRequest
             return;
         }
 
-        if ($previous !== null && $previous->status !== EnrollmentStatus::Withdrawn) {
+        if ($previous !== null && ! $previous->trashed() && $previous->status !== EnrollmentStatus::Withdrawn) {
             throw ValidationException::withMessages([
                 'document' => "Ese documento ya tiene inscripción en {$group->name} ({$season->name}). Consultá con el club.",
             ]);

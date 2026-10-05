@@ -145,7 +145,10 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `QueueEnrollmentCharges`, avisa al terminar).
 - Nueva temporada: asistente `CreateSeason` (`Seasons\Support\SeasonPlanSteps` y `SeasonPlan`: valores por defecto,
   copia, resumen, cuotas de ejemplo, tarifas). "Configurar cobro" y "Cambiar monto": `SeasonActions`.
-- Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento).
+- Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento; `withTrashed: true` incluye archivados).
+- **Soft delete** en `Student`, `Enrollment` y `Attendance`: `delete()` archiva. En consultas con `DB::table` filtrá
+  `deleted_at`. El alta (`RegisterStudent`) restaura al archivado con el mismo documento (y una inscripción archivada);
+  la unicidad de `enrollments` cuenta solo las vigentes (columna generada `not_deleted`).
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms`.
 
 ### Finanzas (cargos)

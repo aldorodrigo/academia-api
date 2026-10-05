@@ -2,6 +2,8 @@
 
 namespace App\Actions\Students;
 
+use App\Actions\Billing\GenerateEnrollmentCharge;
+use App\Actions\Billing\IssueSeasonCharges;
 use App\Actions\Invitations\CreateInvitation;
 use App\Enums\EnrollmentStatus;
 use App\Enums\GuardianRelationship;
@@ -88,10 +90,16 @@ class RegisterStudent
     {
         $birthDate = CarbonImmutable::parse($data['birth_date'])->toDateString();
 
-        $student = Student::findExisting($data['document'] ?? null, $data['first_name'], $data['last_name'], $birthDate);
+        $student = Student::findExisting($data['document'] ?? null, $data['first_name'], $data['last_name'], $birthDate, withTrashed: true);
 
-        if ($student !== null && $mustBeNew) {
+        if ($student !== null && ! $student->trashed() && $mustBeNew) {
             throw new ImportRowException('Ya está cargado: inscribilo desde su ficha.');
+        }
+
+        // Archivado (ej. una inscripción de la app rechazada): vuelve con su historial, no se crea otro.
+        if ($student?->trashed()) {
+            $student->restore();
+            $student->attendances()->onlyTrashed()->restore();
         }
 
         $student ??= new Student;
@@ -184,11 +192,26 @@ class RegisterStudent
 
     private function enroll(Student $student, Group $group, Season $season, ?EnrollmentStatus $status, ?MidPeriod $midPeriod): void
     {
-        $enrollment = Enrollment::query()->firstOrNew([
-            'student_id' => $student->id,
-            'group_id' => $group->id,
-            'season_id' => $season->id,
-        ]);
+        $key = ['student_id' => $student->id, 'group_id' => $group->id, 'season_id' => $season->id];
+        $enrollment = Enrollment::query()->withTrashed()->where($key)->orderByRaw('deleted_at IS NOT NULL')->first()
+            ?? new Enrollment($key);
+
+        // Una archivada vuelve como inscripción nueva: desde hoy, con sus cargos (idempotentes).
+        if ($enrollment->trashed()) {
+            $enrollment->restore();
+            $enrollment->forceFill([
+                'status' => $status ?? EnrollmentStatus::Active,
+                'enrolled_on' => now()->toDateString(),
+                'mid_period' => $midPeriod,
+            ])->save();
+
+            if ($enrollment->isBillableStatus()) {
+                app(GenerateEnrollmentCharge::class)->handle($enrollment);
+                app(IssueSeasonCharges::class)->forEnrollment($enrollment);
+            }
+
+            return;
+        }
 
         if (! $enrollment->exists || $status !== null) {
             $enrollment->status = $status ?? EnrollmentStatus::Active;

@@ -131,8 +131,10 @@ class ReviewEnrollmentRequest
     }
 
     /**
-     * Rechazar o cancelar: el chico sale de la lista. Se borra la inscripción pendiente que creó la solicitud
-     * (o vuelve al estado que tenía, ej. baja) y, si el alumno lo creó la solicitud y no tiene nada más, también.
+     * Rechazar o cancelar: el chico sale de la lista. Nada se borra: se archiva (soft delete) la inscripción
+     * pendiente que creó la solicitud (o vuelve al estado que tenía, ej. baja) y, si el alumno lo creó (o lo
+     * restauró) la solicitud y no tiene nada más, también el alumno y sus asistencias. Si vuelve a pedirlo, se
+     * restauran con su historial.
      */
     private function close(EnrollmentRequest $request, EnrollmentRequestStatus $status, ?User $by, ?string $reason): EnrollmentRequest
     {
@@ -160,6 +162,7 @@ class ReviewEnrollmentRequest
             if ($request->student_created && $student !== null
                 && Enrollment::query()->where('student_id', $student->id)->doesntExist()
                 && Charge::query()->where('student_id', $student->id)->doesntExist()) {
+                $student->attendances()->delete();
                 $student->delete();
             }
 

@@ -4,6 +4,7 @@ use App\Enums\EnrollmentRequestStatus;
 use App\Enums\EnrollmentStatus;
 use App\Enums\OrganizationRole;
 use App\Filament\Resources\EnrollmentRequests\Pages\ManageEnrollmentRequests;
+use App\Models\Attendance;
 use App\Models\Charge;
 use App\Models\Enrollment;
 use App\Models\EnrollmentRequest;
@@ -203,7 +204,8 @@ describe('tutor', function () {
 
         expect($pending->fresh()->status)->toBe(EnrollmentRequestStatus::Cancelled)
             ->and($pending->fresh()->medical)->toBeNull()
-            ->and(Student::query()->where('document', '7123456')->exists())->toBeFalse();
+            ->and(Student::query()->where('document', '7123456')->exists())->toBeFalse()
+            ->and(Student::withTrashed()->where('document', '7123456')->sole()->trashed())->toBeTrue();
         expect(collect(mondayClass($this->coach))->pluck('full_name')->all())->toBe(['Lucas Benítez']);
         asMember($this->tutor, 'GET', 'enrollment-requests')->assertJsonCount(0, 'data');
         asMember($this->tutor, 'DELETE', "enrollment-requests/{$pending->id}")
@@ -390,7 +392,71 @@ describe('quien confirma', function () {
         Notification::assertSentTo($this->tutor, EnrollmentRequestReviewed::class, fn (EnrollmentRequestReviewed $n) => ! $n->approved
             && $n->body === 'El club no aprobó la inscripción de Sofía: No hay lugar en Sub-8 este año.');
 
-        asMember($this->tutor, 'GET', 'enrollment-requests')->assertJsonPath('data.0.rejection_reason', 'No hay lugar en Sub-8 este año.');
+        asMember($this->tutor, 'GET', 'enrollment-requests')->assertJsonPath('data.0.rejection_reason', 'No hay lugar en Sub-8 este año.')
+            ->assertJsonPath('data.0.student_id', null);
+    });
+
+    it('rechazar no borra nada: archiva al alumno, su inscripción y sus asistencias', function () {
+        $request = requestFor($this->tutor);
+
+        // Fue a la clase del lunes.
+        $this->travelTo('2026-10-05 19:00:00');
+        $classId = asMember($this->coach, 'GET', 'classes?date=2026-10-05')->json('data.0.id');
+        asMember($this->coach, 'PUT', "classes/{$classId}/attendance", ['marks' => [['student_id' => $request->student_id, 'status' => 'presente']]])
+            ->assertOk();
+
+        asMember($this->coach, 'POST', "enrollment-requests/{$request->id}/reject", ['reason' => 'No hay lugar.'])->assertOk();
+
+        $sofia = Student::withTrashed()->findOrFail($request->student_id);
+        expect($sofia->trashed())->toBeTrue()
+            ->and(Enrollment::withTrashed()->findOrFail($request->enrollment_id)->trashed())->toBeTrue()
+            ->and(Attendance::withTrashed()->where('student_id', $sofia->id)->sole()->trashed())->toBeTrue()
+            ->and(Student::query()->whereKey($sofia->id)->exists())->toBeFalse();
+
+        // No aparece en la clase, ni en el mes del grupo, ni en "Mis hijos".
+        expect(asMember($this->coach, 'GET', "classes/{$classId}")->json('data.students'))->toBeEmpty();
+        expect(asMember($this->coach, 'GET', "groups/{$this->sub8->id}")->json('data.students'))->toBeEmpty();
+        asMember($this->tutor, 'GET', 'students')->assertJsonCount(1, 'data');
+    });
+
+    it('si vuelve a pedirlo se restaura el mismo alumno con su historial', function () {
+        $request = requestFor($this->tutor);
+        $this->travelTo('2026-10-05 19:00:00');
+        $classId = asMember($this->coach, 'GET', 'classes?date=2026-10-05')->json('data.0.id');
+        asMember($this->coach, 'PUT', "classes/{$classId}/attendance", ['marks' => [['student_id' => $request->student_id, 'status' => 'presente']]]);
+        asMember($this->tutor, 'DELETE', "enrollment-requests/{$request->id}")->assertNoContent();
+
+        $again = requestFor($this->tutor);
+
+        expect($again->student_id)->toBe($request->student_id)
+            ->and($again->enrollment_id)->toBe($request->enrollment_id)
+            ->and($again->student_created)->toBeTrue()
+            ->and(Student::withTrashed()->where('document', '7123456')->count())->toBe(1)
+            ->and(Attendance::query()->where('student_id', $again->student_id)->sole()->status->value)->toBe('presente')
+            ->and($again->enrollment->status)->toBe(EnrollmentStatus::Pending)
+            ->and($again->enrollment->enrolled_on->toDateString())->toBe('2026-10-05');
+
+        // Y si se vuelve a rechazar, se archiva otra vez.
+        asMember($this->secretary, 'POST', "enrollment-requests/{$again->id}/reject", ['reason' => 'Sin lugar.'])->assertOk();
+        expect(Student::query()->whereKey($again->student_id)->exists())->toBeFalse();
+    });
+
+    it('el panel puede volver a inscribir en la misma categoría una inscripción archivada', function () {
+        $this->mateoEnrollment->delete();
+
+        $again = Enrollment::factory()->create(['student_id' => $this->mateo->id, 'group_id' => $this->sub10->id, 'season_id' => $this->season->id, 'status' => EnrollmentStatus::Active]);
+
+        expect(Enrollment::withTrashed()->where('student_id', $this->mateo->id)->count())->toBe(2)
+            ->and($this->mateo->enrollments()->sole()->id)->toBe($again->id);
+    });
+
+    it('la lista del mes del grupo muestra al nuevo por confirmar', function () {
+        $request = requestFor($this->tutor);
+
+        $student = asMember($this->coach, 'GET', "groups/{$this->sub8->id}")->assertOk()->json('data.students.0');
+
+        expect($student['id'])->toBe($request->student_id)
+            ->and($student['enrollment_request'])->toBe(['id' => $request->id, 'can_review' => true]);
     });
 
     it('el técnico confirma solo en sus categorías', function () {

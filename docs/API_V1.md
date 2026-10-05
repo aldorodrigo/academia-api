@@ -1471,7 +1471,7 @@ desde la app (`POST students`). Plan: `docs/PLAN_INSCRIPCION_TUTOR.md`. Todo con
 - `status`: `pendiente` ("Por confirmar"), `aprobada` ("Aprobada"), `rechazada` ("No aprobada") o `cancelada` ("Cancelada").
 - `relationship`: `padre`, `madre`, `tutor`, `abuelo` u `otro`.
 - `has_medical`: si cargó la ficha médica (los datos no se devuelven: pasan a la ficha del alumno al confirmar).
-- `student_id`: el alumno (existe desde que se pide; `null` si se rechazó y se borró el alta).
+- `student_id`: el alumno (existe desde que se pide; `null` si la solicitud se rechazó o canceló y el alta quedó archivada).
 - `reviewed_by`: nombre de quien la confirmó o la rechazó; `self_approved: true` si se confirmó sola.
 
 ### Tutor
@@ -1561,10 +1561,11 @@ prosecretario por defecto, el admin siempre) o con "Confirmar inscripciones de l
 (`Confirm:GroupEnrollments`; el técnico por defecto, solo donde es técnico). Los dos se editan por rol. Las de otras
 categorías responden `404`.
 
-#### En la clase (`GET classes/{id}`)
+#### En la clase (`GET classes/{id}`) y en el mes del grupo (`GET groups/{id}`)
 
 Cada alumno suma `"enrollment_request": { "id": 18, "can_review": true }` si es un nuevo por confirmar (`null` si no):
-la app muestra "Nuevo, por confirmar" y, con `can_review`, "Confirmar inscripción" y "Rechazar".
+la app muestra "Nuevo, por confirmar" y, con `can_review`, "Confirmar inscripción" y "Rechazar". En el mes en curso,
+`GET groups/{id}` incluye a los nuevos por confirmar aunque todavía no hayan tenido clase.
 
 #### `GET enrollment-requests/review?status=pendiente`
 
@@ -1611,9 +1612,10 @@ sus clases y sus cuotas en la app."
 
 #### `POST enrollment-requests/{id}/reject`
 
-`{ "reason": "No hay lugar en Sub-8 este año." }` (obligatorio) → la solicitud rechazada. El chico sale de la lista: se
-borra la inscripción pendiente (o vuelve a la baja que tenía) y, si el alumno lo creó la solicitud, también. Ya
-revisada → `422`. Push al tutor: "El club no aprobó la inscripción de Sofía: No hay lugar en Sub-8 este año."
+`{ "reason": "No hay lugar en Sub-8 este año." }` (obligatorio) → la solicitud rechazada. El chico sale de la lista sin
+borrar nada: se **archiva** (soft delete) la inscripción pendiente (o vuelve a la baja que tenía) y, si el alumno lo
+creó o restauró la solicitud y no tiene nada más, también el alumno y sus asistencias. Si se vuelve a pedir el mismo
+documento, se restaura el mismo alumno con su historial. Ya revisada → `422`. Push al tutor: "El club no aprobó la inscripción de Sofía: No hay lugar en Sub-8 este año."
 
 ### Cargar alumno (permiso `create_students` en `GET organization`)
 
