@@ -234,7 +234,9 @@ Organización → Programa (fútbol, pádel…) → Grupo (Sub-10, Inicial…) �
   y dejan de aparecer en listas, cuentas, informes y el Escritorio, pero queda el historial. El documento sigue siendo
   único por organización contando los archivados: cargar de nuevo ese documento (app, panel o importación)
   **restaura al mismo alumno** con sus asistencias en vez de crear otro, y una inscripción archivada vuelve como nueva
-  (desde ese día, con sus cargos).
+  (desde ese día, con sus cargos). Lo mismo con los **tutores**: "Eliminar" en Tutores lo archiva (deja de verse en la
+  ficha de sus hijos y no recibe avisos) y, si se lo vuelve a cargar con el mismo usuario, correo, celular o
+  documento, se restaura. Los descuentos de una clase suspendida que se vuelve a dar también se archivan.
 
 ### Inscripción desde la app *(2026-10-04, `docs/PLAN_INSCRIPCION_TUTOR.md`)*
 - **"Entra ya, se confirma después".** Un **miembro activo** (normalmente un tutor) pide la inscripción de un hijo:

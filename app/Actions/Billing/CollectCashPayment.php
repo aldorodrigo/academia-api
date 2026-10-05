@@ -98,8 +98,8 @@ class CollectCashPayment
      */
     public static function familyUsers(Family $family, ?Student $student = null): Collection
     {
-        $guardians = Guardian::query()->withoutGlobalScopes()->where('family_id', $family->id)->whereNotNull('user_id')->with('user')->get()->pluck('user');
-        $students = Student::query()->withoutGlobalScopes()->where('family_id', $family->id)->whereNotNull('user_id')->with('user')->get()->pluck('user');
+        $guardians = Guardian::query()->withoutGlobalScopes()->whereNull('deleted_at')->where('family_id', $family->id)->whereNotNull('user_id')->with('user')->get()->pluck('user');
+        $students = Student::query()->withoutGlobalScopes()->whereNull('deleted_at')->where('family_id', $family->id)->whereNotNull('user_id')->with('user')->get()->pluck('user');
 
         return $guardians->merge($students)->push($student?->user)->filter()->unique('id')->values();
     }

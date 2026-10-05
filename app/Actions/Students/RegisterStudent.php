@@ -156,13 +156,20 @@ class RegisterStudent
             $userId = $data['user_id'] ?? null;
 
             // El mismo tutor: por su usuario (solicitud desde la app), por correo, por celular, por documento o
-            // por nombre en la familia.
-            $guardian = ($userId ? Guardian::query()->where('user_id', $userId)->first() : null)
-                ?? ($email ? Guardian::query()->where('email', $email)->first() : null)
-                ?? ($phone ? Guardian::query()->where('phone', $phone)->first() : null)
-                ?? (filled($data['document'] ?? null) ? Guardian::query()->where('document', $data['document'])->first() : null)
+            // por nombre en la familia. Un tutor archivado (soft delete) con esos datos se restaura: el documento y
+            // el usuario son únicos por organización.
+            $find = fn (string $column, mixed $value) => Guardian::query()->withTrashed()
+                ->where($column, $value)->orderByRaw('deleted_at IS NOT NULL')->first();
+            $guardian = ($userId ? $find('user_id', $userId) : null)
+                ?? ($email ? $find('email', $email) : null)
+                ?? ($phone ? $find('phone', $phone) : null)
+                ?? (filled($data['document'] ?? null) ? $find('document', $data['document']) : null)
                 ?? $this->sameNameInFamily($student, $data, $familyId)
                 ?? new Guardian;
+
+            if ($guardian->trashed()) {
+                $guardian->restore();
+            }
 
             $guardian->fill(array_filter([
                 'first_name' => $data['first_name'],

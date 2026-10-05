@@ -670,10 +670,11 @@ describe('clase suspendida sin cobrar (por día de entrenamiento)', function () 
             ->and($reissued->adjustments()->sole()->label)->toBe('Clase suspendida 30/09')
             ->and(ChargeWaiver::query()->sole()->applied_charge_id)->toBe($reissued->id);
 
-        // Volver a programar: el descuento se borra y la próxima vuelve a su monto.
+        // Volver a programar: el descuento se archiva (soft delete, no se borra) y la próxima vuelve a su monto.
         attendanceApi($this->instructor, 'DELETE', 'classes/'.($this->wednesday)().'/suspension')->assertOk();
         expect(Charge::query()->whereNull('voided_at')->whereDate('period_start', '2026-10-05')->sole()->final_amount)->toBe(40000)
-            ->and(ChargeWaiver::query()->count())->toBe(0);
+            ->and(ChargeWaiver::query()->count())->toBe(0)
+            ->and(ChargeWaiver::onlyTrashed()->count())->toBe(1);
     });
 
     it('por clase dictada: la cuota sale al cerrar el período, sin las suspendidas y con las recuperaciones', function () {

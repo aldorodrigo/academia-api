@@ -74,9 +74,11 @@ class DiscountCalculator
             return 1;
         }
 
+        // Sin los archivados (soft delete): sin scopes globales hay que filtrarlos a mano.
         $siblings = Student::query()->withoutGlobalScopes()
             ->where('family_id', $student->family_id)
-            ->whereHas('enrollments', fn ($query) => $query->withoutGlobalScopes()->billable())
+            ->whereNull('deleted_at')
+            ->whereHas('enrollments', fn ($query) => $query->withoutGlobalScopes()->whereNull('enrollments.deleted_at')->billable())
             ->orderBy('birth_date')
             ->orderBy('id')
             ->pluck('id');

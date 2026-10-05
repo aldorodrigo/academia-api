@@ -12,15 +12,17 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
- * Tutor (padre, madre…). Se vincula a un usuario al aceptar la invitación.
+ * Tutor (padre, madre…). Se vincula a un usuario al aceptar la invitación. No se borra: "Eliminar" lo archiva
+ * (soft delete) y deja de aparecer en listas, fichas y avisos; el alta lo restaura si vuelve con el mismo dato.
  */
 #[Fillable(['organization_id', 'family_id', 'user_id', 'first_name', 'last_name', 'document', 'email', 'phone'])]
 class Guardian extends Model
 {
     /** @use HasFactory<GuardianFactory> */
-    use BelongsToOrganization, HasFactory;
+    use BelongsToOrganization, HasFactory, SoftDeletes;
 
     protected static function booted(): void
     {

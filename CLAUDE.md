@@ -6,7 +6,7 @@ Guía para Claude Code al trabajar en este repositorio.
 
 SaaS para **academias, clubes y escuelas de formación** (deporte, danza, música, idiomas…)
 y comisiones de padres. Piloto: **Club Jakare** (fútbol infantil, Paraguay).
-Nombre del producto: pendiente (nombre en clave del repo: `academia`).
+Producto: **Tuku** (dominio `tukuha.app`; nombre en clave del repo: `academia`).
 
 Este repo es el **backend**: API para la app Flutter (`/api/v1`) + panel de administración
 Filament (`/admin`) + colas (Horizon) + tareas programadas. La app móvil vive en otro repo.
@@ -146,9 +146,11 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Nueva temporada: asistente `CreateSeason` (`Seasons\Support\SeasonPlanSteps` y `SeasonPlan`: valores por defecto,
   copia, resumen, cuotas de ejemplo, tarifas). "Configurar cobro" y "Cambiar monto": `SeasonActions`.
 - Jugador existente: `Student::findExisting()` (documento, o nombre + fecha de nacimiento; `withTrashed: true` incluye archivados).
-- **Soft delete** en `Student`, `Enrollment` y `Attendance`: `delete()` archiva. En consultas con `DB::table` filtrá
-  `deleted_at`. El alta (`RegisterStudent`) restaura al archivado con el mismo documento (y una inscripción archivada);
-  la unicidad de `enrollments` cuenta solo las vigentes (columna generada `not_deleted`).
+- **Soft delete** en `Student`, `Guardian`, `Enrollment` y `Attendance` (y en `PaymentReport`, `CashDeposit`,
+  `ChargeWaiver`, `OnboardingDraft`): `delete()` archiva. En consultas con `DB::table` o `withoutGlobalScopes()` filtrá
+  `deleted_at`. El alta (`RegisterStudent`) restaura al alumno archivado con el mismo documento (y una inscripción
+  archivada) y al tutor archivado con el mismo usuario, correo, celular o documento; la unicidad de `enrollments`
+  cuenta solo las vigentes (columna generada `not_deleted`).
 - Etiquetas del panel según el vocabulario de la organización: `App\Filament\Support\Terms` (fuera del panel usa la
   organización activa). Nada de "jugador", "categoría" o "técnico" fijos en textos: van con `Terms` o `term()`.
 - Vocabulario por deporte (`docs/PLAN_VOCABULARIO.md`): `VocabularySuggestion` propone las palabras de la primera
@@ -169,6 +171,9 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
   `issue_upfront`, `mid_period`): períodos con `SeasonPeriods`; emisión por inscripción con `IssueSeasonCharges`
   (al crear la inscripción, idempotente por `unique_key` `enr:…:con:…:per:Y-m-d`); `GenerateSeasonCharges` (lock) y
   comando diario `charges:generate`. Baja o suspensión: `VoidFutureCharges`. `Charge::isUpcoming()` = próxima.
+- Hooks de `Enrollment` (`created`/`updated`): una `pendiente` no se cobra; al pasar de pendiente a activo se emiten el
+  cargo de inscripción y las cuotas desde que empezó; al volver de una baja o suspensión, las cuotas desde el período
+  en curso (los meses afuera no se cobran).
 - Bajas (`docs/PLAN_BAJAS.md`): `Enrollments\WithdrawEnrollment` (fecha, motivo y aviso opcional a la familia
   `StudentWithdrawn` con `defaultNotice()`; la deuda queda), `ReactivateEnrollment` (cuotas desde el período en curso),
   `ReportDropout` (aviso del técnico "dejó de venir" o del tutor "deja el club", `dropout_source`; `DropoutReported`);
@@ -210,3 +215,8 @@ No introduzcas SQL específico de MySQL ni uses SQLite en tests.
 - Modelos con atributos de Laravel 13 (`#[Fillable]`, `#[Hidden]`).
 - Enums en `App\Enums`.
 - Correr `composer lint` antes de commitear.
+- **Siempre soft delete:** nada de dominio se borra físicamente (alumnos, tutores, inscripciones, asistencias,
+  comprobantes, depósitos, descuentos…): se archiva con `SoftDeletes` y se filtra en listas e informes. Cargos, pagos y
+  movimientos no se borran: se anulan con motivo.
+- **Registrar quién:** toda aprobación, rechazo, confirmación, condonación, baja o registro hecho por otro guarda quién
+  lo hizo y cuándo (`*_by` + fecha, y el motivo cuando corresponde).

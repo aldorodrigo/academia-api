@@ -107,7 +107,7 @@ class AcceptInvitation
     private function linkGuardian(Invitation $invitation, User $user): void
     {
         $guardian = $invitation->guardian_id === null ? null
-            : Guardian::query()->withoutGlobalScopes()->find($invitation->guardian_id);
+            : Guardian::query()->withoutGlobalScopes()->whereNull('deleted_at')->find($invitation->guardian_id);
 
         if ($guardian === null || ($guardian->user_id !== null && $guardian->user_id !== $user->id)) {
             return;

@@ -23,7 +23,7 @@ class IssueEnrollmentCharges implements ShouldQueue
             return;
         }
 
-        $enrollment = Enrollment::query()->withoutGlobalScopes()->with(['season', 'group', 'student', 'organization'])->find($this->enrollmentId);
+        $enrollment = Enrollment::query()->withoutGlobalScopes()->whereNull('deleted_at')->with(['season', 'group', 'student', 'organization'])->find($this->enrollmentId);
 
         if ($enrollment !== null) {
             $issue->forEnrollment($enrollment, createdBy: $this->createdBy);

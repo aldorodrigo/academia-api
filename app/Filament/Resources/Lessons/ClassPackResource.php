@@ -24,6 +24,7 @@ use UnitEnum;
 class ClassPackResource extends Resource
 {
     use LessonsModule;
+
     // "Gastos recurrentes", no "Gastos Recurrentes".
     use SentenceCaseLabels;
 

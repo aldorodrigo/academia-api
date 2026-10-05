@@ -246,7 +246,7 @@ it('la lista de inscripciones no tiene alta y lleva a la ficha del jugador', fun
 
     // La baja va con fecha y motivo (WithdrawalsTest).
     Livewire::test(ManageEnrollments::class)
-        ->callTableAction('withdraw', $enrollment, data: ['ended_on' => now()->toDateString(), 'withdrawal_reason' => 'Se mudó'])
+        ->callTableAction('withdraw', $enrollment, data: ['ended_on' => $this->jakare->today()->toDateString(), 'withdrawal_reason' => 'Se mudó'])
         ->assertHasNoTableActionErrors();
 
     expect($enrollment->fresh()->status)->toBe(EnrollmentStatus::Withdrawn)

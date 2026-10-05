@@ -93,6 +93,7 @@ class Metrics
             ->get();
 
         $phones = DB::table('guardians')
+            ->whereNull('deleted_at')
             ->whereIn('family_id', $rows->pluck('family_id'))
             ->whereNotNull('phone')
             ->orderBy('id')
@@ -215,7 +216,7 @@ class Metrics
                 ->from('group_instructor')->whereColumn('group_instructor.group_id', 'groups.id'))->count(),
             'groups_without_schedule' => $groups()->whereNotExists(fn (Builder $query) => $query
                 ->from('schedules')->whereColumn('schedules.group_id', 'groups.id'))->count(),
-            'guardians_without_app' => DB::table('guardians')->where('organization_id', $org)->whereNull('user_id')
+            'guardians_without_app' => DB::table('guardians')->where('organization_id', $org)->whereNull('deleted_at')->whereNull('user_id')
                 ->where(fn (Builder $query) => $query->whereNotNull('phone')->orWhereNotNull('email'))->count(),
             'pending_expenses' => DB::table('expenses')->where('organization_id', $org)
                 ->where('status', ExpenseStatus::Pending->value)->count(),
